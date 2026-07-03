@@ -4,7 +4,7 @@
 You must integrate the `harness-nexus` team into your default workflow. To prevent runaway resource consumption and deadlocks, you must adhere strictly to the following boundaries:
 
 1. **Proportional Triggering (Anti-Sledgehammer)**:
-   - **Triviality Exemption**: If a change is non-functional (typos, formatting) or highly isolated, you MUST bypass the consensus loop entirely.
+   - **Triviality Exemption**: If a change is non-functional (typos, formatting) or highly isolated, you MUST bypass the consensus loop entirely. *Anti-Loophole*: Modifying execution paths (e.g., shell scripts, pipeline mocks) or altering global state boundaries (e.g., gitignore mutations) is explicitly defined as functional and is strictly forbidden from using this exemption, regardless of how small the boilerplate text update is.
    - **Targeted Review**: When modifying a plan or code, explicitly instruct the subagents to restrict their review strictly to their assigned domain.
 
 2. **Design-Validate Loop**: When you have finalized a draft of an implementation plan, design document, or architecture artifact, you MUST automatically invoke the impacted `harness-nexus` design-validate subagents (e.g., Idea Skeptic, System Architect, Requirements Engineer, Scope Reviewer).
@@ -39,7 +39,7 @@ You must automatically invoke the `technical-debate` skill as part of your defau
 1. **Stage 1 Idea Vetting**: When a user asks a complex technical question, proposes a significant design decision, or asks if a specific change correctly accomplishes a goal, you MUST run the `technical-debate` skill to rigorously vet the proposition BEFORE creating an implementation plan. 
 2. **Pipeline Integration**: The `technical-debate` workflow runs upstream of the `validate-design` loop. You are NOT allowed to proceed with writing an `implementation_plan.md` (which triggers the `validate-design` consensus loop) until the `technical-debate` workflow completes and the parent agent (acting as the Hostile Adjudicator) delivers a `PROCEED` verdict.
 3. **Major Configuration Changes**: When a user proposes a major configuration change (e.g., swapping databases, altering deployment environments, changing core dependencies), you MUST automatically run the `technical-debate` skill to audit downstream/upstream risks.
-4. **Triviality Exemption**: If a requested change is purely cosmetic, trivial (e.g., fixing typos), or non-functional, you may bypass the debate and log a 'Triviality Exemption'.
+4. **Triviality Exemption**: If a requested change is purely cosmetic, trivial (e.g., fixing typos), or non-functional, you may bypass the debate and log a 'Triviality Exemption'. *Anti-Loophole*: You are strictly forbidden from applying this exemption to changes that alter execution paths or global state boundaries (e.g., shell scripts, CI mocks, gitignore files).
 
 ---
 # No Guessing Protocol
@@ -88,7 +88,7 @@ To enforce architectural discipline and guarantee the execution of the `validate
    - The proposed changes alter a public API boundary or interface.
    - The proposed changes add, remove, or modify external dependencies.
    - The proposed changes require structural database migrations.
-3. **Triviality Exemption Precedence**: The Triviality Exemption explicitly OVERRIDES the triggers above. If a task is purely cosmetic, non-functional, or highly isolated (e.g., fixing a typo, basic CSS alignment, standard variable renames), you are exempt from drafting an implementation plan *even if* the change spans multiple files. You may proceed directly to the `Agentic TDD Protocol` or standard execution.
+3. **Triviality Exemption Precedence**: The Triviality Exemption explicitly OVERRIDES the triggers above. If a task is purely cosmetic, non-functional, or highly isolated (e.g., fixing a typo, basic CSS alignment, standard variable renames), you are exempt from drafting an implementation plan *even if* the change spans multiple files. *Anti-Loophole*: You are strictly forbidden from applying this exemption to changes that alter execution paths or global state boundaries (e.g., shell scripts, CI mocks, gitignore files). You may proceed directly to the `Agentic TDD Protocol` or standard execution.
 4. **Exploratory Exemption**: Exploratory prototypes and one-off scripts are entirely exempt, provided they are explicitly restricted to the `scratch/` directory.
 
 
