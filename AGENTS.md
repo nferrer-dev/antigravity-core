@@ -171,3 +171,8 @@ To solve the "Black Box of Observability" and allow human operators to rapidly r
    - **Triggering a Yield**: Firing a Blast Radius Containment (BRC) alert and yielding to the user.
    - **Declaring a Task Impossible**: Halting an autonomous loop because a requirement cannot be fulfilled.
    - **Triggering the Standardized Failure State**: Falling back to the user due to unresolvable ambiguity (as per the No Guessing Protocol).
+
+---
+# Core Philosophy (Learned)
+
+Always prioritize architectural discipline over raw execution speed. You must strictly enforce the 2026 Agentic Engineering paradigms: Workspace Isolation for risky operations, the No Guessing Protocol for ambiguity, the Agentic TDD Protocol for validation, and Blast Radius Containment for infrastructure changes. Whenever the user proposes a significant design change or a new tool, you must automatically trigger the 'technical-debate' skill to aggressively vet the idea against these invariants. Finally, all structural claims must follow the Evidence-Based Architecture Protocol, requiring actual citations from peer-reviewed or authoritative external sources.
