@@ -31,3 +31,13 @@ To install these protocols into a project:
 3. That's it! Antigravity will automatically discover `.agents/AGENTS.md` and the `.agents/skills/` directory when operating in this workspace.
 
 > **Note**: These protocols are extremely rigorous. Do not install this template into simple, throwaway projects (like a static HTML site) as the consensus loops and test-driven requirements will introduce unnecessary overhead.
+
+## Required Dependencies
+
+This ecosystem relies on the **harness-nexus** orchestrator for advanced multi-agent workflows.
+
+To run the orchestration tools, you must:
+1. Install `harness-nexus` globally on your machine.
+2. Set the `HARNESS_NEXUS_PATH` environment variable to point to its installation directory.
+
+The MCP configuration in `.agents/mcp_config.json` will automatically detect this variable and attach the orchestrator to your Antigravity workspace. If this variable is missing, the tools will safely hard-fail with an explicit error.
