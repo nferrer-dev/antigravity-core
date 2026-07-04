@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "harness-nexus": {
+      "command": "python",
+      "args": [".agents/start_harness.py"]
+    }
+  }
+}

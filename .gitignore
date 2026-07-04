@@ -1,0 +1,2 @@
+.env
+.agents/sidecars/**/node_modules/

@@ -1,0 +1,8 @@
+{
+  "displayName": "Omni Remote Chat",
+  "restartPolicy": "always",
+  "command": "node",
+  "args": [
+    "start-chat.js"
+  ]
+}
