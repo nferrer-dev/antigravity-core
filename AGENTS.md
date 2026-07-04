@@ -173,6 +173,23 @@ To solve the "Black Box of Observability" and allow human operators to rapidly r
    - **Triggering the Standardized Failure State**: Falling back to the user due to unresolvable ambiguity (as per the No Guessing Protocol).
 
 ---
+# The Asynchronous Patience Protocol
+
+To prevent systemic framework subversion, memory leaks, and context pollution, all agents MUST strictly adhere to the Asynchronous Patience Protocol when utilizing the schedule background timer:
+
+1. **Mandatory Waiting**: You are STRICTLY FORBIDDEN from manually killing an asynchronous timeout timer (e.g., using manage_task kill) *before* the awaited subagents or background processes reply. Do not assume or hallucinate a system failure simply because a response takes time.
+2. **Mandatory Cleanup**: To prevent memory leaks and out-of-context message injection, you MUST use manage_task kill to clean up the active timer immediately *after* the subagents successfully reply.
+3. **Evidence-Based Error Reporting**: You cannot assert that a tool, subagent, or system component failed without explicitly outputting the precise status: ERROR trace returned by the API.
+
+---
+# Strict Design-Validate Consensus Enforcement
+
+To ensure all architectural changes are rigorously vetted, the implementation_plan.md artifact is structurally linked to the alidate-design consensus loop.
+
+1. **Premature Execution Lock**: You are STRICTLY PROHIBITED from setting RequestFeedback = true to yield to the user on an implementation_plan.md artifact UNTIL the alidate-design committee has run concurrently and achieved unanimous [VERDICT: APPROVE].
+2. **Deadlock Circuit Breaker**: This prohibition is explicitly waived ONLY if the consensus loop hits the 5-round stagnation cap or fails automated arbitration. In that specific scenario, you MUST yield to the user, presenting the deadlocked implementation plan alongside the dissenting summaries for manual adjudication.
+
+---
 # Core Philosophy (Learned)
 
 Always prioritize architectural discipline over raw execution speed. You must strictly enforce the 2026 Agentic Engineering paradigms: Workspace Isolation for risky operations, the No Guessing Protocol for ambiguity, the Agentic TDD Protocol for validation, and Blast Radius Containment for infrastructure changes. Whenever the user proposes a significant design change or a new tool, you must automatically trigger the 'technical-debate' skill to aggressively vet the idea against these invariants. Finally, all structural claims must follow the Evidence-Based Architecture Protocol, requiring actual citations from peer-reviewed or authoritative external sources.
