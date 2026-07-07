@@ -891,15 +891,20 @@ function updateDOMPreservingScroll(container, newHTML) {
     morph(container, doc.body);
     
     const distanceFromBottom = scrollHeight - scrollPos - clientHeight;
-    const newScrollPos = currentScroll.scrollHeight - currentScroll.clientHeight - distanceFromBottom;
     
-    if (isUserScrollLocked) {
-        currentScroll.scrollTop = Math.max(0, newScrollPos);
-    } else if (isNearBottom) {
-        currentScroll.scrollTop = currentScroll.scrollHeight;
-    } else {
-        currentScroll.scrollTop = Math.max(0, newScrollPos);
-    }
+    // Wait for the browser to recalculate layout after DOM insertion
+    // so that currentScroll.scrollHeight reflects the newly loaded messages
+    requestAnimationFrame(() => {
+        const newScrollPos = currentScroll.scrollHeight - currentScroll.clientHeight - distanceFromBottom;
+        
+        if (isUserScrollLocked) {
+            currentScroll.scrollTop = Math.max(0, newScrollPos);
+        } else if (isNearBottom) {
+            currentScroll.scrollTop = currentScroll.scrollHeight;
+        } else {
+            currentScroll.scrollTop = Math.max(0, newScrollPos);
+        }
+    });
     
     return true;
 }
