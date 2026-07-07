@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Antigravity Mobile</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css?v=2.5">
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>
+            <span></span>
+        </h1>
+
+        <div class="header-controls">
+            <button class="new-chat-btn" id="newChatBtn" aria-label="New Chat" title="New Chat (Ctrl+Shift+L)">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </button>
+            <button class="history-btn" id="historyBtn" aria-label="Chat History" title="Past Conversations">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+            </button>
+            <button class="stop-btn" id="stopBtn" aria-label="STOP">
+                <span>STOP</span>
+            </button>
+            <button class="refresh-btn" id="refreshBtn" aria-label="Refresh">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 4v6h-6"></path>
+                    <path d="M1 20v-6h6"></path>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            </button>
+            <div class="status-badge">
+                <div class="status-dot disconnected" id="statusDot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Settings Bar removed per user request -->
+
+    <!-- SSL Banner (shown when running HTTP) -->
+    <div class="ssl-banner" id="sslBanner" style="display: none;">
+        <span>⚠️ Not Secure - Running on HTTP</span>
+        <button id="enableHttpsBtn" onclick="enableHttps()">Enable HTTPS</button>
+        <button class="dismiss-btn" onclick="dismissSslBanner()">×</button>
+    </div>
+
+    <!-- Chat Container -->
+    <div class="chat-container" id="chatContainer">
+        <!-- Infinite Scroll Loader -->
+        <div id="infiniteScrollLoader" class="infinite-scroll-loader hidden">
+            <div class="spinner-small"></div>
+            <span>Loading older messages...</span>
+        </div>
+        
+        <div class="chat-content" id="chatContent">
+            <div class="loading-state">
+                <div class="loading-spinner"></div>
+                <p>Waiting for snapshot...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scroll to Bottom FAB -->
+    <button class="fab" id="scrollToBottom" aria-label="Scroll to bottom">
+        <svg viewBox="0 0 24 24" fill="none">
+            <path d="M12 5v14M19 12l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+    </button>
+
+    <!-- Quick Actions Removed -->
+
+    <!-- Input Section -->
+    <div class="input-container" style="background-color: var(--surface) !important; border-top: 1px solid var(--border); box-shadow: 0 -4px 6px rgba(0,0,0,0.1);">
+        <div class="input-wrapper" style="background-color: var(--bg-input); border: 1px solid var(--border);">
+            <textarea id="messageInput" placeholder="Send a message..." rows="1" style="background-color: transparent; color: var(--text-primary);"></textarea>
+            <button class="send-btn" id="sendBtn" aria-label="Send Message">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-panel" id="modalPanel">
+            <div class="modal-title" id="modalTitle">Select Option</div>
+            <div id="modalList"></div>
+            <div style="margin-top:20px; text-align:center;">
+                <button onclick="closeModal()"
+                    style="background:transparent; border:none; color:var(--text-muted); padding:10px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Layer (Full Screen) -->
+    <div class="history-layer" id="historyLayer">
+        <div class="history-header">
+            <button class="icon-btn" onclick="hideChatHistory()" aria-label="Back">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+            </button>
+            <h2>Conversations</h2>
+            <div style="width: 24px;"></div> <!-- Spacer -->
+        </div>
+        <div class="history-content" id="historyList">
+            <!-- Items injected here -->
+        </div>
+    </div>
+
+    <script src="js/app.js?v=4"></script>
+</body>
+
+</html>
