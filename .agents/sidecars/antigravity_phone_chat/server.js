@@ -793,7 +793,7 @@ async function remoteScroll(cdp, { scrollTop, scrollPercent }) {
             if (${scrollPercent} !== undefined) {
                 const maxScroll = target.scrollHeight - target.clientHeight;
                 target.scrollTop = maxScroll * ${scrollPercent};
-                if (${scrollPercent} === 0) {
+                if (${scrollPercent} <= 0.01 || target.scrollTop < 50) {
                     const loadBtn = document.querySelector('[aria-label^="Load older messages"]');
                     if (loadBtn) loadBtn.click();
                 }
