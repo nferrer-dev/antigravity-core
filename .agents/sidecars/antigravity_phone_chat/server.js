@@ -471,6 +471,7 @@ async function captureSnapshot(cdp) {
             color: cascadeStyles.color,
             fontFamily: cascadeStyles.fontFamily,
             scrollInfo: scrollInfo,
+            isGenerating: !!document.querySelector('button svg.lucide-square')?.closest('button'),
             stats: {
                 nodes: clone.getElementsByTagName('*').length,
                 htmlSize: html.length,
