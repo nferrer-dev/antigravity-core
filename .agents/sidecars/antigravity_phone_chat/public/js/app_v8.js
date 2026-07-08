@@ -48,11 +48,16 @@ let chatIsOpen = true; // Track if a chat is currently open
 if ('virtualKeyboard' in navigator) {
     navigator.virtualKeyboard.overlaysContent = true;
     navigator.virtualKeyboard.addEventListener('geometrychange', (event) => {
-        // If the keyboard is opening/changing, scroll to bottom synchronously
-        // This fires continuously on every frame during Chrome's native slide animation
-        if (event.target.boundingRect.height > 0) {
+        // When keyboard opens, smoothly pin the chat to the bottom at 60fps 
+        // to match the CSS padding-bottom transition (0.25s)
+        let start = performance.now();
+        function syncScroll(time) {
             scrollToBottom();
+            if (time - start < 300) {
+                requestAnimationFrame(syncScroll);
+            }
         }
+        requestAnimationFrame(syncScroll);
     });
 }
 
