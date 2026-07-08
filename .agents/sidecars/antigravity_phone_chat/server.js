@@ -471,7 +471,7 @@ async function captureSnapshot(cdp) {
             color: cascadeStyles.color,
             fontFamily: cascadeStyles.fontFamily,
             scrollInfo: scrollInfo,
-            isGenerating: !!document.querySelector('button svg.lucide-square')?.closest('button'),
+            isGenerating: !!document.querySelector('button[aria-label="Cancel (Ctrl+D)"], button svg.lucide-square'),
             stats: {
                 nodes: clone.getElementsByTagName('*').length,
                 htmlSize: html.length,
@@ -684,8 +684,8 @@ async function stopGeneration(cdp) {
         }
         
         // Fallback: Look for a square icon in the send button area
-        const stopBtn = document.querySelector('button svg.lucide-square')?.closest('button');
-        if (stopBtn && stopBtn.offsetParent !== null) {
+        const stopBtn = document.querySelector('button[aria-label="Cancel (Ctrl+D)"], button svg.lucide-square')?.closest('button') || document.querySelector('button[aria-label="Cancel (Ctrl+D)"]');
+        if (stopBtn) {
             stopBtn.click();
             return { success: true, method: 'fallback_square' };
         }
@@ -1594,8 +1594,21 @@ async function createServer() {
             res.redirect('/login.html');
         }
     });
+    app.get('/', (req, res, next) => {
+        if (!req.query.v) {
+            return res.redirect('/?v=' + Date.now());
+        }
+        next();
+    });
 
-    app.use(express.static(join(__dirname, 'public')));
+    app.use(express.static(join(__dirname, 'public'), {
+        setHeaders: (res, path) => {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+            res.setHeader('Surrogate-Control', 'no-store');
+        }
+    }));
 
     // Login endpoint
     app.post('/login', (req, res) => {
@@ -1623,6 +1636,7 @@ async function createServer() {
         if (!lastSnapshot) {
             return res.status(503).json({ error: 'No snapshot available yet' });
         }
+        console.log(`[GET /snapshot] Serving snapshot. isGenerating: ${lastSnapshot.isGenerating}`);
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.json(lastSnapshot);
     });
