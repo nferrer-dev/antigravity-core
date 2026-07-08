@@ -592,9 +592,17 @@ async function injectMessage(cdp, text) {
             editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data: textToInsert }));
         }
 
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        // Wait for React to re-render the Submit button (give it up to 150ms)
+        await new Promise(r => setTimeout(r, 150));
 
-        const submit = document.querySelector("svg.lucide-arrow-right")?.closest("button");
+        let submit = document.querySelector('[data-tooltip-id="input-send-button-tooltip"]') 
+                  || document.querySelector('[data-tooltip-id="send-button-tooltip"]')
+                  || document.querySelector('button[aria-label="Send Message"]')
+                  || document.querySelector('button[aria-label="Send"]')
+                  || document.querySelector("svg.lucide-arrow-right")?.closest("button")
+                  || document.querySelector("svg.lucide-arrow-up")?.closest("button")
+                  || document.querySelector("svg.lucide-send")?.closest("button");
+
         if (submit && !submit.disabled) {
             submit.click();
             return { ok:true, method:"click_submit" };
@@ -605,7 +613,7 @@ async function injectMessage(cdp, text) {
         editor.dispatchEvent(new KeyboardEvent("keydown", enterEvent));
         editor.dispatchEvent(new KeyboardEvent("keyup", enterEvent));
         
-        return { ok:true, method:"enter_keypress" };
+        return { ok:true, method:"enter_keypress", submit_button_found: !!submit, submit_disabled: submit ? submit.disabled : null };
     })()`;
 
     for (const ctx of cdp.contexts) {
