@@ -356,7 +356,7 @@ body {
 
 /* Input Section */
 .input-section {
-    background: var(--bg-panel);
+    background: transparent;
     border-top: none;
     /* Removed border since actions are above */
     padding: 8px 16px 12px 16px;
@@ -372,7 +372,7 @@ body {
     gap: 4px;
     align-items: center;
     /* Center text vertically */
-    background-color: transparent;
+    background-color: var(--bg-panel);
     padding: 4px 4px 4px 16px;
     /* Reduced vertical padding */
     border-radius: 24px;
@@ -385,7 +385,7 @@ body {
 
 .input-wrapper:focus-within {
     border-color: var(--accent);
-    background-color: transparent;
+    background-color: var(--bg-panel);
     box-shadow: 0 0 10px rgba(37, 99, 235, 0.2) !important;
 }
 
