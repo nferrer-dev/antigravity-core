@@ -384,10 +384,9 @@ body {
 }
 
 .input-wrapper:focus-within {
-    border-color: var(--accent);
-    background-color: var(--bg-panel);
-    /* Soft glow instead of hard shadow */
-    box-shadow: 0 0 10px rgba(37, 99, 235, 0.2) !important;
+    border-color: transparent;
+    background-color: var(--bg-input);
+    box-shadow: none !important;
 }
 
 textarea {
