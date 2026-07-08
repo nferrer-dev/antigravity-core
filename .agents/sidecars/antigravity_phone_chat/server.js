@@ -572,9 +572,7 @@ async function injectMessage(cdp, text) {
     const safeText = JSON.stringify(text);
 
     const EXPRESSION = `(async () => {
-        const cancel = document.querySelector('[data-tooltip-id="input-send-button-cancel-tooltip"]');
-        if (cancel && cancel.offsetParent !== null) return { ok:false, reason:"busy" };
-
+        // Remove busy check to allow queuing messages while generating (Antigravity UI supports this)
         const editors = [...document.querySelectorAll('[data-testid="conversation-view"] [contenteditable="true"], #root [contenteditable="true"], .overflow-y-auto [contenteditable="true"]')]
             .filter(el => el.offsetParent !== null);
         const editor = editors.at(-1);
