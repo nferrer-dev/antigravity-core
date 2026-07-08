@@ -401,7 +401,7 @@ textarea {
     /* Vertical center visual */
     font-size: 16px;
     font-family: inherit;
-    resize: none;
+    resize: none !important;
     min-height: 24px;
     /* Matches line height */
     max-height: 160px;
@@ -435,6 +435,14 @@ textarea:focus {
 textarea::-webkit-scrollbar {
     width: 0px;
     background: transparent;
+}
+
+textarea::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+textarea::-webkit-resizer {
+    display: none;
 }
 
 .send-btn {
