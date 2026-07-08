@@ -182,8 +182,8 @@ function updateInputButtons() {
     const wrapper = document.querySelector('.input-wrapper');
     if (isGenerating) {
         if (wrapper) wrapper.classList.add('generating');
-        sendBtn.style.display = 'none';
-        stopBtn.style.display = 'flex';
+        sendBtn.classList.remove('visible');
+        stopBtn.classList.add('visible');
         messageInput.readOnly = true;
         messageInput.style.pointerEvents = 'none';
         
@@ -204,7 +204,7 @@ function updateInputButtons() {
         }
     } else {
         if (wrapper) wrapper.classList.remove('generating');
-        stopBtn.style.display = 'none';
+        stopBtn.classList.remove('visible');
         messageInput.readOnly = false;
         messageInput.style.pointerEvents = 'auto';
         
@@ -222,9 +222,9 @@ function updateInputButtons() {
         }
         
         if (messageInput.value.trim().length > 0) {
-            sendBtn.style.display = 'flex';
+            sendBtn.classList.add('visible');
         } else {
-            sendBtn.style.display = 'none';
+            sendBtn.classList.remove('visible');
         }
     }
 }
@@ -240,8 +240,8 @@ function updateStatus(connected) {
         statusText.textContent = 'Reconnecting';
         
         // Ensure the UI doesn't get stuck in "Stop" mode if the server dies
-        sendBtn.style.display = 'flex';
-        stopBtn.style.display = 'none';
+        sendBtn.classList.add('visible');
+        stopBtn.classList.remove('visible');
     }
 }
 

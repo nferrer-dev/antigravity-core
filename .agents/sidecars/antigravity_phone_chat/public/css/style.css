@@ -459,18 +459,31 @@ textarea::-webkit-resizer {
     background: transparent;
     border: none;
     color: var(--accent);
-    width: 36px;
+    /* Hidden state */
+    width: 0px;
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.5);
+    overflow: hidden;
+    padding: 0;
     height: 36px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
     align-self: flex-end;
     /* Keep button at bottom when text wraps */
     margin-bottom: 2px;
+}
+
+.send-btn.visible {
+    width: 36px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
 }
 
 .send-btn:hover {
