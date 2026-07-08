@@ -176,6 +176,7 @@ function connectWebSocket() {
 
 let isGenerating = false;
 let optimisticGeneratingUntil = 0;
+let generationPlaceholderInterval = null;
 
 function updateInputButtons() {
     const wrapper = document.querySelector('.input-wrapper');
@@ -184,6 +185,17 @@ function updateInputButtons() {
         sendBtn.style.display = 'none';
         stopBtn.style.display = 'flex';
         messageInput.disabled = true;
+        
+        // Start "Working..." animation
+        if (!generationPlaceholderInterval) {
+            let dotCount = 1;
+            messageInput.placeholder = 'Working.';
+            generationPlaceholderInterval = setInterval(() => {
+                dotCount = (dotCount % 3) + 1;
+                messageInput.placeholder = 'Working' + '.'.repeat(dotCount);
+            }, 500);
+        }
+
         const inputActionBtn = document.querySelector('.input-action-btn:first-child');
         if (inputActionBtn) {
             inputActionBtn.style.opacity = '0.5';
@@ -193,6 +205,14 @@ function updateInputButtons() {
         if (wrapper) wrapper.classList.remove('generating');
         stopBtn.style.display = 'none';
         messageInput.disabled = false;
+        
+        // Stop animation and reset placeholder
+        if (generationPlaceholderInterval) {
+            clearInterval(generationPlaceholderInterval);
+            generationPlaceholderInterval = null;
+        }
+        messageInput.placeholder = 'Ask anything, @ to mention, / for actions';
+
         const inputActionBtn = document.querySelector('.input-action-btn:first-child');
         if (inputActionBtn) {
             inputActionBtn.style.opacity = '1';
