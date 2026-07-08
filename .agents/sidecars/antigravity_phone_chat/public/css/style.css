@@ -384,9 +384,9 @@ body {
 }
 
 .input-wrapper:focus-within {
-    border-color: transparent;
+    border-color: var(--accent);
     background-color: transparent;
-    box-shadow: none !important;
+    box-shadow: 0 0 10px rgba(37, 99, 235, 0.2) !important;
 }
 
 textarea {
