@@ -173,6 +173,35 @@ function connectWebSocket() {
     };
 }
 
+let isGenerating = false;
+
+function updateInputButtons() {
+    if (isGenerating) {
+        sendBtn.style.display = 'none';
+        stopBtn.style.display = 'flex';
+        messageInput.disabled = true;
+        const inputActionBtn = document.querySelector('.input-action-btn:first-child');
+        if (inputActionBtn) {
+            inputActionBtn.style.opacity = '0.5';
+            inputActionBtn.style.pointerEvents = 'none';
+        }
+    } else {
+        stopBtn.style.display = 'none';
+        messageInput.disabled = false;
+        const inputActionBtn = document.querySelector('.input-action-btn:first-child');
+        if (inputActionBtn) {
+            inputActionBtn.style.opacity = '1';
+            inputActionBtn.style.pointerEvents = 'auto';
+        }
+        
+        if (messageInput.value.trim().length > 0) {
+            sendBtn.style.display = 'flex';
+        } else {
+            sendBtn.style.display = 'none';
+        }
+    }
+}
+
 function updateStatus(connected) {
     if (connected) {
         statusDot.classList.remove('disconnected');
@@ -223,25 +252,8 @@ async function loadSnapshot() {
         const isUserScrollLocked = Date.now() < userScrollLockUntil;
 
         // --- UPDATE GENERATION STATE ---
-        if (data.isGenerating) {
-            sendBtn.style.display = 'none';
-            stopBtn.style.display = 'flex';
-            messageInput.disabled = true;
-            const inputActionBtn = document.querySelector('.input-action-btn:first-child');
-            if (inputActionBtn) {
-                inputActionBtn.style.opacity = '0.5';
-                inputActionBtn.style.pointerEvents = 'none';
-            }
-        } else {
-            sendBtn.style.display = 'flex';
-            stopBtn.style.display = 'none';
-            messageInput.disabled = false;
-            const inputActionBtn = document.querySelector('.input-action-btn:first-child');
-            if (inputActionBtn) {
-                inputActionBtn.style.opacity = '1';
-                inputActionBtn.style.pointerEvents = 'auto';
-            }
-        }
+        isGenerating = data.isGenerating;
+        updateInputButtons();
 
         // --- UPDATE STATS ---
         if (data.stats) {
@@ -760,14 +772,7 @@ async function sendMessage() {
     messageInput.blur(); // Close keyboard on mobile immediately
 
     isGenerating = true;
-    sendBtn.style.display = 'none';
-    stopBtn.style.display = 'flex';
-    messageInput.disabled = true;
-    const inputActionBtn = document.querySelector('.input-action-btn:first-child');
-    if (inputActionBtn) {
-        inputActionBtn.style.opacity = '0.5';
-        inputActionBtn.style.pointerEvents = 'none';
-    }
+    updateInputButtons();
 
     sendBtn.disabled = true;
     sendBtn.style.opacity = '0.5';
@@ -829,6 +834,7 @@ messageInput.addEventListener('keydown', (e) => {
 messageInput.addEventListener('input', function () {
     this.style.height = 'auto';
     this.style.height = (this.scrollHeight) + 'px';
+    updateInputButtons();
 });
 
 // --- Support Modal Logic ---
@@ -1127,14 +1133,7 @@ stopBtn.addEventListener('click', async () => {
     
     // Optimistic UI update
     isGenerating = false;
-    sendBtn.style.display = 'flex';
-    stopBtn.style.display = 'none';
-    messageInput.disabled = false;
-    const inputActionBtn = document.querySelector('.input-action-btn:first-child');
-    if (inputActionBtn) {
-        inputActionBtn.style.opacity = '1';
-        inputActionBtn.style.pointerEvents = 'auto';
-    }
+    updateInputButtons();
 
     try {
         const res = await fetchWithAuth('/stop', { method: 'POST' });
@@ -1678,6 +1677,7 @@ chatContent.addEventListener('click', (e) => {
 });
 
 // --- Init ---
+updateInputButtons();
 connectWebSocket();
 // Sync state initially and every 5 seconds to keep phone in sync with desktop changes
 fetchAppState();
