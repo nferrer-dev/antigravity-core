@@ -1029,185 +1029,60 @@ async function startNewChat(cdp) {
     }
     return { error: 'Context failed' };
 }
-// Get Chat History - Click history button and scrape conversations
+// Get Chat History - Scrape directly from sidebar convo pills
 async function getChatHistory(cdp) {
     const EXP = `(async () => {
         try {
             const chats = [];
             const seenTitles = new Set();
-
-            // Priority 1: Look for tooltip ID pattern (history/past/recent)
-            let historyBtn = document.querySelector('[data-tooltip-id*="history"], [data-tooltip-id*="past"], [data-tooltip-id*="recent"], [data-tooltip-id*="conversation-history"]');
             
-            // Priority 2: Look for button ADJACENT to the new chat button
-            if (!historyBtn) {
-                const newChatBtn = document.querySelector('[data-tooltip-id="new-conversation-tooltip"]');
-                if (newChatBtn) {
-                    const parent = newChatBtn.parentElement;
-                    if (parent) {
-                        const siblings = Array.from(parent.children).filter(el => el !== newChatBtn);
-                        historyBtn = siblings.find(el => el.tagName === 'A' || el.tagName === 'BUTTON' || el.getAttribute('role') === 'button');
-                    }
-                }
-            }
-
-            // Fallback: Use previous heuristics (icon/aria-label)
-            if (!historyBtn) {
-                const allButtons = Array.from(document.querySelectorAll('button, [role="button"], a[data-tooltip-id]'));
-                for (const btn of allButtons) {
-                    if (btn.offsetParent === null) continue;
-                    const hasHistoryIcon = btn.querySelector('svg.lucide-clock') ||
-                                           btn.querySelector('svg.lucide-history') ||
-                                           btn.querySelector('svg.lucide-folder') ||
-                                           btn.querySelector('svg[class*="clock"]') ||
-                                           btn.querySelector('svg[class*="history"]');
-                    if (hasHistoryIcon) {
-                        historyBtn = btn;
-                        break;
-                    }
-                }
-            }
+            const elements = Array.from(document.querySelectorAll('h2, div.text-sm.font-medium.truncate.m-0, span[data-testid^="convo-pill-"]'));
+            let currentSection = '';
+            let currentGroup = 'Projects';
+            let pillsCount = 0;
+            const logLines = [];
             
-            if (!historyBtn) {
-                return { error: 'History button not found', chats: [] };
-            }
-
-            // Click and Wait
-            historyBtn.click();
-            await new Promise(r => setTimeout(r, 2000));
-            
-            // Find the side panel
-            let panel = null;
-            let inputsFoundDebug = [];
-            
-            // Strategy 1: The search input has specific placeholder
-            let searchInput = null;
-            const inputs = Array.from(document.querySelectorAll('input'));
-            searchInput = inputs.find(i => {
-                const ph = (i.placeholder || '').toLowerCase();
-                return ph.includes('select') || ph.includes('conversation');
-            });
-            
-            // Strategy 2: Look for any text input that looks like a search bar (based on user snippet classes)
-            if (!searchInput) {
-                const allInputs = Array.from(document.querySelectorAll('input[type="text"]'));
-                inputsFoundDebug = allInputs.map(i => 'ph:' + i.placeholder + ', cls:' + i.className);
-                
-                searchInput = allInputs.find(i => 
-                    i.offsetParent !== null && 
-                    (i.className.includes('w-full') || i.classList.contains('w-full'))
-                );
-            }
-            
-            // Strategy 3: Find known text in the panel (Anchor Text Strategy)
-            let anchorElement = null;
-            if (!searchInput) {
-                 const allSpans = Array.from(document.querySelectorAll('span, div, p'));
-                 anchorElement = allSpans.find(s => {
-                     const t = (s.innerText || '').trim();
-                     return t === 'Current' || t === 'Refining Chat History Scraper'; // specific known title
-                 });
-            }
-
-            const startElement = searchInput || anchorElement;
-
-            if (startElement) {
-                // Walk up to find the panel container
-                let container = startElement;
-                for (let i = 0; i < 15; i++) { 
-                    if (!container.parentElement) break;
-                    container = container.parentElement;
-                    const rect = container.getBoundingClientRect();
-                    
-                    // Panel should have good dimensions
-                    // Relaxed constraints for mobile
-                    if (rect.width > 50 && rect.height > 100) {
-                        panel = container;
-                        
-                        // If it looks like a modal/popover (fixed or absolute pos), that's definitely it
-                        const style = window.getComputedStyle(container);
-                        if (style.position === 'fixed' || style.position === 'absolute' || style.zIndex > 10) {
-                            break;
-                        }
-                    }
-                }
-                
-                // Fallback if loop finishes without specific break
-                if (!panel && startElement) {
-                     // Just go up 4 levels
-                     let p = startElement;
-                     for(let k=0; k<4; k++) { if(p.parentElement) p = p.parentElement; }
-                     panel = p;
-                }
-            }
-            
-            const debugInfo = { 
-                panelFound: !!panel, 
-                panelWidth: panel?.offsetWidth || 0,
-                inputFound: !!searchInput,
-                anchorFound: !!anchorElement,
-                inputsDebug: inputsFoundDebug.slice(0, 5)
-            };
-            
-            if (panel) {
-                // Chat titles are in <span> elements
-                const spans = Array.from(panel.querySelectorAll('span'));
-                
-                // Section headers and workspace labels to skip
-                const SKIP_EXACT = new Set([
-                    'current', 'other conversations', 'now',
-                    'projects', 'personal', 'workspace', 'default', 'phone connect antigravity'
-                ]);
-                
-                for (const span of spans) {
-                    const text = span.textContent?.trim() || '';
-                    const lower = text.toLowerCase();
-                    
-                    // Skip empty or too short
+            for (const el of elements) {
+                if (el.tagName === 'H2') {
+                    currentSection = el.textContent?.trim() || '';
+                } else if (el.tagName === 'DIV') {
+                    currentGroup = el.textContent?.trim() || '';
+                } else if (el.tagName === 'SPAN') {
+                    pillsCount++;
+                    let text = el.textContent?.trim() || '';
                     if (text.length < 3) continue;
-
-                    // Sibling-span heuristic: skip tag/badge labels (like workspaces)
-                    // If a short span has a longer sibling span, it's likely a tag next to the actual title
-                    if (text.length < 40 && span.parentElement) {
-                        let hasLongerSiblingSpan = false;
-                        for (const child of span.parentElement.children) {
-                            if (child !== span && child.tagName === 'SPAN') {
-                                const childTextLength = (child.textContent?.trim() || '').length;
-                                if (childTextLength > text.length) {
-                                    hasLongerSiblingSpan = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (hasLongerSiblingSpan) continue;
+                    if (seenTitles.has(text)) continue;
+                    seenTitles.add(text);
+                    
+                    let pillWorkspace = currentGroup;
+                    if (currentSection.toLowerCase() === 'conversations') {
+                        pillWorkspace = 'Global';
                     }
                     
-                    // Skip section headers
-                    if (SKIP_EXACT.has(lower)) continue;
-                    if (lower.startsWith('recent in ')) continue;
-                    if (lower.startsWith('show ') && lower.includes('more')) continue;
+                    // Extract just the project folder name if it's an absolute path
+                    if (pillWorkspace.includes('\\\\') || pillWorkspace.includes('/')) {
+                        const parts = pillWorkspace.replace(/\\\\/g, '/').split('/');
+                        pillWorkspace = parts[parts.length - 1];
+                    }
                     
-                    // Skip timestamps
-                    if (lower.endsWith(' ago') || /^\\d+\\s*(sec|min|hr|day|wk|mo|yr)/i.test(lower)) continue;
-                    
-                    // Skip very long text (containers)
-                    if (text.length > 100) continue;
-                    
-                    // Skip duplicates
-                    if (seenTitles.has(text)) continue;
-                    
-                    seenTitles.add(text);
-                    chats.push({ title: text, date: 'Recent' });
-                    
+                    logLines.push({ originalText: el.textContent, parsedTitle: text, section: currentSection, group: currentGroup, workspace: pillWorkspace });
+                    chats.push({ title: text, workspace: pillWorkspace, date: 'Recent' });
                     if (chats.length >= 50) break;
                 }
             }
             
-            // Note: Panel is left open on PC as requested ("launch history on pc")
+            console.log("CHATS PARSED:", JSON.stringify(chats, null, 2));
+            
+            const debugInfo = {
+                pillsFound: pillsCount,
+                elementsFound: elements.length,
+                logLines: logLines
+            };
 
             return { success: true, chats: chats, debug: debugInfo };
         } catch(e) {
             return { error: e.toString(), chats: [] };
+
         }
     })()`;
 
@@ -1242,83 +1117,25 @@ async function selectChat(cdp, chatTitle) {
             const log = (msg) => debugInfo.push(msg);
             log('Starting selectChat for: ' + targetTitle);
 
-            // 1. Open History Panel (same robust method style as getChatHistory)
-            let historyBtn = document.querySelector('[data-tooltip-id="history-tooltip"]');
+            // 1. Check if drawer is already open by looking for pills
+            let pills = Array.from(document.querySelectorAll('span[data-testid^="convo-pill-"]'));
             
-            if (!historyBtn) {
-                const allButtons = Array.from(document.querySelectorAll('button, [role="button"]'));
-                
-                // Try icon first
-                historyBtn = allButtons.find(btn => {
-                    if (btn.offsetParent === null) return false;
-                    return btn.querySelector('svg.lucide-clock') ||
-                        btn.querySelector('svg.lucide-history') ||
-                        btn.querySelector('svg.lucide-folder') ||
-                        btn.querySelector('svg.lucide-clock-rotate-left');
-                });
-                
-                // Try position strategy (second button near new chat)
-                if (!historyBtn) {
-                    const topButtons = allButtons.filter(btn => {
-                        if (btn.offsetParent === null) return false;
-                        const rect = btn.getBoundingClientRect();
-                        return rect.top < 100 && rect.top > 0;
-                    }).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-                    
-                    if (topButtons.length >= 2) historyBtn = topButtons[1];
+            if (pills.length === 0) {
+                const drawerBtn = document.querySelector('button[aria-label="History"], [data-testid="history-drawer-toggle"]');
+                if (drawerBtn) {
+                    drawerBtn.click();
+                    log('Clicked history button');
+                    await new Promise(r => setTimeout(r, 600));
+                } else {
+                    log('History button not found, assuming drawer is open or missing');
                 }
             }
 
-            if (!historyBtn) return { error: 'History button not found', debug: debugInfo };
-
-            historyBtn.click();
-            log('Clicked history button');
-
-            // 2. Wait-for-visible polling (up to 3s)
-            let panel = null;
-            let panelFound = false;
-            for (let i = 0; i < 15; i++) {
-                await new Promise(r => setTimeout(r, 200));
-
-                const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
-                const searchInput = inputs.find(input =>
-                    input.offsetParent !== null &&
-                    (input.placeholder?.toLowerCase().includes('select') ||
-                     input.placeholder?.toLowerCase().includes('conversation') ||
-                     input.className.includes('w-full'))
-                );
-
-                const allSpans = Array.from(document.querySelectorAll('span, div, p'));
-                const anchorSpan = allSpans.find(s => s.offsetParent !== null && (s.innerText || '').trim() === 'Current');
-
-                const anchor = searchInput || anchorSpan;
-                if (anchor) {
-                    let container = anchor;
-                    for (let j = 0; j < 15; j++) {
-                        if (!container) break;
-                        const rect = container.getBoundingClientRect();
-                        if (rect.width > 50 && rect.height > 100) {
-                            const style = window.getComputedStyle(container);
-                            if (style.position === 'fixed' || style.position === 'absolute' || style.zIndex > 10) {
-                                panel = container;
-                                panelFound = true;
-                                break;
-                            }
-                        }
-                        container = container.parentElement;
-                    }
-                }
-                if (panelFound) break;
-            }
-
-            if (!panelFound) return { error: 'History panel did not open', debug: debugInfo };
-            log('Panel found');
-
-            // Give panel a bit more time to render list items
-            await new Promise(r => setTimeout(r, 300));
+            // Use document body instead of trying to find a fixed panel
+            const searchContext = document.body;
 
             // 3. Scored fuzzy matching
-            let candidates = Array.from(panel.querySelectorAll('span, p, div'))
+            let candidates = Array.from(searchContext.querySelectorAll('span, p, div'))
                 .filter(el => {
                     const text = el.textContent?.trim() || '';
                     return text.length >= 3 && el.children.length === 0 && el.offsetParent !== null;
@@ -1395,21 +1212,14 @@ async function selectChat(cdp, chatTitle) {
             executeClick(candidates[0].el);
             log('Executed click on candidate 0');
 
-            // 5. Verify/retry if panel still open
-            await new Promise(r => setTimeout(r, 1500));
-            const isPanelStillOpen = panel.offsetParent !== null && panel.style.display !== 'none' && panel.getBoundingClientRect().height > 0;
+            // 5. Wait a moment to ensure click processed
+            await new Promise(r => setTimeout(r, 1000));
 
-            if (isPanelStillOpen && candidates.length > 1) {
-                log('Panel still open, retrying with candidate 1: "' + candidates[1].text + '"');
-                executeClick(candidates[1].el);
-                await new Promise(r => setTimeout(r, 1000));
-            }
-
-            // Ensure panel closes
+            // Ensure drawer closes by hitting Escape
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
             document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', code: 'Escape', bubbles: true }));
 
-            return { success: true, method: 'heuristic_click', bestMatch: candidates[0].text, retried: isPanelStillOpen, debug: debugInfo };
+            return { success: true, method: 'heuristic_click', bestMatch: candidates[0].text, retried: false, debug: debugInfo };
         } catch (e) {
             return { error: 'JS Exception: ' + e.toString() };
         }
@@ -1433,6 +1243,16 @@ async function selectChat(cdp, chatTitle) {
 async function closeHistory(cdp) {
     const EXP = `(async () => {
         try {
+            const closeBtn = document.querySelector('button[aria-label="Close"]');
+            if (closeBtn) {
+                closeBtn.click();
+                return { success: true };
+            }
+            const drawerBtn = document.querySelector('button[aria-label="History"], [data-testid="history-drawer-toggle"]');
+            if (drawerBtn && (drawerBtn.getAttribute('aria-expanded') === 'true' || drawerBtn.getAttribute('data-state') === 'open')) {
+                drawerBtn.click();
+                return { success: true };
+            }
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
             document.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Escape', code: 'Escape', bubbles: true }));
             return { success: true };

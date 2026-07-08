@@ -233,3 +233,11 @@ When executing tasks related to `<web_application_development>`, agents MUST adh
 # Minimal Viable Context (MVC) Protocol (Addendum)
 
 6. **The Context Coalescing Protocol**: When an agent uses `view_file` to inspect multiple nearby line ranges, it MUST coalesce them into a single contiguous block to minimize API latency and token fragmentation.
+
+
+---
+# Communication & Interaction Protocols (Addendum)
+
+12. **The Unknowns Bifurcation Protocol**: Agents must strictly categorize unknowns into 'Discoverable Facts' (resolved silently via read-only tools without user involvement) vs 'Preferences/Tradeoffs' (escalated immediately to the user via multiple-choice questions with a recommended default).
+13. **The Code Review Inversion Protocol**: When conducting reviews, agents must invert standard conversational structure. Actionable findings, bugs, and risks (ordered by severity with exact line references) must be presented FIRST. Summaries and overviews are relegated to the bottom as secondary details.
+14. **The Narration-Execution Parity Protocol**: Agents are strictly forbidden from narrating an action in present-continuous or past-tense (e.g., 'I am now reading...') without executing the corresponding tool call in the exact same response payload.

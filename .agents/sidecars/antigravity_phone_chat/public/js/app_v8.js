@@ -1142,6 +1142,11 @@ async function showChatHistory() {
             <div class="history-state-text">Loading History...</div>
         </div>
     `;
+    historyLayer.style.display = 'flex'; // Force reset in case it was hidden
+    
+    // Force a reflow for iOS Safari
+    void historyLayer.offsetWidth;
+
     historyLayer.classList.add('show');
     historyBtn.style.opacity = '1';
 
@@ -1200,26 +1205,36 @@ async function showChatHistory() {
             <div class="history-list-group">
         `;
 
+        // Group chats by workspace
+        const groupedChats = {};
         chats.forEach(chat => {
-            const safeTitle = chat.title.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-            html += `
-                <div class="history-card" data-title="${safeTitle}">
-                    <div class="history-card-icon">
-                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                        </svg>
+            const ws = chat.workspace || 'Global';
+            if (!groupedChats[ws]) groupedChats[ws] = [];
+            groupedChats[ws].push(chat);
+        });
+
+        Object.keys(groupedChats).forEach(ws => {
+            html += `<div class="history-group-header">${escapeHtml(ws)}</div>`;
+            groupedChats[ws].forEach(chat => {
+                const safeTitle = chat.title.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                html += `
+                    <div class="history-card" data-title="${safeTitle}">
+                        <div class="history-card-icon">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </div>
+                        <div class="history-card-content">
+                            <span class="history-card-title">${escapeHtml(chat.title)}</span>
+                        </div>
+                        <div class="history-card-arrow">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </div>
                     </div>
-                    <div class="history-card-content">
-                        ${chat.workspace ? `<span class="history-card-workspace">${escapeHtml(chat.workspace)}</span>` : ''}
-                        <span class="history-card-title">${escapeHtml(chat.title)}</span>
-                    </div>
-                    <div class="history-card-arrow">
-                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                    </div>
-                </div>
-            `;
+                `;
+            });
         });
 
         html += `</div>`;
@@ -1264,6 +1279,9 @@ async function selectChat(title) {
         const data = await res.json();
 
         if (data.success) {
+            // Close the desktop drawer so it doesn't get synced to mobile view
+            await fetchWithAuth('/close-history', { method: 'POST' });
+
             // Persistent polling to catch delayed desktop render/update
             let attempts = 0;
             const poll = setInterval(async () => {
@@ -1592,9 +1610,19 @@ if (historyList) {
             startNewChat();
         } else if (card) {
             const title = card.getAttribute('data-title');
-            // Do NOT call hideChatHistory() here. 
-            // selectChat will click the chat on the desktop, which naturally closes the drawer.
-            // Calling it here creates a race condition where the drawer closes before selectChat can click the item.
+            
+            // Debug visual feedback
+            card.style.opacity = '0.5';
+
+            // Close the mobile UI overlay immediately for responsiveness
+            // (We avoid hideChatHistory() to prevent POST /close-history from racing with /select-chat)
+            historyLayer.classList.remove('show');
+            
+            // Force hide it after the transition (or immediately if transition fails)
+            setTimeout(() => {
+                historyLayer.style.display = 'none';
+            }, 300);
+            
             selectChat(title);
         }
     });

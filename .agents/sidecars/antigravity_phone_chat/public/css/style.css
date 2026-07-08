@@ -758,6 +758,22 @@ textarea::-webkit-scrollbar {
     gap: 12px;
 }
 
+.history-group-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 16px 4px 4px 4px;
+    margin-top: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.history-group-header:first-child {
+    margin-top: 0;
+    padding-top: 4px;
+}
+
 .history-card {
     background: var(--bg-panel);
     border: 1px solid rgba(255, 255, 255, 0.05);
