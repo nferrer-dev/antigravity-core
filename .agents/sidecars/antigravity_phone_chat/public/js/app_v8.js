@@ -226,9 +226,21 @@ async function loadSnapshot() {
         if (data.isGenerating) {
             sendBtn.style.display = 'none';
             stopBtn.style.display = 'flex';
+            messageInput.disabled = true;
+            const inputActionBtn = document.querySelector('.input-action-btn:first-child');
+            if (inputActionBtn) {
+                inputActionBtn.style.opacity = '0.5';
+                inputActionBtn.style.pointerEvents = 'none';
+            }
         } else {
             sendBtn.style.display = 'flex';
             stopBtn.style.display = 'none';
+            messageInput.disabled = false;
+            const inputActionBtn = document.querySelector('.input-action-btn:first-child');
+            if (inputActionBtn) {
+                inputActionBtn.style.opacity = '1';
+                inputActionBtn.style.pointerEvents = 'auto';
+            }
         }
 
         // --- UPDATE STATS ---
