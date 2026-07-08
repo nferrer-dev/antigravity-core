@@ -175,6 +175,7 @@ function connectWebSocket() {
 }
 
 let isGenerating = false;
+let optimisticGeneratingUntil = 0;
 
 function updateInputButtons() {
     const wrapper = document.querySelector('.input-wrapper');
@@ -256,7 +257,12 @@ async function loadSnapshot() {
         const isUserScrollLocked = Date.now() < userScrollLockUntil;
 
         // --- UPDATE GENERATION STATE ---
-        isGenerating = data.isGenerating;
+        if (Date.now() < optimisticGeneratingUntil && !data.isGenerating) {
+            // Force it to true during the optimistic window if the snapshot hasn't caught up yet
+            isGenerating = true;
+        } else {
+            isGenerating = data.isGenerating;
+        }
         updateInputButtons();
 
         // --- UPDATE STATS ---
@@ -780,6 +786,7 @@ async function sendMessage() {
     messageInput.blur(); // Close keyboard on mobile immediately
 
     isGenerating = true;
+    optimisticGeneratingUntil = Date.now() + 3000; // Lock isGenerating to true for 3 seconds to prevent UI toggle flash
     updateInputButtons();
 
     sendBtn.disabled = true;
