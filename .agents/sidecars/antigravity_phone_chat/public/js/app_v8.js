@@ -47,6 +47,14 @@ let chatIsOpen = true; // Track if a chat is currently open
 // Prevents Android Chrome from abruptly resizing the viewport when keyboard opens
 if ('virtualKeyboard' in navigator) {
     navigator.virtualKeyboard.overlaysContent = true;
+    navigator.virtualKeyboard.addEventListener('geometrychange', (event) => {
+        // If the keyboard is opening/changing, scroll to bottom to keep content visible
+        if (event.target.boundingRect.height > 0) {
+            // Use a slight delay to allow the CSS transition padding to apply first
+            setTimeout(scrollToBottom, 50);
+            setTimeout(scrollToBottom, 150);
+        }
+    });
 }
 
 // --- Auth Utilities ---
