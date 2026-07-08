@@ -471,7 +471,7 @@ async function captureSnapshot(cdp) {
             color: cascadeStyles.color,
             fontFamily: cascadeStyles.fontFamily,
             scrollInfo: scrollInfo,
-            isGenerating: !!document.querySelector('button[aria-label="Cancel (Ctrl+D)"], button svg.lucide-square'),
+            isGenerating: !!document.querySelector('[data-testid="agent-loading"]'),
             stats: {
                 nodes: clone.getElementsByTagName('*').length,
                 htmlSize: html.length,
