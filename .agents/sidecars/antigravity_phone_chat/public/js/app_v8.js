@@ -43,6 +43,11 @@ let lastHash = '';
 let currentMode = 'Fast';
 let chatIsOpen = true; // Track if a chat is currently open
 
+// --- Virtual Keyboard API ---
+// Prevents Android Chrome from abruptly resizing the viewport when keyboard opens
+if ('virtualKeyboard' in navigator) {
+    navigator.virtualKeyboard.overlaysContent = true;
+}
 
 // --- Auth Utilities ---
 async function fetchWithAuth(url, options = {}) {
