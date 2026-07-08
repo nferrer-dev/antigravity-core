@@ -486,7 +486,7 @@ async function captureSnapshot(cdp) {
                 expression: CAPTURE_SCRIPT,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
 
             if (result.exceptionDetails) {
@@ -561,7 +561,7 @@ async function injectMessage(cdp, text) {
                 expression: EXPRESSION,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
 
             if (result.result && result.result.value) {
@@ -664,7 +664,7 @@ async function setMode(cdp, mode) {
                 expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value) return res.result.value;
         } catch (e) { }
@@ -698,7 +698,7 @@ async function stopGeneration(cdp) {
                 expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value) return res.result.value;
         } catch (e) { }
@@ -755,7 +755,7 @@ async function clickElement(cdp, { selector, index, textContent }) {
                 expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value?.success) return res.result.value;
             // If we found it but click didn't return success (unlikely with this script), continue to next context
@@ -814,7 +814,7 @@ async function remoteScroll(cdp, { scrollTop, scrollPercent }) {
                 expression: EXPRESSION,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value?.success) return res.result.value;
         } catch (e) { }
@@ -955,7 +955,7 @@ async function setModel(cdp, modelName) {
                 expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value) return res.result.value;
         } catch (e) { }
@@ -1022,7 +1022,7 @@ async function startNewChat(cdp) {
                 expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value?.success) return res.result.value;
         } catch (e) { }
@@ -1218,7 +1218,7 @@ async function getChatHistory(cdp) {
                 expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value) return res.result.value;
             // If result.value is null/undefined but no error thrown, check exceptionDetails
@@ -1376,7 +1376,7 @@ async function selectChat(cdp, chatTitle) {
                     const rect = finalTarget.getBoundingClientRect();
                     const centerX = rect.left + (rect.width / 2);
                     const centerY = rect.top + (rect.height / 2);
-                    const events = ['mousedown', 'mouseup', 'click'];
+                    const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
                     events.forEach(type => {
                         finalTarget.dispatchEvent(new MouseEvent(type, {
                             view: window,
@@ -1421,7 +1421,7 @@ async function selectChat(cdp, chatTitle) {
                 expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value) return res.result.value;
         } catch (e) { }
@@ -1447,7 +1447,7 @@ async function closeHistory(cdp) {
                 expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value?.success) return res.result.value;
         } catch (e) { }
@@ -1472,7 +1472,7 @@ async function hasChatOpen(cdp) {
             const res = await cdp.call("Runtime.evaluate", {
                 expression: EXP,
                 returnByValue: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value) return res.result.value;
         } catch (e) { }
@@ -1559,7 +1559,7 @@ async function getAppState(cdp) {
                 expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
-                contextId: ctx.id
+                /* contextId: ctx.id */
             });
             if (res.result?.value) return res.result.value;
         } catch (e) { }
@@ -2020,18 +2020,18 @@ async function createServer() {
 
             // 3. Scan ALL Contexts
             const contextResults = [];
-            for (const ctx of contexts) {
+            for (const ctx of [{id: undefined}]) {
                 try {
                     const result = await cdpConnection.call("Runtime.evaluate", {
                         expression: EXP,
                         returnByValue: true,
-                        contextId: ctx.id
+                        /* contextId: ctx.id */
                     });
 
                     if (result.result?.value) {
                         const val = result.result.value;
                         contextResults.push({
-                            contextId: ctx.id,
+                            /* contextId: ctx.id (removed) */
                             frameId: ctx.frameId,
                             url: val.url,
                             title: val.title,
@@ -2043,19 +2043,19 @@ async function createServer() {
                         });
                     } else if (result.exceptionDetails) {
                         contextResults.push({
-                            contextId: ctx.id,
+                            /* contextId: ctx.id (removed) */
                             frameId: ctx.frameId,
                             error: `Script Exception: ${result.exceptionDetails.text} ${result.exceptionDetails.exception?.description || ''} `
                         });
                     } else {
                         contextResults.push({
-                            contextId: ctx.id,
+                            /* contextId: ctx.id (removed) */
                             frameId: ctx.frameId,
                             error: 'No value returned (undefined)'
                         });
                     }
                 } catch (e) {
-                    contextResults.push({ contextId: ctx.id, error: e.message });
+                    contextResults.push({ /* contextId: ctx.id (removed) */ error: e.message });
                 }
             }
 

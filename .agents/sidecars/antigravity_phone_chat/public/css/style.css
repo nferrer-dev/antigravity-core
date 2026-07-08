@@ -795,6 +795,19 @@ textarea::-webkit-scrollbar {
     overflow: hidden;
 }
 
+.history-card-workspace {
+    display: block;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
 .history-card-title {
     display: block;
     font-size: 15px;

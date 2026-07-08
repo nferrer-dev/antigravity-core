@@ -1210,6 +1210,7 @@ async function showChatHistory() {
                         </svg>
                     </div>
                     <div class="history-card-content">
+                        ${chat.workspace ? `<span class="history-card-workspace">${escapeHtml(chat.workspace)}</span>` : ''}
                         <span class="history-card-title">${escapeHtml(chat.title)}</span>
                     </div>
                     <div class="history-card-arrow">
@@ -1429,6 +1430,29 @@ chatContainer.addEventListener('click', async (e) => {
 
     const text = target.innerText || '';
 
+    // --- Auto-Respond to Text Options (e.g. "1. Option A") ---
+    // If the user taps on a numbered list item or line, auto-send the number
+    const listElement = e.target.closest('li, p, div');
+    if (listElement && listElement.closest('.message')) {
+        const elText = (listElement.innerText || '').trim();
+        // Match standard option formats: "1. Option", "1) Option", "[1] Option"
+        const optionMatch = elText.match(/^\[?(\d+)\]?[.:\)]?\s+(.+)/);
+        
+        // Ensure it's short, doesn't have line breaks, and isn't just a generic number (must have some text)
+        if (optionMatch && elText.length < 200 && !elText.includes('\n')) {
+            const optionNumber = optionMatch[1];
+            
+            // Provide visual feedback
+            listElement.style.opacity = '0.5';
+            setTimeout(() => listElement.style.opacity = '1', 300);
+            
+            // Set input and send
+            messageInput.value = optionNumber;
+            sendMessage();
+            return;
+        }
+    }
+
     // Check if this looks like a clickable UI toggle from Antigravity/Cascade
     // Includes: Thought blocks, Worked status, Edited files status, and File lists
     const isUiToggle = /Thought|Thinking|Worked for|Edited|\d+\s+file/i.test(text) && text.length < 500;
@@ -1493,7 +1517,7 @@ chatContainer.addEventListener('click', async (e) => {
             'Review changes', 'Review',
             'Confirm', 'Accept', 'Reject', 'Discard',
             'Allow', 'Deny', 'Apply', 'Save', 'Run',
-            'Yes', 'No'
+            'Yes', 'No', 'Submit', 'Skip'
         ];
 
         const btnTextLower = btnText.toLowerCase();
@@ -1568,7 +1592,9 @@ if (historyList) {
             startNewChat();
         } else if (card) {
             const title = card.getAttribute('data-title');
-            hideChatHistory();
+            // Do NOT call hideChatHistory() here. 
+            // selectChat will click the chat on the desktop, which naturally closes the drawer.
+            // Calling it here creates a race condition where the drawer closes before selectChat can click the item.
             selectChat(title);
         }
     });
