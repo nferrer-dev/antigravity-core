@@ -1463,6 +1463,8 @@ async function startPolling(wss) {
     let isConnecting = false;
 
     const poll = async () => {
+        let currentInterval = 1000; // Default idle interval
+
         if (!cdpConnection || (cdpConnection.ws && cdpConnection.ws.readyState !== WebSocket.OPEN)) {
             if (!isConnecting) {
                 console.log('🔍 Looking for Antigravity CDP connection...');
@@ -1489,6 +1491,10 @@ async function startPolling(wss) {
         try {
             const snapshot = await captureSnapshot(cdpConnection);
             if (snapshot && !snapshot.error) {
+                if (snapshot.isGenerating) {
+                    currentInterval = 150; // Fast stream mode (~7 FPS)
+                }
+
                 const hash = hashString(snapshot.html);
 
                 // Only update if content changed or generation state changed
@@ -1507,7 +1513,10 @@ async function startPolling(wss) {
                         }
                     });
 
-                    console.log(`📸 Snapshot updated(hash: ${hash})`);
+                    // Don't log every 150ms to prevent spam
+                    if (currentInterval !== 150 || Math.random() < 0.1) {
+                        console.log(`📸 Snapshot updated(hash: ${hash})`);
+                    }
                 }
             } else {
                 // Snapshot is null or has error
@@ -1528,7 +1537,7 @@ async function startPolling(wss) {
             console.error('Poll error:', err.message);
         }
 
-        setTimeout(poll, POLL_INTERVAL);
+        setTimeout(poll, currentInterval);
     };
 
     poll();
