@@ -184,7 +184,8 @@ function updateInputButtons() {
         if (wrapper) wrapper.classList.add('generating');
         sendBtn.style.display = 'none';
         stopBtn.style.display = 'flex';
-        messageInput.disabled = true;
+        messageInput.readOnly = true;
+        messageInput.style.pointerEvents = 'none';
         
         // Start "Working..." animation
         if (!generationPlaceholderInterval) {
@@ -204,7 +205,8 @@ function updateInputButtons() {
     } else {
         if (wrapper) wrapper.classList.remove('generating');
         stopBtn.style.display = 'none';
-        messageInput.disabled = false;
+        messageInput.readOnly = false;
+        messageInput.style.pointerEvents = 'auto';
         
         // Stop animation and reset placeholder
         if (generationPlaceholderInterval) {
