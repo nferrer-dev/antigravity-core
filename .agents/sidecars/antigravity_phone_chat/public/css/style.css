@@ -372,7 +372,7 @@ body {
     gap: 4px;
     align-items: center;
     /* Center text vertically */
-    background-color: var(--bg-input);
+    background-color: transparent;
     padding: 4px 4px 4px 16px;
     /* Reduced vertical padding */
     border-radius: 24px;
@@ -385,7 +385,7 @@ body {
 
 .input-wrapper:focus-within {
     border-color: transparent;
-    background-color: var(--bg-input);
+    background-color: transparent;
     box-shadow: none !important;
 }
 
