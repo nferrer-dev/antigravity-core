@@ -34,6 +34,7 @@ const quickActionChips = document.querySelectorAll('.action-chip');
 // --- State ---
 let autoRefreshEnabled = true;
 let userIsScrolling = false;
+let isProgrammaticScroll = false;
 let userScrollLockUntil = 0; // Timestamp until which we respect user scroll
 let lastScrollPosition = 0;
 let ws = null;
@@ -61,7 +62,7 @@ async function fetchWithAuth(url, options = {}) {
         throw e;
     }
 }
-const USER_SCROLL_LOCK_DURATION = 3000; // 3 seconds of scroll protection
+const USER_SCROLL_LOCK_DURATION = 500; // 0.5 seconds of scroll protection
 
 // --- Sync State (Desktop is Always Priority) ---
 async function fetchAppState() {
@@ -730,7 +731,9 @@ function setupResizeObserver() {
         if (!scroller) return;
         if (shouldStickToBottom) {
             // Instant scroll, no animation
+            isProgrammaticScroll = true;
             scroller.scrollTop = scroller.scrollHeight;
+            setTimeout(() => isProgrammaticScroll = false, 50);
         }
     });
     
@@ -756,7 +759,9 @@ function scrollToBottom() {
     const container = getScrollContainer();
     if (container) {
         shouldStickToBottom = true;
+        isProgrammaticScroll = true;
         container.scrollTop = container.scrollHeight;
+        setTimeout(() => isProgrammaticScroll = false, 50);
     }
 }
 
@@ -938,6 +943,7 @@ function updateDOMPreservingScroll(container, newHTML) {
     requestAnimationFrame(() => {
         const newScrollPos = currentScroll.scrollHeight - currentScroll.clientHeight - distanceFromBottom;
         
+        isProgrammaticScroll = true;
         if (isUserScrollLocked) {
             currentScroll.scrollTop = Math.max(0, newScrollPos);
         } else if (isNearBottom) {
@@ -945,6 +951,7 @@ function updateDOMPreservingScroll(container, newHTML) {
         } else {
             currentScroll.scrollTop = Math.max(0, newScrollPos);
         }
+        setTimeout(() => isProgrammaticScroll = false, 50);
     });
     
     return true;
@@ -1025,6 +1032,7 @@ function updateLoaderVisibility(container) {
 
 // Use event capture to intercept scroll events from the dynamically injected virtualized container
 chatContent.addEventListener('scroll', (e) => {
+    if (isProgrammaticScroll) return; // Ignore our own scrolling
     if (!e.isTrusted) return; // Ignore programmatic scroll events caused by DOM replacement
     const container = e.target;
     // Only process vertical scrolling containers
@@ -1110,7 +1118,11 @@ chatContent.addEventListener('scroll', (e) => {
     idleTimer = setTimeout(() => {
         userIsScrolling = false;
         autoRefreshEnabled = true;
-    }, 5000);
+        // Catch up immediately if we missed streaming updates
+        if (isGenerating) {
+            loadSnapshot();
+        }
+    }, 500);
 }, true); // USE CAPTURE
 
 scrollToBottomBtn.addEventListener('click', () => {
