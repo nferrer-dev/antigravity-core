@@ -1698,3 +1698,68 @@ setInterval(fetchAppState, 5000);
 // Check chat status initially and periodically
 checkChatStatus();
 setInterval(checkChatStatus, 10000); // Check every 10 seconds
+
+// --- Push Notifications ---
+async function initializePushNotifications() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        console.warn('[PUSH] Web Push not supported in this browser.');
+        alert('Web Push is not supported in this browser or wrapper app. PushManager is missing.');
+        return;
+    }
+
+    try {
+        const swReg = await navigator.serviceWorker.register('/sw.js');
+        console.log('[PUSH] Service Worker Registered');
+
+        let subscription = await swReg.pushManager.getSubscription();
+
+        if (!subscription) {
+            // Need to subscribe
+            const res = await fetchWithAuth('/vapidPublicKey');
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`Failed to fetch VAPID key. Status: ${res.status} ${res.statusText}. Body: ${text.substring(0, 50)}`);
+            }
+            const vapidPublicKey = await res.text();
+            const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
+
+            subscription = await swReg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: convertedVapidKey
+            });
+            console.log('[PUSH] Subscribed to Web Push');
+        }
+
+        // Always send subscription to server to ensure it's registered
+        await fetchWithAuth('/subscribe', {
+            method: 'POST',
+            body: JSON.stringify(subscription),
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        console.log('[PUSH] Subscription sent to server.');
+    } catch (e) {
+        console.error('[PUSH] Failed to initialize push notifications', e);
+        alert('Push init failed: ' + e.message);
+    }
+}
+
+// Utility to convert Base64 URL-safe string to Uint8Array
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+// Initialize Push Notifications
+initializePushNotifications();

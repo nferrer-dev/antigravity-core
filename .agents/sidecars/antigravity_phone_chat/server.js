@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import express from 'express';
+import webpush from 'web-push';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { WebSocketServer } from 'ws';
@@ -13,6 +14,50 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { inspectUI } from './ui_inspector.js';
 import { execSync } from 'child_process';
+
+const SUBSCRIPTIONS_FILE = './pushSubscriptions.json';
+
+export const pushSubscriptions = [];
+try {
+    if (fs.existsSync(SUBSCRIPTIONS_FILE)) {
+        const data = fs.readFileSync(SUBSCRIPTIONS_FILE, 'utf8');
+        pushSubscriptions.push(...JSON.parse(data));
+        console.log(`Loaded ${pushSubscriptions.length} push subscriptions from disk.`);
+    }
+} catch(e) {
+    console.error('Error loading push subscriptions:', e);
+}
+
+let pushTimeout = null;
+
+export function handleSnapshotUpdate(lastSnapshot, currentSnapshot, subscriptions = pushSubscriptions, webPushClient = webpush) {
+    if (currentSnapshot.isGenerating && pushTimeout) {
+        clearTimeout(pushTimeout);
+        pushTimeout = null;
+    }
+
+    if (lastSnapshot && lastSnapshot.isGenerating && !currentSnapshot.isGenerating) {
+        if (pushTimeout) clearTimeout(pushTimeout);
+        
+        pushTimeout = setTimeout(() => {
+            pushTimeout = null;
+            Promise.all(subscriptions.map(sub => 
+                webPushClient.sendNotification(sub, JSON.stringify({
+                    title: 'Antigravity',
+                    body: 'Generation complete!'
+                })).catch(e => {
+                    if (e.statusCode === 404 || e.statusCode === 410) {
+                        const idx = subscriptions.indexOf(sub);
+                        if (idx > -1) subscriptions.splice(idx, 1);
+                    } else {
+                        console.error('Push error:', e);
+                    }
+                })
+            ));
+        }, 2000);
+    }
+    return Promise.resolve();
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1499,6 +1544,7 @@ async function startPolling(wss) {
 
                 // Only update if content changed or generation state changed
                 if (hash !== lastSnapshotHash || (lastSnapshot && snapshot.isGenerating !== lastSnapshot.isGenerating)) {
+                    handleSnapshotUpdate(lastSnapshot, snapshot);
                     lastSnapshot = snapshot;
                     lastSnapshotHash = hash;
                     try { fs.writeFileSync(join(__dirname, 'latest_snapshot.html'), snapshot.html, 'utf8'); } catch(e){}
@@ -1575,6 +1621,14 @@ async function createServer() {
     app.use(compression());
     app.use(express.json());
 
+    if (process.env.PUBLIC_KEY && process.env.PRIVATE_KEY) {
+        webpush.setVapidDetails(
+            'mailto:admin@example.com',
+            process.env.PUBLIC_KEY,
+            process.env.PRIVATE_KEY
+        );
+    }
+
     // Use a secure session secret from .env if available
     const sessionSecret = process.env.SESSION_SECRET || 'antigravity_secret_key_1337';
 
@@ -1588,6 +1642,12 @@ async function createServer() {
     app.use((req, res, next) => {
         // Tell ngrok to skip the "visit" warning for API requests
         res.setHeader('ngrok-skip-browser-warning', 'true');
+        next();
+    });
+
+    // Request Logger
+    app.use((req, res, next) => {
+        console.log(`[REQUEST] ${req.method} ${req.url} - Auth: ${!!req.signedCookies[AUTH_COOKIE_NAME]} - Local: ${isLocalRequest(req)}`);
         next();
     });
 
@@ -1661,6 +1721,46 @@ async function createServer() {
     app.post('/logout', (req, res) => {
         res.clearCookie(AUTH_COOKIE_NAME);
         res.json({ success: true });
+    });
+
+    // Web Push Endpoints
+    app.get('/vapidPublicKey', (req, res) => {
+        res.send(process.env.PUBLIC_KEY);
+    });
+
+    app.post('/subscribe', (req, res) => {
+        const subscription = req.body;
+        // Basic deduplication
+        const exists = pushSubscriptions.some(sub => sub.endpoint === subscription.endpoint);
+        if (!exists) {
+            pushSubscriptions.push(subscription);
+            try {
+                fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(pushSubscriptions));
+            } catch(e) {
+                console.error('Failed to save subscriptions:', e);
+            }
+            console.log('✅ New Web Push subscription registered.');
+        }
+        res.status(201).json({});
+    });
+
+    app.get('/test-push', async (req, res) => {
+        console.log(`[TEST-PUSH] Triggering push to ${pushSubscriptions.length} subs...`);
+        let successes = 0;
+        let errors = [];
+        for (const sub of pushSubscriptions) {
+            try {
+                await webpush.sendNotification(sub, JSON.stringify({
+                    title: 'Test Notification',
+                    body: 'This is a test from the server!'
+                }));
+                successes++;
+            } catch(e) {
+                console.error('Test push error:', e);
+                errors.push(e.message);
+            }
+        }
+        res.json({ successes, errors });
     });
 
     // Get current snapshot
@@ -2147,4 +2247,6 @@ async function main() {
     }
 }
 
-main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+    main();
+}
