@@ -182,6 +182,10 @@ function updateStatus(connected) {
         statusDot.classList.remove('connected');
         statusDot.classList.add('disconnected');
         statusText.textContent = 'Reconnecting';
+        
+        // Ensure the UI doesn't get stuck in "Stop" mode if the server dies
+        sendBtn.style.display = 'flex';
+        stopBtn.style.display = 'none';
     }
 }
 
@@ -217,6 +221,15 @@ async function loadSnapshot() {
         const clientHeight = scrollerBefore.clientHeight;
         const isNearBottom = scrollHeight - scrollPos - clientHeight < 120;
         const isUserScrollLocked = Date.now() < userScrollLockUntil;
+
+        // --- UPDATE GENERATION STATE ---
+        if (data.isGenerating) {
+            sendBtn.style.display = 'none';
+            stopBtn.style.display = 'flex';
+        } else {
+            sendBtn.style.display = 'flex';
+            stopBtn.style.display = 'none';
+        }
 
         // --- UPDATE STATS ---
         if (data.stats) {
@@ -734,6 +747,16 @@ async function sendMessage() {
     messageInput.style.height = 'auto'; // Reset height
     messageInput.blur(); // Close keyboard on mobile immediately
 
+    isGenerating = true;
+    sendBtn.style.display = 'none';
+    stopBtn.style.display = 'flex';
+    messageInput.disabled = true;
+    const inputActionBtn = document.querySelector('.input-action-btn:first-child');
+    if (inputActionBtn) {
+        inputActionBtn.style.opacity = '0.5';
+        inputActionBtn.style.pointerEvents = 'none';
+    }
+
     sendBtn.disabled = true;
     sendBtn.style.opacity = '0.5';
 
@@ -1089,14 +1112,21 @@ function quickAction(text) {
 // --- Stop Logic ---
 stopBtn.addEventListener('click', async () => {
     stopBtn.style.opacity = '0.5';
+    
+    // Optimistic UI update
+    isGenerating = false;
+    sendBtn.style.display = 'flex';
+    stopBtn.style.display = 'none';
+    messageInput.disabled = false;
+    const inputActionBtn = document.querySelector('.input-action-btn:first-child');
+    if (inputActionBtn) {
+        inputActionBtn.style.opacity = '1';
+        inputActionBtn.style.pointerEvents = 'auto';
+    }
+
     try {
         const res = await fetchWithAuth('/stop', { method: 'POST' });
         const data = await res.json();
-        if (data.success) {
-            // alert('Stopped');
-        } else {
-            // alert('Error: ' + data.error);
-        }
     } catch (e) { }
     setTimeout(() => stopBtn.style.opacity = '1', 500);
 });

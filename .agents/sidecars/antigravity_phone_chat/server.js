@@ -471,7 +471,16 @@ async function captureSnapshot(cdp) {
             color: cascadeStyles.color,
             fontFamily: cascadeStyles.fontFamily,
             scrollInfo: scrollInfo,
-            isGenerating: !!document.querySelector('[data-testid="agent-loading"]'),
+            isGenerating: (function() {
+                const els = document.querySelectorAll('button[aria-label="Cancel (Ctrl+D)"], button svg.lucide-square, [data-testid="agent-loading"]');
+                for (let el of els) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        return true;
+                    }
+                }
+                return false;
+            })(),
             stats: {
                 nodes: clone.getElementsByTagName('*').length,
                 htmlSize: html.length,
@@ -675,37 +684,51 @@ async function setMode(cdp, mode) {
 
 // Stop Generation
 async function stopGeneration(cdp) {
-    const EXP = `(async () => {
-        // Look for the cancel button
-        const cancel = document.querySelector('[data-tooltip-id="input-send-button-cancel-tooltip"]');
-        if (cancel && cancel.offsetParent !== null) {
-            cancel.click();
-            return { success: true };
-        }
+    try {
+        console.log('[Stop] Clicking Stop button in DOM to abort generation...');
+        const result = await cdp.call('Runtime.evaluate', {
+            expression: `
+                (function() {
+                    // Try to find the Stop Task button or any button with a square SVG that indicates 'Stop'
+                    const stopBtns = Array.from(document.querySelectorAll('button'));
+                    let clicked = false;
+                    for (const btn of stopBtns) {
+                        // Check if it's a stop task button by its tooltip ID or if it has a square SVG path
+                        const tooltipId = btn.getAttribute('data-tooltip-id');
+                        const hasSquareSvg = btn.querySelector('svg path[d^="M330-330H630V-630H330v300Z"]') || btn.querySelector('svg.lucide-square');
+                        
+                        if ((tooltipId && tooltipId.startsWith('stop-task-')) || hasSquareSvg) {
+                            btn.click();
+                            clicked = true;
+                        }
+                    }
+                    
+                    // If no explicit stop button, look for the 'Cancel (Ctrl+D)' button ONLY if there's an active generation
+                    if (!clicked) {
+                        const isGenerating = !!document.querySelector('[data-testid="agent-loading"]');
+                        if (isGenerating) {
+                            const cancelBtn = document.querySelector('button[aria-label="Cancel (Ctrl+D)"]');
+                            if (cancelBtn) {
+                                cancelBtn.click();
+                                clicked = true;
+                            }
+                        }
+                    }
+                    
+                    return clicked;
+                })()
+            `,
+            returnByValue: true
+        });
         
-        // Fallback: Look for a square icon in the send button area
-        const stopBtn = document.querySelector('button[aria-label="Cancel (Ctrl+D)"], button svg.lucide-square')?.closest('button') || document.querySelector('button[aria-label="Cancel (Ctrl+D)"]');
-        if (stopBtn) {
-            stopBtn.click();
-            return { success: true, method: 'fallback_square' };
-        }
-
-        return { error: 'No active generation found to stop' };
-    })()`;
-
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                /* contextId: ctx.id */
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) { }
+        console.log('[Stop] Stop button clicked:', result.result.value);
+        return { success: result.result.value };
+    } catch (e) {
+        console.error('[Stop] Failed to click stop button:', e);
+        return { success: false, error: e.toString() };
     }
-    return { error: 'Context failed' };
 }
+
 
 // Click Element (Remote)
 async function clickElement(cdp, { selector, index, textContent }) {
@@ -1468,8 +1491,8 @@ async function startPolling(wss) {
             if (snapshot && !snapshot.error) {
                 const hash = hashString(snapshot.html);
 
-                // Only update if content changed
-                if (hash !== lastSnapshotHash) {
+                // Only update if content changed or generation state changed
+                if (hash !== lastSnapshotHash || (lastSnapshot && snapshot.isGenerating !== lastSnapshot.isGenerating)) {
                     lastSnapshot = snapshot;
                     lastSnapshotHash = hash;
                     try { fs.writeFileSync(join(__dirname, 'latest_snapshot.html'), snapshot.html, 'utf8'); } catch(e){}
