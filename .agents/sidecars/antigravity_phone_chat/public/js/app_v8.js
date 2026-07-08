@@ -861,12 +861,6 @@ refreshBtn.addEventListener('click', () => {
     fetchAppState(); // PRIORITY: Sync from Desktop
 });
 
-messageInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
-});
 
 messageInput.addEventListener('input', function () {
     this.style.height = 'auto';
