@@ -197,12 +197,17 @@ let generationPlaceholderInterval = null;
 
 function updateInputButtons() {
     const wrapper = document.querySelector('.input-wrapper');
+    
+    // Always evaluate Send Button visibility based on input value
+    if (messageInput.value.trim().length > 0) {
+        sendBtn.classList.add('visible');
+    } else {
+        sendBtn.classList.remove('visible');
+    }
+
     if (isGenerating) {
         if (wrapper) wrapper.classList.add('generating');
-        sendBtn.classList.remove('visible');
         stopBtn.classList.add('visible');
-        messageInput.readOnly = true;
-        messageInput.style.pointerEvents = 'none';
         
         // Start "Working..." animation
         if (!generationPlaceholderInterval) {
@@ -222,8 +227,6 @@ function updateInputButtons() {
     } else {
         if (wrapper) wrapper.classList.remove('generating');
         stopBtn.classList.remove('visible');
-        messageInput.readOnly = false;
-        messageInput.style.pointerEvents = 'auto';
         
         // Stop animation and reset placeholder
         if (generationPlaceholderInterval) {
@@ -236,12 +239,6 @@ function updateInputButtons() {
         if (inputActionBtn) {
             inputActionBtn.style.opacity = '1';
             inputActionBtn.style.pointerEvents = 'auto';
-        }
-        
-        if (messageInput.value.trim().length > 0) {
-            sendBtn.classList.add('visible');
-        } else {
-            sendBtn.classList.remove('visible');
         }
     }
 }
