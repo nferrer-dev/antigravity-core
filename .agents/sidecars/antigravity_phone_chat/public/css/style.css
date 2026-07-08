@@ -384,7 +384,8 @@ body {
     box-shadow: none !important;
 }
 
-.input-wrapper:focus-within {
+.input-wrapper:focus-within,
+.input-wrapper.generating {
     border-color: var(--accent);
     background-color: var(--bg-panel);
     box-shadow: 0 0 10px rgba(37, 99, 235, 0.2) !important;

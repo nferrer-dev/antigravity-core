@@ -177,7 +177,9 @@ function connectWebSocket() {
 let isGenerating = false;
 
 function updateInputButtons() {
+    const wrapper = document.querySelector('.input-wrapper');
     if (isGenerating) {
+        if (wrapper) wrapper.classList.add('generating');
         sendBtn.style.display = 'none';
         stopBtn.style.display = 'flex';
         messageInput.disabled = true;
@@ -187,6 +189,7 @@ function updateInputButtons() {
             inputActionBtn.style.pointerEvents = 'none';
         }
     } else {
+        if (wrapper) wrapper.classList.remove('generating');
         stopBtn.style.display = 'none';
         messageInput.disabled = false;
         const inputActionBtn = document.querySelector('.input-action-btn:first-child');
