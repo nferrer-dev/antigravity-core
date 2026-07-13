@@ -608,12 +608,8 @@ async function injectMessage(cdp, text) {
             return { ok:true, method:"click_submit" };
         }
 
-        // Submit button not found, but text is inserted - trigger Enter key
-        const enterEvent = { bubbles:true, key:"Enter", code:"Enter", keyCode: 13, which: 13 };
-        editor.dispatchEvent(new KeyboardEvent("keydown", enterEvent));
-        editor.dispatchEvent(new KeyboardEvent("keyup", enterEvent));
-        
-        return { ok:true, method:"enter_keypress", submit_button_found: !!submit, submit_disabled: submit ? submit.disabled : null };
+        // Submit button not found or disabled - tell the backend to use CDP to press Enter
+        return { ok:true, method:"needs_cdp_enter", submit_button_found: !!submit, submit_disabled: submit ? submit.disabled : null };
     })()`;
 
     for (const ctx of cdp.contexts) {
@@ -626,7 +622,14 @@ async function injectMessage(cdp, text) {
             });
 
             if (result.result && result.result.value) {
-                return result.result.value;
+                const val = result.result.value;
+                if (val.method === "needs_cdp_enter") {
+                    // Dispatch a real browser Enter key event
+                    await cdp.call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
+                    await cdp.call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+                    val.method = "cdp_enter";
+                }
+                return val;
             }
         } catch (e) { }
     }

@@ -63,7 +63,16 @@ def check_node_environment():
 # Helpers
 # -----------------------------------------------------------------------------
 def get_local_ip():
-    """Robustly determines the local LAN IP address."""
+    """Robustly determines the local LAN IP address, prioritizing Tailscale."""
+    # First, try to get the Tailscale IP
+    try:
+        output = subprocess.check_output(["tailscale", "ip", "-4"], text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        ts_ip = output.strip()
+        if ts_ip and ts_ip.startswith("100."):
+            return ts_ip
+    except Exception:
+        pass
+
     s = None
     try:
         # Connect to a public DNS server (doesn't actually send data)
@@ -74,7 +83,8 @@ def get_local_ip():
     except Exception:
         IP = '127.0.0.1'
     finally:
-        s.close()
+        if s:
+            s.close()
     return IP
 
 def generate_passcode():
@@ -169,17 +179,17 @@ def main():
             final_url = f"{protocol}://{ip}:{port}"
             
             print("\n" + "="*50)
-            print(f"📡 LOCAL WIFI ACCESS")
+            print(f"📡 LOCAL NETWORK / TAILSCALE ACCESS")
             print("="*50)
             print(f"🔗 URL: {final_url}")
-            print(f"🔑 Passcode: Not required for local WiFi (Auto-detected)")
+            print(f"🔑 Passcode: Not required for local network (Auto-detected)")
             
             print("\n📱 Scan this QR Code to connect:")
             print_qr(final_url)
 
             print("-" * 50)
             print("📝 Steps to Connect:")
-            print("1. Ensure your phone is on the SAME Wi-Fi network as this computer.")
+            print("1. Ensure your phone is on the SAME Wi-Fi network OR connected to Tailscale.")
             print("2. Open your phone's Camera app or a QR scanner.")
             print("3. Scan the code above OR manually type the URL into your browser.")
             print("4. You should be connected automatically!")
