@@ -1619,7 +1619,7 @@ chatContainer.addEventListener('click', async (e) => {
     // --- Command Action Buttons (Run, Reject, Allow, Deny, etc.) ---
     const btn = e.target.closest('button, [role="button"]');
     if (btn) {
-        const btnText = (btn.innerText || '').trim();
+        const btnText = (btn.innerText || btn.getAttribute('aria-label') || btn.getAttribute('title') || '').trim();
 
         // Match various action keywords
         const actionKeywords = [
@@ -1636,6 +1636,7 @@ chatContainer.addEventListener('click', async (e) => {
             btnTextLower.includes(kw.toLowerCase())
         );
         if (matchedKeyword) {
+            const kw = matchedKeyword;
             btn.style.opacity = '0.5';
             setTimeout(() => btn.style.opacity = '1', 300);
 
@@ -1643,9 +1644,10 @@ chatContainer.addEventListener('click', async (e) => {
             const allButtons = Array.from(chatContainer.querySelectorAll('button, [role="button"]'));
 
             // Filter to only those that match our specific keyword
-            const matchingButtons = allButtons.filter(b =>
-                (b.innerText || '').toLowerCase().includes(matchedKeyword.toLowerCase())
-            );
+            const matchingButtons = allButtons.filter(b => {
+                const bTxt = (b.innerText || b.getAttribute('aria-label') || b.getAttribute('title') || '').toLowerCase();
+                return bTxt.includes(kw.toLowerCase());
+            });
             const btnIndex = matchingButtons.indexOf(btn);
 
             try {

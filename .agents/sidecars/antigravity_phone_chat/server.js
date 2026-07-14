@@ -799,7 +799,7 @@ async function clickElement(cdp, { selector, index, textContent }) {
             const filterText = ${safeText};
             if (filterText) {
                 elements = elements.filter(el => {
-                    const txt = (el.innerText || el.textContent || '').trim();
+                    const txt = (el.innerText || el.textContent || el.getAttribute('aria-label') || el.getAttribute('title') || '').trim();
                     const firstLine = txt.split('\\n')[0].trim();
                     // Match if first line matches (thought blocks) or if it contains the label (buttons)
                     return firstLine === filterText || txt.includes(filterText);
