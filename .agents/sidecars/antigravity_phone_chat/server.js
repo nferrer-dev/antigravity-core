@@ -790,8 +790,8 @@ async function clickElement(cdp, { selector, index, textContent }) {
 
     const EXP = `(async () => {
         try {
-            // Priority: Search inside the chat container first for better accuracy
-            const root = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade') || document;
+            // Priority: Search inside the exact same chat container that the snapshot uses for perfect index alignment
+            const root = document.querySelector('[data-testid="conversation-view"]') || document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade') || document;
             
             // Strategy: Find all elements matching the selector
             let elements = Array.from(root.querySelectorAll('${selector}'));
