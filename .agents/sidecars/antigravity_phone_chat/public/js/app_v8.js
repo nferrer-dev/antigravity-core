@@ -429,12 +429,15 @@ async function loadSnapshot() {
             '    overflow-y: auto !important;\n' +
             '}\n' +
             '\n' +
-            '/* Fix overlapping action buttons on user messages by letting them sit alongside text */\n' +
+            '/* Force user message buttons to sit underneath the text */\n' +
+            '[data-testid="conversation-view"] .flex-row:has(> .user-input-buttons-container) {\n' +
+            '    flex-direction: column !important;\n' +
+            '    align-items: flex-end !important;\n' +
+            '}\n' +
             '[data-testid="conversation-view"] .user-input-buttons-container {\n' +
             '    position: relative !important;\n' +
             '    bottom: auto !important;\n' +
             '    right: auto !important;\n' +
-            '    align-self: flex-end;\n' +
             '    margin-top: 4px;\n' +
             '}\n' +
             '\n' +
