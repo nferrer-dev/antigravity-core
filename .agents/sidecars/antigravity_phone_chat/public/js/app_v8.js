@@ -1616,58 +1616,32 @@ chatContainer.addEventListener('click', async (e) => {
         return;
     }
 
-    // --- Command Action Buttons (Run, Reject, Allow, Deny, etc.) ---
+    // --- Universal Button Proxy ---
     const btn = e.target.closest('button, [role="button"]');
-    if (btn) {
-        const btnText = (btn.innerText || btn.getAttribute('aria-label') || btn.getAttribute('title') || '').trim();
+    if (btn && !btn.classList.contains('mobile-copy-btn')) {
+        // Visual feedback
+        btn.style.opacity = '0.5';
+        setTimeout(() => btn.style.opacity = '1', 300);
 
-        // Match various action keywords
-        const actionKeywords = [
-            'Allow this conversation', 'Always allow', 'Allow once',
-            'Review changes', 'Review',
-            'Confirm', 'Accept', 'Reject', 'Discard',
-            'Allow', 'Deny', 'Apply', 'Save', 'Run',
-            'Yes', 'No', 'Submit', 'Skip',
-            'Redirect', 'Delete'
-        ];
+        // Get the exact global index of this button
+        const allButtons = Array.from(chatContainer.querySelectorAll('button, [role="button"]'));
+        const btnIndex = allButtons.indexOf(btn);
 
-        const btnTextLower = btnText.toLowerCase();
-        const matchedKeyword = actionKeywords.find(kw =>
-            btnTextLower.includes(kw.toLowerCase())
-        );
-        if (matchedKeyword) {
-            const kw = matchedKeyword;
-            btn.style.opacity = '0.5';
-            setTimeout(() => btn.style.opacity = '1', 300);
-
-            // Determine which occurrence of this button text the user tapped
-            const allButtons = Array.from(chatContainer.querySelectorAll('button, [role="button"]'));
-
-            // Filter to only those that match our specific keyword
-            const matchingButtons = allButtons.filter(b => {
-                const bTxt = (b.innerText || b.getAttribute('aria-label') || b.getAttribute('title') || '').toLowerCase();
-                return bTxt.includes(kw.toLowerCase());
+        try {
+            await fetchWithAuth('/remote-click', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    selector: btn.tagName.toLowerCase() === 'button' ? 'button' : '[role="button"]',
+                    index: btnIndex >= 0 ? btnIndex : 0,
+                    textContent: '' // Empty text forces server to bypass text-filtering and strictly use the DOM index
+                })
             });
-            const btnIndex = matchingButtons.indexOf(btn);
-
-            try {
-                await fetchWithAuth('/remote-click', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        selector: btn.tagName.toLowerCase() === 'button' ? 'button' : '[role="button"]',
-                        index: btnIndex >= 0 ? btnIndex : 0,
-                        textContent: matchedKeyword
-                    })
-                });
-
-                // Rapidly poll for updates as actions usually trigger DOM changes
-                setTimeout(loadSnapshot, 400);
-                setTimeout(loadSnapshot, 1000);
-                setTimeout(loadSnapshot, 2500);
-            } catch (err) {
-                console.error('Remote button click failed:', err);
-            }
+            
+            // Reload snapshot sooner since deletes are fast
+            setTimeout(loadSnapshot, 1000);
+        } catch (err) {
+            console.error('Remote button click failed:', err);
         }
     }
 });
