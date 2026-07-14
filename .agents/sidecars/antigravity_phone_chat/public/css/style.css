@@ -967,3 +967,9 @@ textarea::-webkit-resizer {
 .btn-text { display: inline-block; transform: translateY(0.5px); }
 
 .header-controls { width: 100%; justify-content: flex-start; }
+
+.model-btn { background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; padding: 5px 10px; border-radius: 20px; display: flex; align-items: center; justify-content: center; flex-wrap: nowrap; white-space: nowrap; margin-left: auto; margin-right: 10px; }
+.model-btn:hover { color: var(--text-main); background: rgba(255, 255, 255, 0.1); border-color: var(--text-muted); }
+.model-btn:active { transform: scale(0.95); }
+.model-btn .btn-text { margin-left: 4px; font-size: 11px; font-weight: 600; display: inline-block; transform: translateY(0.5px); }
+.model-btn svg { width: 12px !important; height: 12px !important; stroke-width: 3 !important; stroke: currentColor; fill: none; }

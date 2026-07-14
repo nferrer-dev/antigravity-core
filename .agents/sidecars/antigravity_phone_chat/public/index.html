@@ -11,7 +11,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css?v=2.13">
+    <link rel="stylesheet" href="/css/style.css?v=2.14">
 </head>
 
 <body>
@@ -23,7 +23,7 @@
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
-                <span class="btn-text">New Conversation</span>
+                <span class="btn-text">New</span>
             </button>
             <button class="history-btn" id="historyBtn" aria-label="Chat History" title="Past Conversations">
                 <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
@@ -31,6 +31,12 @@
                     <polyline points="12 6 12 12 16 14"></polyline>
                 </svg>
                 <span class="btn-text">History</span>
+            </button>
+            <button class="model-btn" id="modelBtn" aria-label="Select Model" title="Select Model">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960">
+                    <path d="M480-541.85l-184,184L253.85-400L480-626.15L706.15-400L664-357.85l-184-184Z" fill="currentColor"></path>
+                </svg>
+                <span class="btn-text" id="modelText">Select Model</span>
             </button>
             <div class="status-badge">
                 <div class="status-dot disconnected" id="statusDot"></div>
@@ -120,7 +126,7 @@
         </div>
     </div>
 
-    <script src="js/app_v8.js?v=29"></script>
+    <script src="js/app_v8.js?v=30"></script>
 </body>
 
 </html>
