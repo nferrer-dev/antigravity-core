@@ -953,3 +953,6 @@ textarea::-webkit-resizer {
     animation: spin 1s linear infinite;
 }
 
+
+.new-chat-btn .btn-text { margin-left: 6px; font-size: 13px; font-weight: 500; }
+.new-chat-btn { padding: 6px 12px; }
