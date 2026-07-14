@@ -909,81 +909,49 @@ async function remoteScroll(cdp, { scrollTop, scrollPercent }) {
 async function setModel(cdp, modelName) {
     const EXP = `(async () => {
         try {
-            // STRATEGY: Multi-layered approach to find and click the model selector
             const KNOWN_KEYWORDS = ["Gemini", "Claude", "GPT", "Model"];
             
-            let modelBtn = null;
+            // 1. Strict Exact Match (The model button is in the top header and has aria-label="Select model...")
+            let modelBtn = document.querySelector('button[aria-label^="Select model"]');
             
-            // To avoid clicking sidebar history items, anchor searches to the main chat input area
-            let searchRoot = document.querySelector('[data-testid="conversation-view"]') || document.body;
-            const chatInput = document.querySelector('textarea, [contenteditable="true"]');
-            if (chatInput) {
-                let p = chatInput;
-                // Traverse up ~8 levels to capture the whole input bar container, but not the whole app/sidebar
-                for (let i = 0; i < 8; i++) {
-                    if (!p.parentElement || p.parentElement === document.body) break;
-                    p = p.parentElement;
-                }
-                searchRoot = p;
-            }
-            
-            // Strategy 1: Look for data-tooltip-id patterns (anchored to searchRoot)
-            modelBtn = searchRoot.querySelector('button[aria-label^="Select model"], [data-tooltip-id*="model"], [data-tooltip-id*="provider"]');
-            
-            // Strategy 2: Look for buttons/elements containing model keywords with SVG icons (anchored)
+            // 2. Fallback: Any button with a dialog popup that contains model keywords
             if (!modelBtn) {
-                const candidates = Array.from(searchRoot.querySelectorAll('button, [role="button"], div, span'))
-                    .filter(el => {
-                        const txt = el.innerText?.trim() || '';
-                        return KNOWN_KEYWORDS.some(k => txt.includes(k)) && el.offsetParent !== null;
-                    });
-
-                // Find the best one (has chevron icon or cursor pointer)
-                modelBtn = candidates.find(el => {
-                    const style = window.getComputedStyle(el);
-                    const hasSvg = el.querySelector('svg');
-                    return (style.cursor === 'pointer' || el.tagName === 'BUTTON') && hasSvg;
-                }) || candidates[0];
-            }
-            
-            // Strategy 3: Traverse from text nodes up to clickable parents (anchored)
-            if (!modelBtn) {
-                const allEls = Array.from(searchRoot.querySelectorAll('*'));
-                const textNodes = allEls.filter(el => {
-                    if (el.children.length > 0) return false;
-                    const txt = el.textContent;
+                const buttons = Array.from(document.querySelectorAll('button[aria-haspopup="dialog"], button[aria-haspopup="listbox"], button[aria-haspopup="menu"]'));
+                modelBtn = buttons.find(btn => {
+                    const txt = btn.innerText || btn.textContent || '';
                     return KNOWN_KEYWORDS.some(k => txt.includes(k));
                 });
-
-                for (const el of textNodes) {
-                    let current = el;
-                    for (let i = 0; i < 5; i++) {
-                        if (!current) break;
-                        if (current.tagName === 'BUTTON' || window.getComputedStyle(current).cursor === 'pointer') {
-                            modelBtn = current;
-                            break;
-                        }
-                        current = current.parentElement;
-                    }
-                    if (modelBtn) break;
-                }
+            }
+            
+            // 3. Fallback: Any button in the top 150px of the screen that contains model keywords
+            if (!modelBtn) {
+                const topButtons = Array.from(document.querySelectorAll('button')).filter(btn => {
+                    const rect = btn.getBoundingClientRect();
+                    return rect.top >= 0 && rect.top < 150 && rect.width > 0 && rect.height > 0;
+                });
+                modelBtn = topButtons.find(btn => {
+                    const txt = btn.innerText || btn.textContent || '';
+                    return KNOWN_KEYWORDS.some(k => txt.includes(k));
+                });
             }
 
             if (!modelBtn) return { error: 'Model selector button not found' };
-            
-            // GEOMETRIC SAFETY CHECK: Model button is ALWAYS at the bottom of the screen.
-            const rect = modelBtn.getBoundingClientRect();
-            if (rect.top < window.innerHeight * 0.4) {
-                return { error: 'Found modelBtn in top half of screen, rejected to prevent unwanted navigation.' };
-            }
             
             // CRITICAL SAFETY CHECK: Never click a link or something in a navigation sidebar
             if (modelBtn.closest('a') || modelBtn.closest('nav') || modelBtn.closest('aside')) {
                 return { error: 'Found model button inside a link or sidebar, rejected to prevent unwanted navigation.' };
             }
 
+            // Click execution with MouseEvent fallback
+            const executeClick = (targetEl) => {
+                const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+                events.forEach(type => {
+                    targetEl.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+                });
+            };
+
             // Click to open menu
-            modelBtn.click();
+            executeClick(modelBtn);
             
             // Poll for up to 2 seconds for the dropdown
             let visibleDialog = null;
@@ -997,7 +965,10 @@ async function setModel(cdp, modelName) {
                     if (d.offsetHeight === 0) return false;
                     const style = window.getComputedStyle(d);
                     const isPositioned = style.position === 'absolute' || style.position === 'fixed';
-                    const isRadix = d.hasAttribute('data-radix-popper-content-wrapper') || d.getAttribute('role');
+                    const isRadix = d.hasAttribute('data-radix-popper-content-wrapper') || 
+                                    d.getAttribute('role') === 'dialog' || 
+                                    d.getAttribute('role') === 'menu' || 
+                                    d.getAttribute('role') === 'listbox';
                     
                     if (!isPositioned && !isRadix) return false;
                     
@@ -1007,28 +978,15 @@ async function setModel(cdp, modelName) {
                     
                     return d.innerText?.includes(baseName) && !d.innerText?.includes('Files With Changes');
                 });
-                
-                if (candidates.length > 0) {
+                      if (candidates.length > 0) {
                     candidates.sort((a, b) => (parseInt(window.getComputedStyle(b).zIndex) || 0) - (parseInt(window.getComputedStyle(a).zIndex) || 0));
                     visibleDialog = candidates[0];
                     break;
                 }
             }
 
-            if (!visibleDialog) {
-                // Blind search across entire document as last resort (exact match only to avoid sidebar)
-                const allElements = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"]'));
-                const target = allElements.find(el => 
-                    el.offsetParent !== null && el.innerText?.trim() === '${modelName}'
-                );
-                if (target) {
-                    target.click();
-                    return { success: true, method: 'blind_search_exact' };
-                }
-                return { error: 'Model list not opened or could not be found' };
-            }
+            if (!visibleDialog) return { error: 'Model list not opened' };
 
-            // Select specific model inside the dialog
             const allDialogEls = Array.from(visibleDialog.querySelectorAll('*'));
             const validEls = allDialogEls.filter(el => el.children.length === 0 && el.textContent?.trim().length > 0);
             
@@ -1051,7 +1009,7 @@ async function setModel(cdp, modelName) {
 
             if (target) {
                 target.scrollIntoView({block: 'center'});
-                target.click();
+                executeClick(target);
                 await new Promise(r => setTimeout(r, 200));
                 return { success: true };
             }
