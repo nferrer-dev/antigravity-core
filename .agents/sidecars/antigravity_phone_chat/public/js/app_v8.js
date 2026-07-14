@@ -247,10 +247,12 @@ function updateStatus(connected) {
         statusDot.classList.remove('disconnected');
         statusDot.classList.add('connected');
         statusText.textContent = 'Live';
+        statusText.style.fontSize = ''; // Reset to default CSS
     } else {
         statusDot.classList.remove('connected');
         statusDot.classList.add('disconnected');
         statusText.textContent = 'Reconnecting';
+        statusText.style.fontSize = '9px'; // Dynamically smaller so it fits same width!
         
         // Ensure the UI doesn't get stuck in "Stop" mode if the server dies
         sendBtn.classList.add('visible');
