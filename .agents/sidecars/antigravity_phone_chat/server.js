@@ -963,26 +963,35 @@ async function setModel(cdp, modelName) {
 
             // Click to open menu
             modelBtn.click();
-            await new Promise(r => setTimeout(r, 600));
-
-            // Find the dialog/dropdown - search globally (React portals render at body level)
+            
+            // Poll for up to 2 seconds for the dropdown
             let visibleDialog = null;
-            
-            // Try specific dialog patterns first
             const baseName = '${modelName}'.split(' ')[0];
-            const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [role="listbox"], [role="menu"], [data-radix-popper-content-wrapper]'));
-            visibleDialog = dialogs.find(d => d.offsetHeight > 0 && d.innerText?.includes(baseName));
             
-            // Fallback: look for positioned divs
-            if (!visibleDialog) {
-                visibleDialog = Array.from(document.querySelectorAll('div'))
-                    .find(d => {
-                        const style = window.getComputedStyle(d);
-                        return d.offsetHeight > 0 && 
-                               (style.position === 'absolute' || style.position === 'fixed') && 
-                               d.innerText?.includes(baseName) && 
-                               !d.innerText?.includes('Files With Changes');
-                    });
+            for (let i = 0; i < 10; i++) {
+                await new Promise(r => setTimeout(r, 200));
+                
+                const allDivs = Array.from(document.querySelectorAll('[role="dialog"], [role="listbox"], [role="menu"], [data-radix-popper-content-wrapper], div'));
+                const candidates = allDivs.filter(d => {
+                    if (d.offsetHeight === 0) return false;
+                    const style = window.getComputedStyle(d);
+                    const isPositioned = style.position === 'absolute' || style.position === 'fixed';
+                    const isRadix = d.hasAttribute('data-radix-popper-content-wrapper') || d.getAttribute('role');
+                    
+                    if (!isPositioned && !isRadix) return false;
+                    
+                    // Ignore large containers (like sidebar or main app)
+                    if (d.offsetWidth > window.innerWidth * 0.6) return false;
+                    if (d.offsetHeight >= window.innerHeight * 0.95) return false;
+                    
+                    return d.innerText?.includes(baseName) && !d.innerText?.includes('Files With Changes');
+                });
+                
+                if (candidates.length > 0) {
+                    candidates.sort((a, b) => (parseInt(window.getComputedStyle(b).zIndex) || 0) - (parseInt(window.getComputedStyle(a).zIndex) || 0));
+                    visibleDialog = candidates[0];
+                    break;
+                }
             }
 
             if (!visibleDialog) {
