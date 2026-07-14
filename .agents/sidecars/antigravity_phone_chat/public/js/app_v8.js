@@ -434,6 +434,18 @@ async function loadSnapshot() {
             '    overflow-y: auto !important;\n' +
             '}\n' +
             '\n' +
+            '/* Reveal hover-dependent action buttons on mobile (e.g. Queued message Delete/Redirect) */\n' +
+            '[data-testid="conversation-view"] .opacity-0,\n' +
+            '[data-testid="conversation-view"] [class*="opacity-0"],\n' +
+            '[data-testid="conversation-view"] [class*="group-hover:opacity-100"] {\n' +
+            '    opacity: 1 !important;\n' +
+            '    visibility: visible !important;\n' +
+            '}\n' +
+            '[data-testid="conversation-view"] .hidden.group-hover\\:flex,\n' +
+            '[data-testid="conversation-view"] [class*="group-hover:flex"] {\n' +
+            '    display: flex !important;\n' +
+            '}\n' +
+            '\n' +
             '/* Hide broken local file icons (served from /c:/Users/... paths) */\n' +
             'img[src^="/c:"], img[src^="/C:"], img[src*="AppData"] {\n' +
             '    display: none !important;\n' +
@@ -1615,7 +1627,8 @@ chatContainer.addEventListener('click', async (e) => {
             'Review changes', 'Review',
             'Confirm', 'Accept', 'Reject', 'Discard',
             'Allow', 'Deny', 'Apply', 'Save', 'Run',
-            'Yes', 'No', 'Submit', 'Skip'
+            'Yes', 'No', 'Submit', 'Skip',
+            'Redirect', 'Delete'
         ];
 
         const btnTextLower = btnText.toLowerCase();
