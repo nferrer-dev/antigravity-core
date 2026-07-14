@@ -6,7 +6,6 @@ const sendBtn = document.getElementById('sendBtn');
 const scrollToBottomBtn = document.getElementById('scrollToBottom');
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
-const refreshBtn = document.getElementById('refreshBtn');
 const stopBtn = document.getElementById('stopBtn');
 const newChatBtn = document.getElementById('newChatBtn');
 const historyBtn = document.getElementById('historyBtn');
@@ -262,12 +261,6 @@ function updateStatus(connected) {
 // --- Rendering ---
 async function loadSnapshot() {
     try {
-        // Add spin animation to refresh button
-        const icon = refreshBtn.querySelector('svg');
-        icon.classList.remove('spin-anim');
-        void icon.offsetWidth; // trigger reflow
-        icon.classList.add('spin-anim');
-
         const response = await fetchWithAuth('/snapshot');
         if (!response.ok) {
             if (response.status === 503) {
@@ -886,12 +879,6 @@ async function sendMessage() {
 
 // --- Event Listeners ---
 sendBtn.addEventListener('click', sendMessage);
-
-refreshBtn.addEventListener('click', () => {
-    // Refresh both Chat and State (Mode/Model)
-    loadSnapshot();
-    fetchAppState(); // PRIORITY: Sync from Desktop
-});
 
 
 messageInput.addEventListener('input', function () {
