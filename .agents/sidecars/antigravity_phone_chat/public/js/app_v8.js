@@ -428,6 +428,12 @@ async function loadSnapshot() {
             '    text-decoration: underline;\n' +
             '}\n' +
             '\n' +
+            '/* Add scrollbar and limit height for long user prompts */\n' +
+            '[data-testid="user-input-step"] [class*="max-h-"] {\n' +
+            '    max-height: 25vh !important;\n' +
+            '    overflow-y: auto !important;\n' +
+            '}\n' +
+            '\n' +
             '/* Hide broken local file icons (served from /c:/Users/... paths) */\n' +
             'img[src^="/c:"], img[src^="/C:"], img[src*="AppData"] {\n' +
             '    display: none !important;\n' +
@@ -1507,28 +1513,9 @@ modelBtn.addEventListener('click', () => {
 });
 
 // --- Viewport / Keyboard Handling ---
-// This fixes the issue where the keyboard hides the input or layout breaks
-if (window.visualViewport) {
-    function handleResize() {
-        // Resize the body to match the visual viewport (screen minus keyboard)
-        document.body.style.height = window.visualViewport.height + 'px';
+// We now rely on CSS 100dvh and interactive-widget=resizes-content in the meta viewport
+// to handle keyboard resizing natively and smoothly without JS snapping.
 
-        // Scroll to bottom if keyboard opened
-        if (document.activeElement === messageInput) {
-            setTimeout(scrollToBottom, 100);
-        }
-    }
-
-    window.visualViewport.addEventListener('resize', handleResize);
-    window.visualViewport.addEventListener('scroll', handleResize);
-    handleResize(); // Init
-} else {
-    // Fallback for older browsers without visualViewport support
-    window.addEventListener('resize', () => {
-        document.body.style.height = window.innerHeight + 'px';
-    });
-    document.body.style.height = window.innerHeight + 'px'; // Init
-}
 
 // --- Remote Click Logic (Thinking/Thought) ---
 chatContainer.addEventListener('click', async (e) => {

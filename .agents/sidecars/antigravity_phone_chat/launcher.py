@@ -62,6 +62,21 @@ def check_node_environment():
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
+def get_tailscale_serve_url(target_port):
+    """Checks if Tailscale serve is proxying the target port and returns the HTTPS URL."""
+    try:
+        output = subprocess.check_output(["tailscale", "serve", "status", "--json"], text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        data = json.loads(output)
+        for host, host_data in data.get('Web', {}).items():
+            for path, path_data in host_data.get('Handlers', {}).items():
+                proxy = path_data.get('Proxy', '')
+                if proxy.endswith(f":{target_port}"):
+                    clean_host = host.split(':')[0]
+                    return f"https://{clean_host}"
+    except Exception:
+        pass
+    return None
+
 def get_local_ip():
     """Robustly determines the local LAN IP address, prioritizing Tailscale."""
     # First, try to get the Tailscale IP
@@ -168,15 +183,17 @@ def main():
     
     try:
         if args.mode == 'local':
-            ip = get_local_ip()
             port = os.environ.get('PORT', '3000')
             
-            # Detect HTTPS
-            protocol = "http"
-            if os.path.exists('certs/server.key') and os.path.exists('certs/server.cert'):
-                protocol = "https"
-            
-            final_url = f"{protocol}://{ip}:{port}"
+            ts_serve_url = get_tailscale_serve_url(port)
+            if ts_serve_url:
+                final_url = ts_serve_url
+            else:
+                ip = get_local_ip()
+                protocol = "http"
+                if os.path.exists('certs/server.key') and os.path.exists('certs/server.cert'):
+                    protocol = "https"
+                final_url = f"{protocol}://{ip}:{port}"
             
             print("\n" + "="*50)
             print(f"📡 LOCAL NETWORK / TAILSCALE ACCESS")
