@@ -1735,7 +1735,8 @@ async function initializePushNotifications() {
     }
 
     try {
-        const swReg = await navigator.serviceWorker.register('/sw.js');
+        const swReg = await navigator.serviceWorker.register('/sw.js?v=3');
+        swReg.update(); // Force check for updates bypassing some caches
         console.log('[PUSH] Service Worker Registered');
 
         let subscription = await swReg.pushManager.getSubscription();
