@@ -11,7 +11,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css?v=2.14">
+    <link rel="stylesheet" href="/css/style.css?v=2.15">
 </head>
 
 <body>
@@ -31,12 +31,6 @@
                     <polyline points="12 6 12 12 16 14"></polyline>
                 </svg>
                 <span class="btn-text">History</span>
-            </button>
-            <button class="model-btn" id="modelBtn" aria-label="Select Model" title="Select Model">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960">
-                    <path d="M480-541.85l-184,184L253.85-400L480-626.15L706.15-400L664-357.85l-184-184Z" fill="currentColor"></path>
-                </svg>
-                <span class="btn-text" id="modelText">Select Model</span>
             </button>
             <div class="status-badge">
                 <div class="status-dot disconnected" id="statusDot"></div>
@@ -81,6 +75,14 @@
 
     <!-- Input Section -->
     <div class="input-section">
+        <div style="display:flex; justify-content: flex-start; margin-bottom: -4px;">
+            <button class="model-chip" id="modelBtn" aria-label="Select Model" title="Select Model">
+                <span class="btn-text" id="modelText">Select Model</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </button>
+        </div>
         <div class="input-wrapper">
             <button class="send-btn" id="stopBtn" aria-label="Stop Generation">
                 <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
@@ -126,7 +128,7 @@
         </div>
     </div>
 
-    <script src="js/app_v8.js?v=30"></script>
+    <script src="js/app_v8.js?v=31"></script>
 </body>
 
 </html>

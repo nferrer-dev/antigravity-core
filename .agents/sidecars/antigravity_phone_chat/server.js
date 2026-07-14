@@ -915,7 +915,7 @@ async function setModel(cdp, modelName) {
             let modelBtn = null;
             
             // Strategy 1: Look for data-tooltip-id patterns (most reliable)
-            modelBtn = document.querySelector('[data-tooltip-id*="model"], [data-tooltip-id*="provider"]');
+            modelBtn = document.querySelector('button[aria-label^="Select model"], [data-tooltip-id*="model"], [data-tooltip-id*="provider"]');
             
             // Strategy 2: Look for buttons/elements containing model keywords with SVG icons
             if (!modelBtn) {
