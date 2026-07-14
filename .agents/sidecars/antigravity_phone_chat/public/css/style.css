@@ -936,9 +936,9 @@ textarea::-webkit-resizer {
     align-items: center;
     gap: 8px;
     z-index: 50;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    color: var(--accent);
-    font-size: 0.85rem;
+    font-size: 13px;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     pointer-events: none;
     transition: opacity 0.3s ease, transform 0.3s ease;
     opacity: 0;

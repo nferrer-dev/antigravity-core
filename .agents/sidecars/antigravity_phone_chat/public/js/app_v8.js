@@ -786,6 +786,8 @@ async function copyToClipboard(text) {
 
 let scrollObserver = null;
 let shouldStickToBottom = true;
+let anchorDistanceFromBottom = null;
+let anchorScrollTimeout = null;
 
 function setupResizeObserver() {
     const scroller = getScrollContainer();
@@ -798,11 +800,17 @@ function setupResizeObserver() {
     if (!innerContent) return;
     
     scrollObserver = new ResizeObserver(() => {
-        if (!scroller) return;
-        if (shouldStickToBottom) {
-            // Instant scroll, no animation
+        const activeScroll = getScrollContainer();
+        if (!activeScroll) return;
+        
+        if (anchorDistanceFromBottom !== null) {
+            const newScrollPos = activeScroll.scrollHeight - activeScroll.clientHeight - anchorDistanceFromBottom;
             isProgrammaticScroll = true;
-            scroller.scrollTop = scroller.scrollHeight;
+            activeScroll.scrollTop = Math.max(0, newScrollPos);
+            setTimeout(() => isProgrammaticScroll = false, 50);
+        } else if (shouldStickToBottom) {
+            isProgrammaticScroll = true;
+            activeScroll.scrollTop = activeScroll.scrollHeight;
             setTimeout(() => isProgrammaticScroll = false, 50);
         }
     });
@@ -1000,16 +1008,38 @@ function updateDOMPreservingScroll(container, newHTML) {
     // Wait for the browser to recalculate layout after DOM insertion
     // so that currentScroll.scrollHeight reflects the newly loaded messages
     requestAnimationFrame(() => {
-        const newScrollPos = currentScroll.scrollHeight - currentScroll.clientHeight - distanceFromBottom;
+        const activeScroll = getScrollContainer(); // Get the NEW scroll container in case morph replaced it
+        if (!activeScroll) return;
+        
+        const newScrollPos = activeScroll.scrollHeight - activeScroll.clientHeight - distanceFromBottom;
+        
+        // Lock the anchor for 1 second to handle CSS transitions and image loads that expand height
+        anchorDistanceFromBottom = distanceFromBottom;
+        clearTimeout(anchorScrollTimeout);
+        anchorScrollTimeout = setTimeout(() => {
+            anchorDistanceFromBottom = null;
+        }, 1000);
         
         isProgrammaticScroll = true;
         if (isUserScrollLocked) {
-            currentScroll.scrollTop = Math.max(0, newScrollPos);
+            activeScroll.scrollTop = Math.max(0, newScrollPos);
         } else if (isNearBottom) {
-            currentScroll.scrollTop = currentScroll.scrollHeight;
+            activeScroll.scrollTop = activeScroll.scrollHeight;
         } else {
-            currentScroll.scrollTop = Math.max(0, newScrollPos);
+            activeScroll.scrollTop = Math.max(0, newScrollPos);
         }
+
+        // Hide infinite scroll loader if we just loaded older messages
+        if (activeScroll.scrollHeight > scrollHeight + 100) {
+            const loader = document.getElementById('infiniteScrollLoader');
+            if (loader) loader.classList.add('hidden');
+            isAtAbsoluteTop = true;
+            if (topHitTimeout !== null) {
+                clearTimeout(topHitTimeout);
+                topHitTimeout = null;
+            }
+        }
+        
         setTimeout(() => isProgrammaticScroll = false, 50);
     });
     
@@ -1048,41 +1078,12 @@ async function syncScrollToDesktop() {
 
 let isAtAbsoluteTop = false;
 let topHitTimeout = null;
-let ceilingReached = false;
-let lastKnownCurrent = -1;
 
 function updateLoaderVisibility(container) {
     const loader = document.getElementById('infiniteScrollLoader');
     if (!loader) return;
-     // Check if we can actually load more messages
-    let canLoadMore = true;
-    const loadBtn = chatContent.querySelector('[aria-label^="Load older messages"]');
-    if (loadBtn) {
-        if (loadBtn.getAttribute('aria-disabled') === 'true' || loadBtn.disabled || loadBtn.hasAttribute('disabled')) {
-            canLoadMore = false;
-        } else {
-            const label = loadBtn.getAttribute('aria-label');
-            const match = label.match(/showing ([\d,]+) of ([\d,]+)/i);
-            if (match) {
-                const current = parseInt(match[1].replace(/,/g, ''), 10);
-                const total = parseInt(match[2].replace(/,/g, ''), 10);
-                if (current >= total) canLoadMore = false;
-                
-                if (lastKnownCurrent !== -1 && current > lastKnownCurrent) {
-                    ceilingReached = false;
-                }
-                lastKnownCurrent = current;
-            }
-        }
-    } else {
-        canLoadMore = false;
-    }
-    
-    if (ceilingReached) {
-        canLoadMore = false;
-    }
 
-    if (!isAtAbsoluteTop && canLoadMore && container && container.scrollTop < 50) {
+    if (!isAtAbsoluteTop && container && container.scrollTop < 50) {
         if (loader) loader.classList.remove('hidden');
     } else {
         if (loader) loader.classList.add('hidden');
@@ -1093,6 +1094,11 @@ function updateLoaderVisibility(container) {
 chatContent.addEventListener('scroll', (e) => {
     if (isProgrammaticScroll) return; // Ignore our own scrolling
     if (!e.isTrusted) return; // Ignore programmatic scroll events caused by DOM replacement
+    
+    // Clear anchor lock on manual scroll
+    anchorDistanceFromBottom = null;
+    clearTimeout(anchorScrollTimeout);
+    
     const container = e.target;
     // Only process vertical scrolling containers
     if (!container || !container.scrollHeight) return;
@@ -1106,33 +1112,6 @@ chatContent.addEventListener('scroll', (e) => {
     let isNearBottom = scrollBottom < 50;
     shouldStickToBottom = isNearBottom;
 
-    // Check if we can actually load more messages
-    let canLoadMore = true;
-    const loadBtn = chatContent.querySelector('[aria-label^="Load older messages"]');
-    if (loadBtn) {
-        if (loadBtn.getAttribute('aria-disabled') === 'true') {
-            canLoadMore = false;
-        } else {
-            const label = loadBtn.getAttribute('aria-label');
-            const match = label.match(/showing ([\d,]+) of ([\d,]+)/i);
-            if (match) {
-                const current = parseInt(match[1].replace(/,/g, ''), 10);
-                const total = parseInt(match[2].replace(/,/g, ''), 10);
-                if (current >= total) canLoadMore = false;
-            }
-        }
-    } else {
-        canLoadMore = false;
-    }
-
-    // Show loading spinner when scrolling to top (loading history)
-    const loader = document.getElementById('infiniteScrollLoader');
-    if (!isAtAbsoluteTop && canLoadMore && container.scrollTop === 0 && container.scrollHeight > container.clientHeight) {
-        if (loader) loader.classList.remove('hidden');
-    } else if (isAtAbsoluteTop || !canLoadMore) {
-        if (loader) loader.classList.add('hidden');
-    }
-
     clearTimeout(idleTimer);
     
     if (isNearBottom) {
@@ -1143,22 +1122,29 @@ chatContent.addEventListener('scroll', (e) => {
         scrollToBottomBtn.classList.add('show');
     }
     
+    // Auto-reset state if pulling hard into negative overscroll
+    if (container.scrollTop < 0) {
+        isAtAbsoluteTop = false;
+        if (topHitTimeout !== null) {
+            clearTimeout(topHitTimeout);
+            topHitTimeout = null;
+        }
+    }
+
     if (container.scrollTop < 50) {
         if (topHitTimeout === null && !isAtAbsoluteTop) {
             topHitTimeout = setTimeout(() => {
                 isAtAbsoluteTop = true;
-                ceilingReached = true;
                 updateLoaderVisibility(container);
-            }, 1500); // Wait 1.5s for desktop app to load older messages
+            }, 10000); // Wait 10s for desktop app to load older messages
         }
     } else {
         if (topHitTimeout !== null) {
             clearTimeout(topHitTimeout);
             topHitTimeout = null;
         }
-        // Only reset isAtAbsoluteTop if they scroll significantly down, 
-        // to prevent rubber-banding at the top from flashing the chip again.
-        if (container.scrollTop > 300) {
+        // Reset when they scroll down just a bit
+        if (container.scrollTop > 50) {
             isAtAbsoluteTop = false;
         }
     }
@@ -1183,6 +1169,51 @@ chatContent.addEventListener('scroll', (e) => {
         }
     }, 500);
 }, true); // USE CAPTURE
+
+// Catch desktop mouse wheel attempts to scroll past the top
+chatContent.addEventListener('wheel', (e) => {
+    const container = e.currentTarget;
+    if (e.deltaY < 0 && container.scrollTop <= 50) {
+        isAtAbsoluteTop = false;
+        if (topHitTimeout !== null) clearTimeout(topHitTimeout);
+        topHitTimeout = setTimeout(() => {
+            isAtAbsoluteTop = true;
+            updateLoaderVisibility(container);
+        }, 10000);
+        updateLoaderVisibility(container);
+        
+        // Ensure we actually tell the desktop app to scroll to top to trigger loading
+        clearTimeout(scrollSyncTimeout);
+        scrollSyncTimeout = setTimeout(syncScrollToDesktop, 100);
+    }
+}, { passive: true });
+
+// Catch touchscreen drag attempts to scroll past the top (Windows/Android)
+let lastTouchY = 0;
+chatContent.addEventListener('touchstart', (e) => {
+    lastTouchY = e.touches[0].clientY;
+}, { passive: true });
+
+chatContent.addEventListener('touchmove', (e) => {
+    const currentY = e.touches[0].clientY;
+    const deltaY = lastTouchY - currentY;
+    lastTouchY = currentY;
+    const container = e.currentTarget;
+    
+    if (deltaY < 0 && container.scrollTop <= 50) {
+        isAtAbsoluteTop = false;
+        if (topHitTimeout !== null) clearTimeout(topHitTimeout);
+        topHitTimeout = setTimeout(() => {
+            isAtAbsoluteTop = true;
+            updateLoaderVisibility(container);
+        }, 10000);
+        updateLoaderVisibility(container);
+        
+        // Ensure we actually tell the desktop app to scroll to top to trigger loading
+        clearTimeout(scrollSyncTimeout);
+        scrollSyncTimeout = setTimeout(syncScrollToDesktop, 100);
+    }
+}, { passive: true });
 
 scrollToBottomBtn.addEventListener('click', () => {
     userIsScrolling = false;
