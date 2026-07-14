@@ -35,3 +35,15 @@ self.addEventListener('notificationclick', function(event) {
         })
     );
 });
+
+self.addEventListener('message', function(event) {
+    if (event.data === 'clear_notifications') {
+        event.waitUntil(
+            self.registration.getNotifications().then(function(notifications) {
+                notifications.forEach(function(notification) {
+                    notification.close();
+                });
+            })
+        );
+    }
+});

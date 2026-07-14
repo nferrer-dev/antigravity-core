@@ -1790,3 +1790,17 @@ function urlBase64ToUint8Array(base64String) {
 
 // Initialize Push Notifications
 initializePushNotifications();
+
+// --- Notification Clearing ---
+function clearNotifications() {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage('clear_notifications');
+    }
+}
+clearNotifications();
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        clearNotifications();
+    }
+});
+window.addEventListener('focus', clearNotifications);
