@@ -1038,6 +1038,12 @@ function updateDOMPreservingScroll(container, newHTML) {
                 clearTimeout(topHitTimeout);
                 topHitTimeout = null;
             }
+            loadAttempts = 0; // Reset load attempts on success
+        }
+        
+        // Track the highest scroll height to know if we actually grew
+        if (activeScroll.scrollHeight > highestScrollHeight) {
+            highestScrollHeight = activeScroll.scrollHeight;
         }
         
         setTimeout(() => isProgrammaticScroll = false, 50);
@@ -1054,7 +1060,21 @@ let snapshotReloadPending = false;
 
 async function syncScrollToDesktop() {
     const container = getScrollContainer();
-    const scrollPercent = container.scrollTop / (container.scrollHeight - container.clientHeight);
+    if (!container) return;
+    
+    if (container.scrollTop <= 50) {
+        if (hasMoreHistory()) {
+            if (loadAttempts < 3) {
+                loadAttempts++;
+            } else {
+                return; // Give up after 3 attempts to prevent infinite loading
+            }
+        }
+    }
+    
+    const maxScroll = container.scrollHeight - container.clientHeight;
+    const scrollPercent = maxScroll > 0 ? container.scrollTop / maxScroll : 0;
+    
     try {
         await fetchWithAuth('/remote-scroll', {
             method: 'POST',
@@ -1078,18 +1098,25 @@ async function syncScrollToDesktop() {
 
 let isAtAbsoluteTop = false;
 let topHitTimeout = null;
+let loadAttempts = 0;
+let highestScrollHeight = 0;
 
 function hasMoreHistory() {
+    if (loadAttempts >= 3) return false;
+
     const btn = document.querySelector('button[aria-label^="Load older messages"]');
     if (!btn) return false;
     if (btn.getAttribute('aria-disabled') === 'true' || btn.disabled) return false;
     
     const ariaLabel = btn.getAttribute('aria-label') || '';
-    const match = ariaLabel.match(/showing (\d+) of (\d+)/);
+    const match = ariaLabel.match(/showing ([\d,]+) of ([\d,]+)/);
     if (match) {
-        return parseInt(match[1], 10) < parseInt(match[2], 10);
+        const loaded = parseInt(match[1].replace(/,/g, ''), 10);
+        const total = parseInt(match[2].replace(/,/g, ''), 10);
+        return loaded < total;
     }
-    return true; // Default to true if button exists and is not disabled
+    
+    return false; // Safely return false if there's no matching numbers found
 }
 
 function updateLoaderVisibility(container) {
