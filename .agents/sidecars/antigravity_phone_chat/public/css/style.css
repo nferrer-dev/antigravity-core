@@ -954,8 +954,8 @@ textarea::-webkit-resizer {
 }
 
 
-.new-chat-btn .btn-text { margin-left: 6px; font-size: 13px; font-weight: 500; }
-.new-chat-btn { padding: 6px 12px; }
+.new-chat-btn .btn-text { margin-left: 4px; font-size: 11px; font-weight: 600; }
+.new-chat-btn { padding: 5px 10px; border-radius: 20px; }
 
-.history-btn .btn-text { margin-left: 6px; font-size: 13px; font-weight: 500; }
-.history-btn { padding: 5px 12px; }
+.history-btn .btn-text { margin-left: 4px; font-size: 11px; font-weight: 600; }
+.history-btn { padding: 5px 10px; border-radius: 20px; }
