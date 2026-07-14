@@ -427,6 +427,15 @@ async function loadSnapshot() {
             '    overflow-y: auto !important;\n' +
             '}\n' +
             '\n' +
+            '/* Fix overlapping action buttons on user messages by letting them sit alongside text */\n' +
+            '[data-testid="conversation-view"] .user-input-buttons-container {\n' +
+            '    position: relative !important;\n' +
+            '    bottom: auto !important;\n' +
+            '    right: auto !important;\n' +
+            '    align-self: flex-end;\n' +
+            '    margin-top: 4px;\n' +
+            '}\n' +
+            '\n' +
             '/* Reveal hover-dependent action buttons on mobile (e.g. Queued message Delete/Redirect) */\n' +
             '[data-testid="conversation-view"] .opacity-0,\n' +
             '[data-testid="conversation-view"] [class*="opacity-0"],\n' +
