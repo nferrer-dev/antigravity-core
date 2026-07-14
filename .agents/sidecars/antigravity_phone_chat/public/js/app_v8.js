@@ -1623,25 +1623,27 @@ chatContainer.addEventListener('click', async (e) => {
         btn.style.opacity = '0.5';
         setTimeout(() => btn.style.opacity = '1', 300);
 
-        // Get the exact global index of this button
-        const allButtons = Array.from(chatContainer.querySelectorAll('button, [role="button"]'));
-        const btnIndex = allButtons.indexOf(btn);
-
-        try {
-            await fetchWithAuth('/remote-click', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    selector: btn.tagName.toLowerCase() === 'button' ? 'button' : '[role="button"]',
-                    index: btnIndex >= 0 ? btnIndex : 0,
-                    textContent: '' // Empty text forces server to bypass text-filtering and strictly use the DOM index
-                })
-            });
-            
-            // Reload snapshot sooner since deletes are fast
-            setTimeout(loadSnapshot, 1000);
-        } catch (err) {
-            console.error('Remote button click failed:', err);
+        // Get the robust ID tagged by the server
+        const btnId = btn.getAttribute('data-ag-btn-id');
+        
+        if (btnId) {
+            try {
+                await fetchWithAuth('/remote-click', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        selector: `[data-ag-btn-id="${btnId}"]`,
+                        index: 0, // Unused now
+                        textContent: '' 
+                    })
+                });
+                
+                setTimeout(loadSnapshot, 1000);
+            } catch (err) {
+                console.error('Remote button click failed:', err);
+            }
+        } else {
+            console.warn('Button lacks data-ag-btn-id attribute');
         }
     }
 });

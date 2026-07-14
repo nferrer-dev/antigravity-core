@@ -298,8 +298,12 @@ async function captureSnapshot(cdp) {
         // Mark fixed/absolute elements in the original DOM before cloning
         // This is the only way to reliably catch CSS-class-based positioning
         const candidates = cascade.querySelectorAll('*');
+        let btnCounter = 0;
         candidates.forEach(el => {
             try {
+                if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') {
+                    el.setAttribute('data-ag-btn-id', 'ag-btn-' + (++btnCounter));
+                }
                 const pos = window.getComputedStyle(el).position;
                 if (pos === 'fixed' || pos === 'absolute') {
                     el.setAttribute('data-ag-rem', 'true');
