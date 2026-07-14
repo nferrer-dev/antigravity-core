@@ -963,3 +963,6 @@ textarea::-webkit-resizer {
 .new-chat-btn svg, .history-btn svg { width: 12px !important; height: 12px !important; stroke-width: 3 !important; }
 .new-chat-btn, .history-btn { display: flex; align-items: center; justify-content: center; flex-wrap: nowrap; white-space: nowrap; }
 .btn-text { display: inline-block; transform: translateY(0.5px); }
+
+.header-controls { width: 100%; justify-content: space-between; position: relative; }
+.history-btn { position: absolute; left: 50%; transform: translateX(-50%); }
