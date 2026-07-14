@@ -1079,9 +1079,27 @@ async function syncScrollToDesktop() {
 let isAtAbsoluteTop = false;
 let topHitTimeout = null;
 
+function hasMoreHistory() {
+    const btn = document.querySelector('button[aria-label^="Load older messages"]');
+    if (!btn) return false;
+    if (btn.getAttribute('aria-disabled') === 'true' || btn.disabled) return false;
+    
+    const ariaLabel = btn.getAttribute('aria-label') || '';
+    const match = ariaLabel.match(/showing (\d+) of (\d+)/);
+    if (match) {
+        return parseInt(match[1], 10) < parseInt(match[2], 10);
+    }
+    return true; // Default to true if button exists and is not disabled
+}
+
 function updateLoaderVisibility(container) {
     const loader = document.getElementById('infiniteScrollLoader');
     if (!loader) return;
+    
+    if (!hasMoreHistory()) {
+        loader.classList.add('hidden');
+        return;
+    }
 
     if (!isAtAbsoluteTop && container && container.scrollTop < 50) {
         if (loader) loader.classList.remove('hidden');
@@ -1174,6 +1192,8 @@ chatContent.addEventListener('scroll', (e) => {
 chatContent.addEventListener('wheel', (e) => {
     const container = e.currentTarget;
     if (e.deltaY < 0 && container.scrollTop <= 50) {
+        if (!hasMoreHistory()) return;
+        
         isAtAbsoluteTop = false;
         if (topHitTimeout !== null) clearTimeout(topHitTimeout);
         topHitTimeout = setTimeout(() => {
@@ -1201,6 +1221,8 @@ chatContent.addEventListener('touchmove', (e) => {
     const container = e.currentTarget;
     
     if (deltaY < 0 && container.scrollTop <= 50) {
+        if (!hasMoreHistory()) return;
+        
         isAtAbsoluteTop = false;
         if (topHitTimeout !== null) clearTimeout(topHitTimeout);
         topHitTimeout = setTimeout(() => {
