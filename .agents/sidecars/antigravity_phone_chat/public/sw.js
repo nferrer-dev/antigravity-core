@@ -11,7 +11,9 @@ self.addEventListener('push', function(event) {
             body: payload.body,
             icon: '/favicon.ico',
             vibrate: [200, 100, 200],
-            requireInteraction: false
+            requireInteraction: false,
+            tag: 'chat-message',
+            renotify: true
         });
 
         event.waitUntil(promiseChain);
