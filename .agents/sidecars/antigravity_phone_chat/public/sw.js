@@ -20,6 +20,15 @@ self.addEventListener('push', function(event) {
 
 self.addEventListener('notificationclick', function(event) {
     event.notification.close();
+    
+    // Also clear all other notifications since we're opening the app
+    event.waitUntil(
+        self.registration.getNotifications().then(function(notifications) {
+            notifications.forEach(function(notification) {
+                notification.close();
+            });
+        })
+    );
 
     event.waitUntil(
         clients.matchAll({ type: 'window' }).then(windowClients => {
