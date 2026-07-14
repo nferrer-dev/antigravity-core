@@ -1796,6 +1796,10 @@ function clearNotifications() {
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage('clear_notifications');
     }
+    // Clear the app icon badge (the unread number on the home screen)
+    if ('clearAppBadge' in navigator) {
+        navigator.clearAppBadge().catch(console.error);
+    }
 }
 clearNotifications();
 document.addEventListener('visibilitychange', () => {
