@@ -47,3 +47,11 @@ self.addEventListener('message', function(event) {
         );
     }
 });
+
+self.addEventListener('install', function(event) {
+    self.skipWaiting();
+});
+
+self.addEventListener('activate', function(event) {
+    event.waitUntil(clients.claim());
+});
