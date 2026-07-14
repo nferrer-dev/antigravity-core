@@ -965,4 +965,3 @@ textarea::-webkit-resizer {
 .btn-text { display: inline-block; transform: translateY(0.5px); }
 
 .header-controls { width: 100%; justify-content: flex-start; }
-.status-badge { margin-left: auto; }
