@@ -1616,34 +1616,46 @@ chatContainer.addEventListener('click', async (e) => {
         return;
     }
 
-    // --- Universal Button Proxy ---
-    const btn = e.target.closest('button, [role="button"]');
-    if (btn && !btn.classList.contains('mobile-copy-btn')) {
-        // Visual feedback
-        btn.style.opacity = '0.5';
-        setTimeout(() => btn.style.opacity = '1', 300);
+    // --- Universal Click Proxy ---
+    // Instead of only looking for <button>, we find the nearest interactive element 
+    // or just pass the exact element tapped, so the desktop can trigger it regardless of HTML tag.
+    if (e.target.closest('.mobile-copy-btn')) return;
 
-        // Get the robust ID tagged by the server
-        const btnId = btn.getAttribute('data-ag-btn-id');
-        
-        if (btnId) {
-            try {
-                await fetchWithAuth('/remote-click', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        selector: `[data-ag-btn-id="${btnId}"]`,
-                        index: 0, // Unused now
-                        textContent: '' 
-                    })
-                });
-                
-                setTimeout(loadSnapshot, 1000);
-            } catch (err) {
-                console.error('Remote button click failed:', err);
-            }
-        } else {
-            console.warn('Button lacks data-ag-btn-id attribute');
+    let curr = e.target;
+    let interactiveEl = null;
+    while (curr && curr !== chatContainer && curr !== document.body) {
+        if (curr.tagName === 'BUTTON' || curr.tagName === 'A' || curr.getAttribute('role') === 'button' ||
+            window.getComputedStyle(curr).cursor === 'pointer' ||
+            (curr.tagName === 'SVG' && (curr.className.baseVal || '').includes('lucide'))) {
+            interactiveEl = curr;
+            break;
+        }
+        curr = curr.parentElement;
+    }
+
+    const elToClick = interactiveEl || e.target.closest('[data-ag-id]') || e.target;
+    const agId = elToClick.getAttribute('data-ag-id');
+
+    if (agId) {
+        // Visual feedback
+        const originalOpacity = elToClick.style.opacity;
+        elToClick.style.opacity = '0.5';
+        setTimeout(() => elToClick.style.opacity = originalOpacity || '1', 300);
+
+        try {
+            await fetchWithAuth('/remote-click', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    selector: `[data-ag-id="${agId}"]`,
+                    index: 0, 
+                    textContent: '' 
+                })
+            });
+            
+            setTimeout(loadSnapshot, 1000);
+        } catch (err) {
+            console.error('Remote click failed:', err);
         }
     }
 });
