@@ -917,9 +917,22 @@ async function setModel(cdp, modelName) {
             // Strategy 1: Look for data-tooltip-id patterns (most reliable)
             modelBtn = document.querySelector('button[aria-label^="Select model"], [data-tooltip-id*="model"], [data-tooltip-id*="provider"]');
             
-            // Strategy 2: Look for buttons/elements containing model keywords with SVG icons
+            // To avoid clicking sidebar history items, anchor searches to the main chat input area
+            let searchRoot = document.body;
+            const chatInput = document.querySelector('textarea, [contenteditable="true"]');
+            if (chatInput) {
+                let p = chatInput;
+                // Traverse up ~8 levels to capture the whole input bar container, but not the whole app/sidebar
+                for (let i = 0; i < 8; i++) {
+                    if (!p.parentElement || p.parentElement === document.body) break;
+                    p = p.parentElement;
+                }
+                searchRoot = p;
+            }
+            
+            // Strategy 2: Look for buttons/elements containing model keywords with SVG icons (anchored)
             if (!modelBtn) {
-                const candidates = Array.from(document.querySelectorAll('button, [role="button"], div, span'))
+                const candidates = Array.from(searchRoot.querySelectorAll('button, [role="button"], div, span'))
                     .filter(el => {
                         const txt = el.innerText?.trim() || '';
                         return KNOWN_KEYWORDS.some(k => txt.includes(k)) && el.offsetParent !== null;
@@ -928,17 +941,14 @@ async function setModel(cdp, modelName) {
                 // Find the best one (has chevron icon or cursor pointer)
                 modelBtn = candidates.find(el => {
                     const style = window.getComputedStyle(el);
-                    const hasSvg = el.querySelector('svg.lucide-chevron-up') || 
-                                   el.querySelector('svg.lucide-chevron-down') || 
-                                   el.querySelector('svg[class*="chevron"]') ||
-                                   el.querySelector('svg');
+                    const hasSvg = el.querySelector('svg');
                     return (style.cursor === 'pointer' || el.tagName === 'BUTTON') && hasSvg;
                 }) || candidates[0];
             }
             
-            // Strategy 3: Traverse from text nodes up to clickable parents
+            // Strategy 3: Traverse from text nodes up to clickable parents (anchored)
             if (!modelBtn) {
-                const allEls = Array.from(document.querySelectorAll('*'));
+                const allEls = Array.from(searchRoot.querySelectorAll('*'));
                 const textNodes = allEls.filter(el => {
                     if (el.children.length > 0) return false;
                     const txt = el.textContent;
