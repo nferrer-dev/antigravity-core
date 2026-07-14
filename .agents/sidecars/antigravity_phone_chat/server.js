@@ -914,9 +914,6 @@ async function setModel(cdp, modelName) {
             
             let modelBtn = null;
             
-            // Strategy 1: Look for data-tooltip-id patterns (most reliable)
-            modelBtn = document.querySelector('button[aria-label^="Select model"], [data-tooltip-id*="model"], [data-tooltip-id*="provider"]');
-            
             // To avoid clicking sidebar history items, anchor searches to the main chat input area
             let searchRoot = document.body;
             const chatInput = document.querySelector('textarea, [contenteditable="true"]');
@@ -929,6 +926,9 @@ async function setModel(cdp, modelName) {
                 }
                 searchRoot = p;
             }
+            
+            // Strategy 1: Look for data-tooltip-id patterns (anchored to searchRoot)
+            modelBtn = searchRoot.querySelector('button[aria-label^="Select model"], [data-tooltip-id*="model"], [data-tooltip-id*="provider"]');
             
             // Strategy 2: Look for buttons/elements containing model keywords with SVG icons (anchored)
             if (!modelBtn) {
@@ -970,6 +970,11 @@ async function setModel(cdp, modelName) {
             }
 
             if (!modelBtn) return { error: 'Model selector button not found' };
+            
+            // CRITICAL SAFETY CHECK: Never click a link or something in a navigation sidebar
+            if (modelBtn.closest('a') || modelBtn.closest('nav') || modelBtn.closest('aside')) {
+                return { error: 'Found model button inside a link or sidebar, rejected to prevent unwanted navigation.' };
+            }
 
             // Click to open menu
             modelBtn.click();
