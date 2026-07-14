@@ -956,3 +956,6 @@ textarea::-webkit-resizer {
 
 .new-chat-btn .btn-text { margin-left: 6px; font-size: 13px; font-weight: 500; }
 .new-chat-btn { padding: 6px 12px; }
+
+.history-btn .btn-text { margin-left: 6px; font-size: 13px; font-weight: 500; }
+.history-btn { padding: 5px 12px; }
