@@ -959,3 +959,7 @@ textarea::-webkit-resizer {
 
 .history-btn .btn-text { margin-left: 4px; font-size: 11px; font-weight: 600; }
 .history-btn { padding: 5px 10px; border-radius: 20px; }
+
+.new-chat-btn svg, .history-btn svg { width: 12px !important; height: 12px !important; stroke-width: 3 !important; }
+.new-chat-btn, .history-btn { display: flex; align-items: center; justify-content: center; flex-wrap: nowrap; white-space: nowrap; }
+.btn-text { display: inline-block; transform: translateY(0.5px); }
