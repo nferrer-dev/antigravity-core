@@ -969,8 +969,9 @@ async function setModel(cdp, modelName) {
             let visibleDialog = null;
             
             // Try specific dialog patterns first
+            const baseName = '${modelName}'.split(' ')[0];
             const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [role="listbox"], [role="menu"], [data-radix-popper-content-wrapper]'));
-            visibleDialog = dialogs.find(d => d.offsetHeight > 0 && d.innerText?.includes('${modelName}'));
+            visibleDialog = dialogs.find(d => d.offsetHeight > 0 && d.innerText?.includes(baseName));
             
             // Fallback: look for positioned divs
             if (!visibleDialog) {
@@ -979,23 +980,22 @@ async function setModel(cdp, modelName) {
                         const style = window.getComputedStyle(d);
                         return d.offsetHeight > 0 && 
                                (style.position === 'absolute' || style.position === 'fixed') && 
-                               d.innerText?.includes('${modelName}') && 
+                               d.innerText?.includes(baseName) && 
                                !d.innerText?.includes('Files With Changes');
                     });
             }
 
             if (!visibleDialog) {
-                // Blind search across entire document as last resort
+                // Blind search across entire document as last resort (exact match only to avoid sidebar)
                 const allElements = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"]'));
                 const target = allElements.find(el => 
-                    el.offsetParent !== null && 
-                    (el.innerText?.trim() === '${modelName}' || el.innerText?.includes('${modelName}'))
+                    el.offsetParent !== null && el.innerText?.trim() === '${modelName}'
                 );
                 if (target) {
                     target.click();
-                    return { success: true, method: 'blind_search' };
+                    return { success: true, method: 'blind_search_exact' };
                 }
-                return { error: 'Model list not opened' };
+                return { error: 'Model list not opened or could not be found' };
             }
 
             // Select specific model inside the dialog
