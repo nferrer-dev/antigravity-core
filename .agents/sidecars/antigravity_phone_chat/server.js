@@ -915,7 +915,7 @@ async function setModel(cdp, modelName) {
             let modelBtn = null;
             
             // To avoid clicking sidebar history items, anchor searches to the main chat input area
-            let searchRoot = document.body;
+            let searchRoot = document.querySelector('[data-testid="conversation-view"]') || document.body;
             const chatInput = document.querySelector('textarea, [contenteditable="true"]');
             if (chatInput) {
                 let p = chatInput;
@@ -970,6 +970,12 @@ async function setModel(cdp, modelName) {
             }
 
             if (!modelBtn) return { error: 'Model selector button not found' };
+            
+            // GEOMETRIC SAFETY CHECK: Model button is ALWAYS at the bottom of the screen.
+            const rect = modelBtn.getBoundingClientRect();
+            if (rect.top < window.innerHeight * 0.4) {
+                return { error: 'Found modelBtn in top half of screen, rejected to prevent unwanted navigation.' };
+            }
             
             // CRITICAL SAFETY CHECK: Never click a link or something in a navigation sidebar
             if (modelBtn.closest('a') || modelBtn.closest('nav') || modelBtn.closest('aside')) {
