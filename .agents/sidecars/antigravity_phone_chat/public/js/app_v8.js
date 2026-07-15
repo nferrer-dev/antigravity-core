@@ -1813,6 +1813,8 @@ chatContainer.addEventListener('click', async (e) => {
         return;
     }
 
+
+
     // Strategy: Check if the clicked element OR its parent contains "Thought" or "Thinking" text.
     // This handles both opening (collapsed) and closing (expanded) states.
 
@@ -2111,6 +2113,72 @@ setInterval(fetchAppState, 5000);
 // Check chat status initially and periodically
 checkChatStatus();
 setInterval(checkChatStatus, 10000); // Check every 10 seconds
+
+// --- Initialize Native File Upload ---
+function initializeFileUpload() {
+    const attachMenuBtn = document.getElementById('attachMenuBtn');
+    const attachMenu = document.getElementById('attachMenu');
+    const docInput = document.getElementById('mobile-file-document');
+    const mediaInput = document.getElementById('mobile-file-media');
+
+    if (attachMenuBtn && attachMenu && !attachMenuBtn.dataset.initialized) {
+        attachMenuBtn.dataset.initialized = 'true';
+        attachMenuBtn.addEventListener('click', () => {
+            attachMenu.classList.toggle('show');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!attachMenu.contains(e.target) && !attachMenuBtn.contains(e.target)) {
+                attachMenu.classList.remove('show');
+            }
+        });
+    }
+
+    const handleUpload = async (event) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+        
+        if (attachMenu) attachMenu.classList.remove('show');
+        
+        if (window.isFileUploading) return;
+        window.isFileUploading = true;
+        
+        const spinner = document.createElement('div');
+        spinner.className = 'upload-spinner';
+        spinner.innerHTML = '<div class="spinner"></div>';
+        document.body.appendChild(spinner);
+        
+        const formData = new FormData();
+        for (let i = 0; i < files.length; i++) {
+            formData.append('files', files[i]);
+        }
+        
+        try {
+            await fetchWithAuth('/upload-attachment', {
+                method: 'POST',
+                body: formData
+            });
+            setTimeout(loadSnapshot, 1000);
+        } catch (err) {
+            console.error('File upload failed:', err);
+            alert('Upload failed: ' + err.message);
+        } finally {
+            window.isFileUploading = false;
+            if (spinner.parentNode) spinner.parentNode.removeChild(spinner);
+            event.target.value = ''; // Reset so same file can be selected again
+        }
+    };
+
+    if (docInput && !docInput.dataset.initialized) {
+        docInput.dataset.initialized = 'true';
+        docInput.addEventListener('change', handleUpload);
+    }
+    if (mediaInput && !mediaInput.dataset.initialized) {
+        mediaInput.dataset.initialized = 'true';
+        mediaInput.addEventListener('change', handleUpload);
+    }
+}
+initializeFileUpload();
 
 // --- Push Notifications ---
 async function initializePushNotifications() {
