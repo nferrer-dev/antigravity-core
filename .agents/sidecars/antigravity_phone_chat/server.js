@@ -282,6 +282,60 @@ async function captureSnapshot(cdp) {
         
         const cascadeStyles = window.getComputedStyle(cascade);
         
+        // Deep React Fiber Identity Extraction for messages
+        try {
+            const convId = window.location.pathname.split('/').pop();
+            const articles = cascade.querySelectorAll('[role="article"]');
+            for (const el of articles) {
+                const fiberKey = Object.keys(el).find(k => k.startsWith('__reactFiber$'));
+                if (!fiberKey) continue;
+                
+                let fiber = el[fiberKey];
+                let depth = 0;
+                let foundId = null;
+                
+                // Helper to deeply search for IDs
+                function searchProps(obj, currentDepth, visited) {
+                    if (!obj || typeof obj !== 'object' || currentDepth > 5) return null;
+                    if (visited.has(obj)) return null;
+                    visited.add(obj);
+
+                    for (const key in obj) {
+                        try {
+                            const val = obj[key];
+                            // Match UUIDs (length 36) or message IDs
+                            if (typeof val === 'string' && val.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
+                                // Skip the conversation ID which we know is a UUID but shared across all messages
+                                if (val === convId) continue;
+                                return val;
+                            } else if (typeof val === 'object') {
+                                const res = searchProps(val, currentDepth + 1, visited);
+                                if (res) return res;
+                            }
+                        } catch(e) {}
+                    }
+                    return null;
+                }
+
+                while (fiber && depth < 15) {
+                    if (fiber.memoizedProps) {
+                        foundId = searchProps(fiber.memoizedProps, 0, new Set());
+                        if (foundId) break;
+                    }
+                    if (fiber.pendingProps) {
+                        foundId = searchProps(fiber.pendingProps, 0, new Set());
+                        if (foundId) break;
+                    }
+                    fiber = fiber.return;
+                    depth++;
+                }
+                
+                if (foundId) {
+                    el.setAttribute('data-message-id', foundId);
+                }
+            }
+        } catch (e) {}
+
         // Find the main scrollable container
         const scrollContainer = cascade.querySelector('.overflow-y-auto, [data-scroll-area]') || cascade;
 
@@ -515,6 +569,7 @@ async function captureSnapshot(cdp) {
             } catch (e) { }
         }
         const allCSS = rules.join(' ') + 
+            ' button.active-thumb, button.active-thumb svg { color: #3b82f6 !important; fill: currentColor !important; }' +
             ' .conversation-button-group { display: none !important; }' +
             ' div[class*="bg-sidebar"] { display: none !important; width: 0 !important; }' +
             ' div[style*=" width: 256px;"] { display: none !important; width: 0 !important; }' +
@@ -840,7 +895,7 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
                 if (target.scrollIntoView) {
                     target.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
                 }
-                
+
                 // Get rect to perform hardware click
                 const rect = target.getBoundingClientRect();
                 return { 
@@ -856,7 +911,7 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
             }
             return { error: 'Element not found' };
         } catch(e) {
-            return { error: e.toString() };
+            return { error: e.message || e.toString(), stack: e.stack };
         }
     })();`;
 
@@ -869,21 +924,23 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
         
         if (res.result && res.result.value && res.result.value.success && res.result.value.rect) {
             const { x, y } = res.result.value.rect;
+            const centerX = Math.round(x);
+            const centerY = Math.round(y);
             
             // Perform true hardware click via CDP (isTrusted=true)
             await cdp.call('Input.dispatchMouseEvent', {
                 type: 'mousePressed',
                 button: 'left',
-                x: x,
-                y: y,
+                x: centerX,
+                y: centerY,
                 clickCount: 1
             });
             await new Promise(r => setTimeout(r, 50));
             await cdp.call('Input.dispatchMouseEvent', {
                 type: 'mouseReleased',
                 button: 'left',
-                x: x,
-                y: y,
+                x: centerX,
+                y: centerY,
                 clickCount: 1
             });
             
@@ -892,7 +949,8 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
         
         return res.result?.value || { error: 'Evaluate failed' };
     } catch (e) {
-        return { error: e.toString() };
+        console.error("CDP ERROR in clickElement:", e);
+        return { error: JSON.stringify(e) };
     }
 }
 

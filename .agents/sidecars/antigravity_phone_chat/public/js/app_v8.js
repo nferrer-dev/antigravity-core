@@ -607,6 +607,18 @@ async function loadSnapshot() {
             chatContent.innerHTML = data.html;
         }
 
+        // Re-apply active thumb visual states based on data-message-id
+        window.tappedThumbs = window.tappedThumbs || {};
+        const allBtns = document.querySelectorAll('button[aria-label="Good response"], button[aria-label="Bad response"]');
+        allBtns.forEach(btn => {
+            const type = btn.getAttribute('aria-label');
+            const article = btn.closest('[role="article"]') || (btn.closest('.group') ? btn.closest('.group').querySelector('[role="article"]') : null);
+            const messageId = article ? article.getAttribute('data-message-id') : null;
+            if (messageId && window.tappedThumbs[messageId] === type) {
+                btn.classList.add('active-thumb');
+            }
+        });
+
         // Add mobile copy buttons to all code blocks
         addMobileCopyButtons();
 
@@ -1880,6 +1892,43 @@ chatContainer.addEventListener('click', async (e) => {
         const originalOpacity = elToClick.style.opacity;
         elToClick.style.opacity = '0.5';
         setTimeout(() => elToClick.style.opacity = originalOpacity || '1', 300);
+
+        // Enhanced visual feedback for thumbs up/down
+        const checkAriaLabel = (interactiveEl && interactiveEl.getAttribute('aria-label')) || elToClick.getAttribute('aria-label');
+        if (checkAriaLabel === 'Good response' || checkAriaLabel === 'Bad response') {
+            const btn = interactiveEl || elToClick;
+            const article = btn.closest('[role="article"]') || (btn.closest('.group') ? btn.closest('.group').querySelector('[role="article"]') : null);
+            const messageId = article ? article.getAttribute('data-message-id') : null;
+            
+            if (messageId) {
+                window.tappedThumbs = window.tappedThumbs || {};
+                const isAlreadyActive = btn.classList.contains('active-thumb');
+                
+                if (isAlreadyActive) {
+                    // Toggle off
+                    btn.classList.remove('active-thumb');
+                    if (window.tappedThumbs[messageId] === checkAriaLabel) {
+                        delete window.tappedThumbs[messageId];
+                    }
+                } else {
+                    // Toggle on
+                    btn.classList.add('active-thumb');
+                    window.tappedThumbs[messageId] = checkAriaLabel;
+                    
+                    // If they tapped one, remove the other (mutually exclusive)
+                    const oppositeLabel = checkAriaLabel === 'Good response' ? 'Bad response' : 'Good response';
+                    
+                    // Remove visual class from opposite button if it's currently on screen
+                    const oppositeBtnList = Array.from(document.querySelectorAll(`button[aria-label="${oppositeLabel}"]`));
+                    oppositeBtnList.forEach(oppBtn => {
+                        const oppArticle = oppBtn.closest('[role="article"]') || (oppBtn.closest('.group') ? oppBtn.closest('.group').querySelector('[role="article"]') : null);
+                        if (oppArticle && oppArticle.getAttribute('data-message-id') === messageId) {
+                            oppBtn.classList.remove('active-thumb');
+                        }
+                    });
+                }
+            }
+        }
 
         // Generate robust fallback selector
         let fallbackSelector = elToClick.tagName.toLowerCase();
