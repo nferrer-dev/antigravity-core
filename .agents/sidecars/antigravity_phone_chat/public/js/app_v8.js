@@ -265,7 +265,16 @@ function updateStatus(connected) {
 }
 
 // --- Rendering ---
+window.isThumbAnimating = false;
+window.pendingSnapshot = false;
+
 async function loadSnapshot() {
+    if (window.isThumbAnimating) {
+        window.pendingSnapshot = true;
+        return;
+    }
+    window.pendingSnapshot = false;
+
     try {
         const response = await fetchWithAuth('/snapshot');
         if (!response.ok) {
@@ -282,6 +291,12 @@ async function loadSnapshot() {
         chatIsOpen = true;
 
         const data = await response.json();
+
+        // Check again after fetch resolves to prevent replacing DOM if user clicked during the network request!
+        if (window.isThumbAnimating) {
+            window.pendingSnapshot = true;
+            return;
+        }
 
         // Capture scroll state BEFORE updating content
         const scrollerBefore = getScrollContainer();
@@ -553,7 +568,7 @@ async function loadSnapshot() {
             '    align-items: center !important;\n' +
             '    justify-content: center !important;\n' +
             '    border-radius: 4px !important;\n' +
-            '    transition: all 0.2s ease !important;\n' +
+            '    transition: all 0.5s ease-in-out !important;\n' +
             '    -webkit-tap-highlight-color: transparent !important;\n' +
             '    z-index: 10 !important;\n' +
             '    margin: 0 !important;\n' +
@@ -563,6 +578,12 @@ async function loadSnapshot() {
             '.mobile-copy-btn:focus {\n' +
             '    background: rgba(59, 130, 246, 0.2) !important;\n' +
             '    color: #60a5fa !important;\n' +
+            '}\n' +
+            '\n' +
+            '.mobile-copy-btn.copied {\n' +
+            '    color: #4ade80 !important;\n' +
+            '    background: rgba(74, 222, 128, 0.2) !important;\n' +
+            '    transform: scale(1.1) !important;\n' +
             '}\n' +
             '                \n' +
             '.mobile-copy-btn svg {\n' +
@@ -1765,7 +1786,13 @@ chatContainer.addEventListener('click', async (e) => {
             copyBtn.dataset.copySuccess = "true";
 
             const originalColor = copyBtn.style.color;
+            const originalTransition = copyBtn.style.transition;
+            const originalTransform = copyBtn.style.transform;
+            
+            copyBtn.style.transition = 'all 0.5s ease-in-out';
             copyBtn.style.color = '#4ade80';
+            copyBtn.style.transform = 'scale(1.1)';
+            
             const svg = copyBtn.querySelector('svg');
             let originalSvg = null;
             if (svg) {
@@ -1774,6 +1801,11 @@ chatContainer.addEventListener('click', async (e) => {
             }
             setTimeout(() => {
                 copyBtn.style.color = originalColor;
+                copyBtn.style.transform = originalTransform || '';
+                setTimeout(() => {
+                    if (copyBtn.style) copyBtn.style.transition = originalTransition || '';
+                }, 500);
+                
                 if (svg && originalSvg) copyBtn.innerHTML = originalSvg;
                 delete copyBtn.dataset.copySuccess;
             }, 2000);
@@ -1888,14 +1920,25 @@ chatContainer.addEventListener('click', async (e) => {
     const agId = elToClick.getAttribute('data-ag-id');
 
     if (agId || elToClick !== chatContainer) {
-        // Visual feedback
-        const originalOpacity = elToClick.style.opacity;
-        elToClick.style.opacity = '0.5';
-        setTimeout(() => elToClick.style.opacity = originalOpacity || '1', 300);
+        const checkAriaLabel = (interactiveEl && interactiveEl.getAttribute('aria-label')) || elToClick.getAttribute('aria-label');
+        const isThumbBtn = checkAriaLabel === 'Good response' || checkAriaLabel === 'Bad response';
+
+        // Smoother, slower visual feedback (Skip for thumbs up/down, they have their own visual state)
+        if (!isThumbBtn) {
+            const originalOpacity = elToClick.style.opacity;
+            const originalTransition = elToClick.style.transition;
+            elToClick.style.transition = 'opacity 0.4s ease-in-out';
+            elToClick.style.opacity = '0.3';
+            setTimeout(() => {
+                elToClick.style.opacity = originalOpacity || '1';
+                setTimeout(() => {
+                    if (elToClick.style) elToClick.style.transition = originalTransition || '';
+                }, 400);
+            }, 400);
+        }
 
         // Enhanced visual feedback for thumbs up/down
-        const checkAriaLabel = (interactiveEl && interactiveEl.getAttribute('aria-label')) || elToClick.getAttribute('aria-label');
-        if (checkAriaLabel === 'Good response' || checkAriaLabel === 'Bad response') {
+        if (isThumbBtn) {
             const btn = interactiveEl || elToClick;
             const article = btn.closest('[role="article"]') || (btn.closest('.group') ? btn.closest('.group').querySelector('[role="article"]') : null);
             const messageId = article ? article.getAttribute('data-message-id') : null;
@@ -1952,21 +1995,50 @@ chatContainer.addEventListener('click', async (e) => {
         let index = elements.indexOf(elToClick);
         if (index === -1) index = 0;
 
-        try {
-            await fetchWithAuth('/remote-click', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: agId || '',
-                    selector: fallbackSelector,
-                    index: index,
-                    textContent: textContent
-                })
+        const sendRemoteClick = async () => {
+            try {
+                await fetchWithAuth('/remote-click', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: agId || '',
+                        selector: fallbackSelector,
+                        index: index,
+                        textContent: textContent
+                    })
+                });
+                
+                setTimeout(loadSnapshot, 1000);
+            } catch (err) {
+                console.error('Remote click failed:', err);
+            }
+        };
+
+        if (isThumbBtn) {
+            window.thumbClickQueue = window.thumbClickQueue || Promise.resolve();
+            window.activeThumbClicks = (window.activeThumbClicks || 0) + 1;
+            window.isThumbAnimating = true;
+
+            // Clear any stray timers from old debounce logic if they exist
+            if (window.thumbAnimationTimer) clearTimeout(window.thumbAnimationTimer);
+
+            window.thumbClickQueue = window.thumbClickQueue.then(async () => {
+                // Wait 500ms before sending click to let the local CSS transition play
+                await new Promise(r => setTimeout(r, 500));
+                await sendRemoteClick();
+                // Tail buffer to let server DOM settle
+                await new Promise(r => setTimeout(r, 200));
+            }).catch(e => console.error(e))
+              .finally(() => {
+                window.activeThumbClicks--;
+                if (window.activeThumbClicks <= 0) {
+                    window.activeThumbClicks = 0;
+                    window.isThumbAnimating = false;
+                    if (window.pendingSnapshot) loadSnapshot();
+                }
             });
-            
-            setTimeout(loadSnapshot, 1000);
-        } catch (err) {
-            console.error('Remote click failed:', err);
+        } else {
+            sendRemoteClick();
         }
     }
 });
