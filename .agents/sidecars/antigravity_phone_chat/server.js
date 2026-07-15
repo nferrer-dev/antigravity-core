@@ -836,6 +836,11 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
                 // Focus element
                 if (target.focus) target.focus();
                 
+                // Ensure it's in the viewport before taking coordinates
+                if (target.scrollIntoView) {
+                    target.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+                }
+                
                 // Get rect to perform hardware click
                 const rect = target.getBoundingClientRect();
                 return { 
