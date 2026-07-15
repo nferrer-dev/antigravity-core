@@ -569,8 +569,8 @@ async function captureSnapshot(cdp) {
             } catch (e) { }
         }
         const allCSS = rules.join(' ') + 
-            ' button[aria-label="Good response"], button[aria-label="Bad response"] { opacity: 1 !important; transition: all 0.5s ease-in-out !important; }' +
-            ' button.active-thumb, button.active-thumb svg { color: #3b82f6 !important; fill: currentColor !important; transition: all 0.5s ease-in-out !important; }' +
+            ' button[aria-label="Good response"], button[aria-label="Bad response"] { opacity: 1 !important; transition: all 0.2s ease-in-out !important; }' +
+            ' button.active-thumb, button.active-thumb svg { color: #3b82f6 !important; fill: currentColor !important; transition: all 0.2s ease-in-out !important; }' +
             ' .conversation-button-group { display: none !important; }' +
             ' div[class*="bg-sidebar"] { display: none !important; width: 0 !important; }' +
             ' div[style*=" width: 256px;"] { display: none !important; width: 0 !important; }' +

@@ -2023,8 +2023,8 @@ chatContainer.addEventListener('click', async (e) => {
             if (window.thumbAnimationTimer) clearTimeout(window.thumbAnimationTimer);
 
             window.thumbClickQueue = window.thumbClickQueue.then(async () => {
-                // Wait 500ms before sending click to let the local CSS transition play
-                await new Promise(r => setTimeout(r, 500));
+                // Wait 200ms before sending click to let the local CSS transition play
+                await new Promise(r => setTimeout(r, 200));
                 await sendRemoteClick();
                 // Tail buffer to let server DOM settle
                 await new Promise(r => setTimeout(r, 200));
