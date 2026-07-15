@@ -42,6 +42,50 @@ let lastHash = '';
 let currentMode = 'Fast';
 let chatIsOpen = true; // Track if a chat is currently open
 
+window.stagedAttachments = [];
+function renderStagedAttachments() {
+    const container = document.getElementById('stagedAttachmentsContainer');
+    if (!container) return;
+    if (window.stagedAttachments.length === 0) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+    container.classList.remove('hidden');
+    container.innerHTML = '';
+    window.stagedAttachments.forEach(filename => {
+        const chip = document.createElement('div');
+        chip.className = 'attachment-chip';
+        chip.innerHTML = `
+            <svg class="file-icon" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            ${filename}
+            <button class="remove-btn" aria-label="Remove file">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        `;
+        chip.querySelector('.remove-btn').addEventListener('click', async () => {
+            window.stagedAttachments = window.stagedAttachments.filter(f => f !== filename);
+            renderStagedAttachments();
+            try {
+                await fetchWithAuth('/remove-attachment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename })
+                });
+            } catch (e) {
+                console.error('Failed to remove attachment', e);
+            }
+        });
+        container.appendChild(chip);
+    });
+}
+
 // --- Virtual Keyboard API ---
 // Prevents Android Chrome from abruptly resizing the viewport when keyboard opens
 if ('virtualKeyboard' in navigator) {
@@ -962,7 +1006,10 @@ function scrollToBottom() {
 // --- Inputs ---
 async function sendMessage() {
     const message = messageInput.value.trim();
-    if (!message) return;
+    if (!message && window.stagedAttachments.length === 0) return;
+
+    window.stagedAttachments = [];
+    renderStagedAttachments();
 
     // Optimistic UI updates
     const previousValue = messageInput.value;
@@ -2154,10 +2201,15 @@ function initializeFileUpload() {
         }
         
         try {
-            await fetchWithAuth('/upload-attachment', {
+            const res = await fetchWithAuth('/upload-attachment', {
                 method: 'POST',
                 body: formData
             });
+            const data = await res.json();
+            if (data.filenames) {
+                window.stagedAttachments.push(...data.filenames);
+                renderStagedAttachments();
+            }
             setTimeout(loadSnapshot, 1000);
         } catch (err) {
             console.error('File upload failed:', err);

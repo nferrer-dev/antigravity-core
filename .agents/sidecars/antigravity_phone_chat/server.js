@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import express from 'express';
+import multer from 'multer';
 import webpush from 'web-push';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
@@ -1884,6 +1885,147 @@ const wss = new WebSocketServer({ server });
         }
         res.json({ successes, errors });
     });
+
+    // File upload endpoint
+    const storage = multer.diskStorage({
+        destination: os.tmpdir(),
+        filename: (req, file, cb) => {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            cb(null, uniqueSuffix + '-' + file.originalname);
+        }
+    });
+
+    const upload = multer({ 
+        storage: storage,
+        limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+    });
+    app.post('/upload-attachment', upload.array('files', 10), async (req, res) => {
+        try {
+            if (!cdpConnection) return res.status(503).json({ error: 'CDP not connected' });
+            
+            const filePaths = req.files.map(f => f.path);
+            console.log('[Upload] Received files:', req.files.map(f => f.originalname));
+            
+            if (filePaths.length === 0) return res.status(400).json({ error: 'No files uploaded' });
+
+            // We use FileChooser Interception to bypass React synthetic event ignorance
+            await cdpConnection.call('Page.enable');
+            await cdpConnection.call('Page.setInterceptFileChooserDialog', { enabled: true });
+
+            // Set up a listener for the file chooser opening
+            const onMessage = async (msgData) => {
+                try {
+                    const msg = JSON.parse(msgData);
+                    if (msg.method === 'Page.fileChooserOpened') {
+                        try {
+                            await cdpConnection.call('Page.handleFileChooser', {
+                                action: 'accept',
+                                files: filePaths
+                            });
+                            console.log('[Upload] Handled file chooser natively!');
+                        } catch (e) {
+                            console.error('[Upload] Error handling file chooser:', e);
+                        } finally {
+                            cdpConnection.ws.removeListener('message', onMessage);
+                            cdpConnection.call('Page.setInterceptFileChooserDialog', { enabled: false }).catch(() => {});
+                        }
+                    }
+                } catch(e) {}
+            };
+            cdpConnection.ws.on('message', onMessage);
+
+            // Trigger the click natively
+            const doc = await cdpConnection.call('DOM.getDocument', { depth: -1 });
+            const node = await cdpConnection.call('DOM.querySelector', { 
+                nodeId: doc.root.nodeId, 
+                selector: 'input[type="file"]' 
+            });
+
+            if (node && node.nodeId) {
+                const { object } = await cdpConnection.call('DOM.resolveNode', { nodeId: node.nodeId });
+                if (object && object.objectId) {
+                    await cdpConnection.call('Runtime.callFunctionOn', {
+                        objectId: object.objectId,
+                        functionDeclaration: 'function() { this.click(); }',
+                        userGesture: true
+                    });
+                }
+                res.json({ success: true, filenames: req.files.map(f => f.originalname) });
+            } else {
+                console.warn('[Upload] Could not find file input element to click');
+                res.status(404).json({ error: 'File input not found in DOM' });
+                // Cleanup immediately on failure
+                filePaths.forEach(p => fs.unlink(p, () => {}));
+                return;
+            }
+
+            // Cleanup temp files after 1 minute to allow Chrome to read them asynchronously
+            setTimeout(() => {
+                filePaths.forEach(p => {
+                    fs.unlink(p, (err) => {
+                        if (err) console.error('[Cleanup] Error unlinking temp file:', err);
+                    });
+                });
+            }, 60000);
+        } catch (e) {
+            console.error('[Upload] Error:', e);
+            res.status(500).json({ error: e.message });
+            // Cleanup on error
+            if (req.files) {
+                req.files.forEach(f => fs.unlink(f.path, () => {}));
+            }
+        }
+    });
+
+    app.post('/remove-attachment', express.json(), async (req, res) => {
+        try {
+            if (!cdpConnection) return res.status(503).json({ error: 'CDP not connected' });
+            const { filename } = req.body;
+            if (!filename) return res.status(400).json({ error: 'Filename is required' });
+
+            const REMOVE_SCRIPT = `(async () => {
+                const chips = Array.from(document.querySelectorAll('div, span')).filter(el => el.textContent && el.textContent.includes('${filename}'));
+                let targetButton = null;
+                for (const chip of chips) {
+                    const btn = chip.querySelector('button[aria-label="Remove file"]') || chip.parentElement?.querySelector('button[aria-label="Remove file"]');
+                    if (btn) {
+                        targetButton = btn;
+                        break;
+                    }
+                }
+                if (targetButton) {
+                    targetButton.click();
+                    return { success: true };
+                }
+                return { error: 'Remove button not found' };
+            })()`;
+
+            let success = false;
+            for (const ctx of cdpConnection.contexts) {
+                try {
+                    const result = await cdpConnection.call('Runtime.evaluate', {
+                        expression: REMOVE_SCRIPT,
+                        returnByValue: true,
+                        awaitPromise: true,
+                    });
+                    if (result.result && result.result.value && result.result.value.success) {
+                        success = true;
+                        break;
+                    }
+                } catch (e) {}
+            }
+
+            if (success) {
+                res.json({ success: true });
+            } else {
+                res.status(404).json({ error: 'Could not remove attachment' });
+            }
+        } catch (e) {
+            console.error('[Remove Attachment] Error:', e);
+            res.status(500).json({ error: e.message });
+        }
+    });
+
 
     // Get current snapshot
     app.get('/snapshot', (req, res) => {

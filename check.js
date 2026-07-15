@@ -1,0 +1,1 @@
+const fs = require('fs'); const content = fs.readFileSync('.agents/sidecars/antigravity_phone_chat/desktop_dom.html', 'utf8'); console.log('leading-relaxed', content.includes('leading-relaxed')); console.log('select-text', content.includes('select-text')); console.log('whitespace-pre-wrap', content.includes('whitespace-pre-wrap'));

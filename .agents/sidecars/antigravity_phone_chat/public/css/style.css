@@ -1082,4 +1082,63 @@ textarea::-webkit-resizer {
     color: var(--text-muted);
 }
 
+/* Staged Attachments Container */
+.staged-attachments-container {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px 4px;
+    margin-bottom: 4px;
+}
 
+.staged-attachments-container.hidden {
+    display: none;
+}
+
+.attachment-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 6px 12px;
+    font-size: 13px;
+    color: var(--text-main);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.attachment-chip .file-icon {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.attachment-chip .remove-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin-left: 4px;
+}
+
+.attachment-chip .remove-btn:hover {
+    color: var(--error);
+}
+
+.attachment-chip .remove-btn svg {
+    width: 14px;
+    height: 14px;
+}
