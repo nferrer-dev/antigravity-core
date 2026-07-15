@@ -174,6 +174,10 @@ function connectWebSocket() {
 
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        if (data.type === 'force_reload') {
+            window.location.reload(true);
+            return;
+        }
         if (data.type === 'error' && data.message === 'Unauthorized') {
             window.location.href = '/login.html';
             return;
@@ -633,6 +637,8 @@ async function loadSnapshot() {
 }
 
 // --- Mobile Code Block Copy Functionality ---
+// Removed addAgentMessageCopyButtons in favor of backend clipboard hooking
+
 function addMobileCopyButtons() {
     // Find all pre elements (code blocks) in the chat
     const codeBlocks = chatContent.querySelectorAll('pre');
@@ -722,7 +728,6 @@ function addMobileCopyButtons() {
     });
 }
 
-// --- Cross-platform Clipboard Copy ---
 async function copyToClipboard(text) {
     // Method 1: Modern Clipboard API (works on HTTPS or localhost)
     if (navigator.clipboard && window.isSecureContext) {
@@ -735,12 +740,12 @@ async function copyToClipboard(text) {
         }
     }
 
-    // Method 2: Fallback using execCommand (works on HTTP, older browsers)
+    // Method 3: Fallback using execCommand (works on HTTP, older browsers)
+    let execSuccess = false;
     try {
         const textArea = document.createElement('textarea');
         textArea.value = text;
 
-        // Avoid scrolling to bottom on iOS
         textArea.style.position = 'fixed';
         textArea.style.top = '0';
         textArea.style.left = '0';
@@ -750,12 +755,12 @@ async function copyToClipboard(text) {
         textArea.style.border = 'none';
         textArea.style.outline = 'none';
         textArea.style.boxShadow = 'none';
-        textArea.style.background = 'transparent';
-        textArea.style.opacity = '0';
+        textArea.style.background = 'white';
+        textArea.style.color = 'black';
+        textArea.style.opacity = '0.01';
 
         document.body.appendChild(textArea);
 
-        // iOS specific handling
         if (navigator.userAgent.match(/ipad|iphone/i)) {
             const range = document.createRange();
             range.selectNodeContents(textArea);
@@ -767,10 +772,16 @@ async function copyToClipboard(text) {
             textArea.select();
         }
 
-        const success = document.execCommand('copy');
+        execSuccess = document.execCommand('copy');
         document.body.removeChild(textArea);
 
-        if (success) {
+        if (execSuccess) {
+            // On Android Chrome, execCommand often returns true even when it silently fails.
+            if (navigator.userAgent.match(/Android/i)) {
+                console.warn('[COPY] execCommand lies on Android. Forcing modal.');
+                showManualCopyModal(text);
+                return false;
+            }
             console.log('[COPY] Success via execCommand fallback');
             return true;
         }
@@ -778,10 +789,82 @@ async function copyToClipboard(text) {
         console.warn('[COPY] execCommand fallback failed:', err);
     }
 
-    // Method 3: For Android WebView or restricted contexts
-    // Show the text in a selectable modal if all else fails
-    console.error('[COPY] All copy methods failed');
-    return false;
+    // Method 3: Mobile fallback modal (Guaranteed to work if user interacts)
+    console.warn('[COPY] Falling back to manual copy modal');
+    showManualCopyModal(text);
+    return false; // Returns false so the button shows a failure initially, but user can still copy
+}
+
+function showManualCopyModal(text) {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.backgroundColor = 'rgba(0,0,0,0.6)';
+    overlay.style.zIndex = '999999';
+    overlay.style.display = 'flex';
+    overlay.style.justifyContent = 'center';
+    overlay.style.alignItems = 'center';
+
+    const modal = document.createElement('div');
+    modal.style.backgroundColor = 'var(--bg-panel, #1e1e2e)';
+    modal.style.color = 'var(--text-main, #fff)';
+    modal.style.padding = '20px';
+    modal.style.borderRadius = '12px';
+    modal.style.width = '90%';
+    modal.style.maxWidth = '400px';
+    modal.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+    modal.style.display = 'flex';
+    modal.style.flexDirection = 'column';
+    modal.style.gap = '15px';
+
+    const header = document.createElement('div');
+    header.style.fontWeight = 'bold';
+    header.style.fontSize = '16px';
+    header.style.textAlign = 'center';
+    header.innerText = 'Copy Manually';
+
+    const helpText = document.createElement('div');
+    helpText.style.fontSize = '12px';
+    helpText.style.color = 'var(--text-muted, #aaa)';
+    helpText.style.textAlign = 'center';
+    helpText.innerText = 'Automatic copy failed. Long-press the text below to copy it.';
+
+    const textAreaFallback = document.createElement('textarea');
+    textAreaFallback.value = text;
+    textAreaFallback.readOnly = true;
+    textAreaFallback.style.width = '100%';
+    textAreaFallback.style.height = '200px';
+    textAreaFallback.style.backgroundColor = 'var(--bg-input, #000)';
+    textAreaFallback.style.color = 'var(--text-main, #fff)';
+    textAreaFallback.style.border = '1px solid var(--border, #333)';
+    textAreaFallback.style.padding = '12px';
+    textAreaFallback.style.borderRadius = '8px';
+    textAreaFallback.style.fontSize = '14px';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.innerText = 'Close';
+    closeBtn.style.padding = '12px';
+    closeBtn.style.backgroundColor = 'var(--accent, #3b82f6)';
+    closeBtn.style.color = 'white';
+    closeBtn.style.border = 'none';
+    closeBtn.style.borderRadius = '8px';
+    closeBtn.style.fontWeight = 'bold';
+    closeBtn.onclick = () => document.body.removeChild(overlay);
+
+    modal.appendChild(header);
+    modal.appendChild(helpText);
+    modal.appendChild(textAreaFallback);
+    modal.appendChild(closeBtn);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    setTimeout(() => {
+        textAreaFallback.focus();
+        textAreaFallback.setSelectionRange(0, text.length);
+    }, 100);
 }
 
 let scrollObserver = null;
@@ -1612,6 +1695,80 @@ modelBtn.addEventListener('click', () => {
 
 // --- Remote Click Logic (Thinking/Thought) ---
 chatContainer.addEventListener('click', async (e) => {
+    // --- Native Mobile Copy Intercept (Bypass Backend) ---
+    const copyBtn = e.target.closest('button[aria-label="Copy"]');
+    if (copyBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // 1. Find the main message bubble or article
+        let article = copyBtn.closest('[role="article"], .message');
+        let contentWrapper = null;
+
+        if (article) {
+            contentWrapper = article.querySelector('.leading-relaxed.select-text, .whitespace-pre-wrap');
+        } else {
+            // Fallback for new Omni chat structure: find the group container
+            const group = copyBtn.closest('.group');
+            if (group) {
+                const agentArticle = group.querySelector('[aria-label="Agent response"], [aria-label="System response"]');
+                const closestUserMsg = copyBtn.closest('[aria-label="User message"]');
+                
+                if (closestUserMsg) {
+                    contentWrapper = closestUserMsg.querySelector('.leading-relaxed.select-text, .whitespace-pre-wrap');
+                } else if (agentArticle) {
+                    contentWrapper = agentArticle.querySelector('.leading-relaxed.select-text, .whitespace-pre-wrap');
+                }
+                
+                if (!contentWrapper) {
+                    const wrappers = Array.from(group.querySelectorAll('.leading-relaxed.select-text, .whitespace-pre-wrap'));
+                    const agentWrappers = wrappers.filter(w => !w.closest('[aria-label="User message"]'));
+                    if (agentWrappers.length > 0) {
+                        contentWrapper = agentWrappers[agentWrappers.length - 1];
+                    }
+                }
+            }
+        }
+        
+        if (!contentWrapper) return;
+
+        // 3. Extract text cleanly using the browser's native selection engine
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(contentWrapper);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        
+        const textToCopy = selection.toString().trim();
+        selection.removeAllRanges(); // Clear immediately so user doesn't see a flash
+
+        if (!textToCopy) return;
+
+        // 4. Execute native copy synchronously
+        const success = await copyToClipboard(textToCopy);
+        
+        if (success) {
+            // Guard against double-click state corruption
+            if (copyBtn.dataset.copySuccess) return;
+            copyBtn.dataset.copySuccess = "true";
+
+            const originalColor = copyBtn.style.color;
+            copyBtn.style.color = '#4ade80';
+            const svg = copyBtn.querySelector('svg');
+            let originalSvg = null;
+            if (svg) {
+                originalSvg = copyBtn.innerHTML;
+                copyBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+            }
+            setTimeout(() => {
+                copyBtn.style.color = originalColor;
+                if (svg && originalSvg) copyBtn.innerHTML = originalSvg;
+                delete copyBtn.dataset.copySuccess;
+            }, 2000);
+        }
+        return;
+    }
+
     // Strategy: Check if the clicked element OR its parent contains "Thought" or "Thinking" text.
     // This handles both opening (collapsed) and closing (expanded) states.
 
@@ -1702,35 +1859,59 @@ chatContainer.addEventListener('click', async (e) => {
     // or just pass the exact element tapped, so the desktop can trigger it regardless of HTML tag.
     if (e.target.closest('.mobile-copy-btn')) return;
 
-    let curr = e.target;
-    let interactiveEl = null;
-    while (curr && curr !== chatContainer && curr !== document.body) {
-        if (curr.tagName === 'BUTTON' || curr.tagName === 'A' || curr.getAttribute('role') === 'button' ||
-            window.getComputedStyle(curr).cursor === 'pointer' ||
-            (curr.tagName === 'SVG' && (curr.className.baseVal || '').includes('lucide'))) {
-            interactiveEl = curr;
-            break;
+    let interactiveEl = e.target.closest('button, a, [role="button"]');
+    
+    if (!interactiveEl) {
+        let curr = e.target;
+        while (curr && curr !== chatContainer && curr !== document.body) {
+            if (window.getComputedStyle(curr).cursor === 'pointer') {
+                interactiveEl = curr;
+                break;
+            }
+            curr = curr.parentElement;
         }
-        curr = curr.parentElement;
     }
 
     const elToClick = interactiveEl || e.target.closest('[data-ag-id]') || e.target;
     const agId = elToClick.getAttribute('data-ag-id');
 
-    if (agId) {
+    if (agId || elToClick !== chatContainer) {
         // Visual feedback
         const originalOpacity = elToClick.style.opacity;
         elToClick.style.opacity = '0.5';
         setTimeout(() => elToClick.style.opacity = originalOpacity || '1', 300);
+
+        // Generate robust fallback selector
+        let fallbackSelector = elToClick.tagName.toLowerCase();
+        const ariaLabel = elToClick.getAttribute('aria-label');
+        if (ariaLabel) {
+            fallbackSelector += `[aria-label="${ariaLabel}"]`;
+        } else if (elToClick.className && typeof elToClick.className === 'string') {
+            const cls = elToClick.className.trim().split(/\s+/)[0];
+            if (cls) fallbackSelector += `.${CSS.escape(cls)}`;
+        }
+
+        // Generate text content filter
+        let textContent = (elToClick.innerText || elToClick.textContent || '').trim();
+        if (textContent.length > 50) textContent = textContent.substring(0, 50);
+
+        // Calculate index
+        let elements = [];
+        try {
+            elements = Array.from(document.querySelectorAll(fallbackSelector));
+        } catch (e) {}
+        let index = elements.indexOf(elToClick);
+        if (index === -1) index = 0;
 
         try {
             await fetchWithAuth('/remote-click', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    selector: `[data-ag-id="${agId}"]`,
-                    index: 0, 
-                    textContent: '' 
+                    id: agId || '',
+                    selector: fallbackSelector,
+                    index: index,
+                    textContent: textContent
                 })
             });
             

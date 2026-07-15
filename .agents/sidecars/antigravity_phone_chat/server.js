@@ -234,6 +234,12 @@ async function connectCDP(url) {
                 if (idx !== -1) contexts.splice(idx, 1);
             } else if (data.method === 'Runtime.executionContextsCleared') {
                 contexts.length = 0;
+            } else if (data.method === 'Runtime.consoleAPICalled') {
+                const args = data.params.args;
+                if (args && args.length > 0 && args[0].value && typeof args[0].value === 'string' && args[0].value.startsWith('AG_CLIPBOARD_HOOK:')) {
+                    const text = args[0].value.substring(18);
+                    if (global.onRemoteClipboardWrite) global.onRemoteClipboardWrite(text);
+                }
             }
         } catch (e) { }
     });
@@ -522,7 +528,7 @@ async function captureSnapshot(cdp) {
             fontFamily: cascadeStyles.fontFamily,
             scrollInfo: scrollInfo,
             isGenerating: (function() {
-                const els = document.querySelectorAll('button[aria-label="Cancel (Ctrl+D)"], button svg.lucide-square, [data-testid="agent-loading"]');
+                const els = document.querySelectorAll('[data-testid="agent-loading"]');
                 for (let el of els) {
                     const rect = el.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0) {
@@ -790,61 +796,99 @@ async function stopGeneration(cdp) {
 
 
 // Click Element (Remote)
-async function clickElement(cdp, { selector, index, textContent }) {
+async function clickElement(cdp, { id, selector, index, textContent }) {
     const safeText = JSON.stringify(textContent || '');
 
     const EXP = `(async () => {
         try {
             // Priority: Search inside the exact same chat container that the snapshot uses for perfect index alignment
             const root = document.querySelector('[data-testid="conversation-view"]') || document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade') || document;
+            let target = null;
+            let elements = [];
             
-            // Strategy: Find all elements matching the selector
-            let elements = Array.from(root.querySelectorAll('${selector}'));
-            
-            const filterText = ${safeText};
-            if (filterText) {
-                elements = elements.filter(el => {
-                    const txt = (el.innerText || el.textContent || el.getAttribute('aria-label') || el.getAttribute('title') || '').trim();
-                    const firstLine = txt.split('\\n')[0].trim();
-                    // Match if first line matches (thought blocks) or if it contains the label (buttons)
-                    return firstLine === filterText || txt.includes(filterText);
-                });
-                
-                // CRITICAL: If elements are nested (e.g. <div><span>Text</span></div>), 
-                // both will match. We only want the most specific (inner-most) one.
-                elements = elements.filter(el => {
-                    return !elements.some(other => other !== el && el.contains(other));
-                });
+            if ('${id}' !== 'undefined' && '${id}') {
+                target = root.querySelector('[data-ag-id="${id}"]');
             }
-
-            const target = elements[${index}];
+            
+            if (!target) {
+                // Fallback: Find all elements matching the selector
+                try {
+                    elements = Array.from(root.querySelectorAll('${selector}'));
+                } catch(e) {}
+                
+                const filterText = ${safeText};
+                if (filterText && elements.length > 0) {
+                    elements = elements.filter(el => {
+                        const txt = (el.innerText || el.textContent || el.getAttribute('aria-label') || el.getAttribute('title') || '').trim();
+                        const firstLine = txt.split('\\n')[0].trim();
+                        return firstLine === filterText || txt.includes(filterText);
+                    });
+                    
+                    elements = elements.filter(el => {
+                        return !elements.some(other => other !== el && el.contains(other));
+                    });
+                }
+    
+                target = elements[${index}];
+            }
 
             if (target) {
-                // Focus and Click
+                // Focus element
                 if (target.focus) target.focus();
-                target.click();
-                return { success: true, found: elements.length, indexUsed: ${index} };
+                
+                // Get rect to perform hardware click
+                const rect = target.getBoundingClientRect();
+                return { 
+                    success: true, 
+                    found: elements.length, 
+                    indexUsed: ${index}, 
+                    idUsed: '${id}',
+                    rect: {
+                        x: rect.left + (rect.width / 2),
+                        y: rect.top + (rect.height / 2)
+                    }
+                };
             }
-            
-            return { error: 'Element not found at index ' + ${index} + ' among ' + elements.length + ' matches' };
+            return { error: 'Element not found' };
         } catch(e) {
             return { error: e.toString() };
         }
-    })()`;
+    })();`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                /* contextId: ctx.id */
+    try {
+        const res = await cdp.call("Runtime.evaluate", {
+            expression: EXP,
+            returnByValue: true,
+            awaitPromise: true
+        });
+        
+        if (res.result && res.result.value && res.result.value.success && res.result.value.rect) {
+            const { x, y } = res.result.value.rect;
+            
+            // Perform true hardware click via CDP (isTrusted=true)
+            await cdp.call('Input.dispatchMouseEvent', {
+                type: 'mousePressed',
+                button: 'left',
+                x: x,
+                y: y,
+                clickCount: 1
             });
-            if (res.result?.value?.success) return res.result.value;
-            // If we found it but click didn't return success (unlikely with this script), continue to next context
-        } catch (e) { }
+            await new Promise(r => setTimeout(r, 50));
+            await cdp.call('Input.dispatchMouseEvent', {
+                type: 'mouseReleased',
+                button: 'left',
+                x: x,
+                y: y,
+                clickCount: 1
+            });
+            
+            return res.result.value;
+        }
+        
+        return res.result?.value || { error: 'Evaluate failed' };
+    } catch (e) {
+        return { error: e.toString() };
     }
-    return { error: 'Click failed in all contexts or element not found at index' };
 }
 
 // Remote scroll - sync phone scroll to desktop
@@ -1614,7 +1658,19 @@ async function createServer() {
         server = http.createServer(app);
     }
 
-    const wss = new WebSocketServer({ server });
+    // Ensure we ask CDP to send us console events so we can catch clipboard hooks!
+async function ensureConsoleEnabled() {
+    if (cdpConnection) {
+        try {
+            await cdpConnection.call('Runtime.enable', {});
+        } catch(e) {}
+    }
+}
+setInterval(ensureConsoleEnabled, 5000);
+
+const wss = new WebSocketServer({ server });
+
+
 
     // Initialize Auth Token using a unique salt from environment
     const authSalt = process.env.AUTH_SALT || 'antigravity_default_salt_99';
@@ -2153,9 +2209,9 @@ async function main() {
 
         // Remote Click
         app.post('/remote-click', async (req, res) => {
-            const { selector, index, textContent } = req.body;
+            const { id, selector, index, textContent } = req.body;
             if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
-            const result = await clickElement(cdpConnection, { selector, index, textContent });
+            const result = await clickElement(cdpConnection, { id, selector, index, textContent });
             res.json(result);
         });
 
