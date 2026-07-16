@@ -9,6 +9,7 @@ const statusText = document.getElementById('statusText');
 const stopBtn = document.getElementById('stopBtn');
 const newChatBtn = document.getElementById('newChatBtn');
 const historyBtn = document.getElementById('historyBtn');
+const voiceBtn = document.getElementById('voiceBtn');
 
 const modeBtn = document.getElementById('modeBtn') || { classList: { toggle: () => {} }, addEventListener: () => {} };
 const modelBtn = document.getElementById('modelBtn') || { classList: { toggle: () => {} }, addEventListener: () => {} };
@@ -2181,11 +2182,8 @@ function initializeFileUpload() {
         });
     }
 
-    const handleUpload = async (event) => {
-        const files = event.target.files;
+    window.uploadFiles = async (files) => {
         if (!files || files.length === 0) return;
-        
-        if (attachMenu) attachMenu.classList.remove('show');
         
         if (window.isFileUploading) return;
         window.isFileUploading = true;
@@ -2217,8 +2215,13 @@ function initializeFileUpload() {
         } finally {
             window.isFileUploading = false;
             if (spinner.parentNode) spinner.parentNode.removeChild(spinner);
-            event.target.value = ''; // Reset so same file can be selected again
         }
+    };
+
+    const handleUpload = async (event) => {
+        if (attachMenu) attachMenu.classList.remove('show');
+        await window.uploadFiles(event.target.files);
+        event.target.value = ''; // Reset so same file can be selected again
     };
 
     if (docInput && !docInput.dataset.initialized) {
@@ -2319,3 +2322,95 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 window.addEventListener('focus', clearNotifications);
+
+// --- Voice Input Logic ---
+function initializeVoiceInput() {
+    if (!voiceBtn) return;
+    
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+    let startTime = 0;
+    let maxDurationTimeout = null;
+
+    const stopRecording = () => {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+    };
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            
+            // Prefer webm, fallback to mp4
+            let mimeType = '';
+            if (MediaRecorder.isTypeSupported('audio/webm')) {
+                mimeType = 'audio/webm';
+            } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                mimeType = 'audio/mp4';
+            }
+
+            const options = mimeType ? { mimeType } : {};
+            mediaRecorder = new MediaRecorder(stream, options);
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    audioChunks.push(e.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                isRecording = false;
+                voiceBtn.classList.remove('recording');
+                clearTimeout(maxDurationTimeout);
+                stream.getTracks().forEach(track => track.stop());
+
+                const duration = Date.now() - startTime;
+                
+                // Discard if < 1000ms or 0 chunks
+                if (duration < 1000 || audioChunks.length === 0) {
+                    return;
+                }
+                
+                const blob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
+                if (blob.size === 0) return;
+
+                const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+                const file = new File([blob], `voice_memo_${Date.now()}.${ext}`, { type: blob.type });
+
+                if (typeof window.uploadFiles === 'function') {
+                    window.uploadFiles([file]);
+                }
+            };
+
+            mediaRecorder.start();
+            isRecording = true;
+            startTime = Date.now();
+            voiceBtn.classList.add('recording');
+
+            // 60 second timeout
+            maxDurationTimeout = setTimeout(() => {
+                if (isRecording) stopRecording();
+            }, 60000);
+
+        } catch (err) {
+            console.error('Voice recording error:', err);
+            if (err.name === 'NotAllowedError') {
+                alert('Microphone access was denied. Please allow it in your browser settings.');
+            } else {
+                alert('Error accessing microphone: ' + err.message);
+            }
+        }
+    };
+
+    voiceBtn.addEventListener('click', () => {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    });
+}
+initializeVoiceInput();
