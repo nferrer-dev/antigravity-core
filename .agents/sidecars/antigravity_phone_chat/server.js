@@ -1704,6 +1704,28 @@ async function startPolling(wss) {
 async function createServer() {
     const app = express();
 
+    // Initialize voice memos directory and cleanup interval
+    const voiceMemosDir = join(__dirname, 'scratch', 'voice_memos');
+    if (!fs.existsSync(voiceMemosDir)) {
+        fs.mkdirSync(voiceMemosDir, { recursive: true });
+    }
+    setInterval(() => {
+        try {
+            if (!fs.existsSync(voiceMemosDir)) return;
+            const files = fs.readdirSync(voiceMemosDir);
+            const now = Date.now();
+            for (const file of files) {
+                const filePath = join(voiceMemosDir, file);
+                const stats = fs.statSync(filePath);
+                if (now - stats.mtimeMs > 24 * 60 * 60 * 1000) {
+                    fs.unlinkSync(filePath);
+                }
+            }
+        } catch (e) {
+            console.error('Error cleaning up voice memos:', e);
+        }
+    }, 60 * 60 * 1000);
+
     // Check for SSL certificates
     const keyPath = join(__dirname, 'certs', 'server.key');
     const certPath = join(__dirname, 'certs', 'server.cert');
@@ -1922,6 +1944,18 @@ const wss = new WebSocketServer({ server });
                     nodeId: node.nodeId
                 });
                 
+                // Copy voice memos to persistent scratch directory
+                try {
+                    for (const f of req.files) {
+                        if (f.originalname.endsWith('.webm') || f.originalname.endsWith('.mp4')) {
+                            const dest = join(__dirname, 'scratch', 'voice_memos', f.originalname);
+                            fs.copyFileSync(f.path, dest);
+                        }
+                    }
+                } catch(e) {
+                    console.error('Error copying voice memo:', e);
+                }
+
                 res.json({ success: true, filenames: req.files.map(f => f.originalname) });
             } else {
                 console.warn('[Upload] Could not find file input element to upload to');
@@ -2100,7 +2134,25 @@ const wss = new WebSocketServer({ server });
 
     // Send message
     app.post('/send', async (req, res) => {
-        const { message } = req.body;
+        let { message, attachments } = req.body;
+
+        // Bypass for voice memos that persist across chat resets
+        if (Array.isArray(attachments)) {
+            for (const filename of attachments) {
+                // Prevent path traversal
+                if (typeof filename !== 'string' || filename.includes('/') || filename.includes('\\')) continue;
+                
+                const memoPath = join(__dirname, 'scratch', 'voice_memos', filename);
+                if (fs.existsSync(memoPath)) {
+                    const appendText = `[Attached Voice Memo: ${memoPath}]`;
+                    if (!message) {
+                        message = appendText;
+                    } else {
+                        message = message + '\n' + appendText;
+                    }
+                }
+            }
+        }
 
         if (!message) {
             return res.status(400).json({ error: 'Message required' });

@@ -1009,6 +1009,7 @@ async function sendMessage() {
     const message = messageInput.value.trim();
     if (!message && window.stagedAttachments.length === 0) return;
 
+    const attachmentsToProcess = [...window.stagedAttachments];
     window.stagedAttachments = [];
     renderStagedAttachments();
 
@@ -1040,7 +1041,7 @@ async function sendMessage() {
         const res = await fetchWithAuth('/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
+            body: JSON.stringify({ message, attachments: attachmentsToProcess })
         });
 
         // Always reload snapshot to check if message appeared
