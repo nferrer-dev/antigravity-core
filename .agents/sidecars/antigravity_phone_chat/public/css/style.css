@@ -433,7 +433,7 @@ textarea:-webkit-autofill:focus {
 
 textarea::placeholder {
     color: rgba(255, 255, 255, 0.4);
-    font-size: 12px;
+    font-size: 9px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
