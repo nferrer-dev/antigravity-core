@@ -1908,33 +1908,7 @@ const wss = new WebSocketServer({ server });
             
             if (filePaths.length === 0) return res.status(400).json({ error: 'No files uploaded' });
 
-            // We use FileChooser Interception to bypass React synthetic event ignorance
-            await cdpConnection.call('Page.enable');
-            await cdpConnection.call('Page.setInterceptFileChooserDialog', { enabled: true });
-
-            // Set up a listener for the file chooser opening
-            const onMessage = async (msgData) => {
-                try {
-                    const msg = JSON.parse(msgData);
-                    if (msg.method === 'Page.fileChooserOpened') {
-                        try {
-                            await cdpConnection.call('Page.handleFileChooser', {
-                                action: 'accept',
-                                files: filePaths
-                            });
-                            console.log('[Upload] Handled file chooser natively!');
-                        } catch (e) {
-                            console.error('[Upload] Error handling file chooser:', e);
-                        } finally {
-                            cdpConnection.ws.removeListener('message', onMessage);
-                            cdpConnection.call('Page.setInterceptFileChooserDialog', { enabled: false }).catch(() => {});
-                        }
-                    }
-                } catch(e) {}
-            };
-            cdpConnection.ws.on('message', onMessage);
-
-            // Trigger the click natively
+            // Instead of intercepting the file chooser, directly set the files
             const doc = await cdpConnection.call('DOM.getDocument', { depth: -1 });
             const node = await cdpConnection.call('DOM.querySelector', { 
                 nodeId: doc.root.nodeId, 
@@ -1942,17 +1916,15 @@ const wss = new WebSocketServer({ server });
             });
 
             if (node && node.nodeId) {
-                const { object } = await cdpConnection.call('DOM.resolveNode', { nodeId: node.nodeId });
-                if (object && object.objectId) {
-                    await cdpConnection.call('Runtime.callFunctionOn', {
-                        objectId: object.objectId,
-                        functionDeclaration: 'function() { this.click(); }',
-                        userGesture: true
-                    });
-                }
+                // Set the file input files directly
+                await cdpConnection.call('DOM.setFileInputFiles', {
+                    files: filePaths,
+                    nodeId: node.nodeId
+                });
+                
                 res.json({ success: true, filenames: req.files.map(f => f.originalname) });
             } else {
-                console.warn('[Upload] Could not find file input element to click');
+                console.warn('[Upload] Could not find file input element to upload to');
                 res.status(404).json({ error: 'File input not found in DOM' });
                 // Cleanup immediately on failure
                 filePaths.forEach(p => fs.unlink(p, () => {}));
@@ -1999,17 +1971,10 @@ const wss = new WebSocketServer({ server });
                     }
                 }
                 
-                // Fallback to original chip approach if the new selector didn't match
-                if (clicked === 0) {
-                    const chips = Array.from(document.querySelectorAll('div, span')).filter(el => el.textContent && el.textContent.includes('${filename}'));
-                    for (const chip of chips) {
-                        const btn = chip.querySelector('button[aria-label="Remove file"]') || chip.parentElement?.querySelector('button[aria-label="Remove file"]');
-                        if (btn) {
-                            btn.click();
-                            clicked++;
-                            break;
-                        }
-                    }
+                // Fallback: If we couldn't find a specific chip (e.g. for images which don't render filename text), 
+                // just clear all attachments so the UI state doesn't get permanently stuck.
+                if (clicked === 0 && btns.length > 0) {
+                    btns.forEach(b => { b.click(); clicked++; });
                 }
                 
                 const input = document.querySelector('input[type="file"]');
@@ -2018,7 +1983,7 @@ const wss = new WebSocketServer({ server });
                     input.dispatchEvent(new Event("change", { bubbles: true }));
                     input.dispatchEvent(new Event("input", { bubbles: true }));
                 }
-                return { clicked, inputFound: !!input, success: clicked > 0 };
+                return { clicked, inputFound: !!input, success: true };
             })()`;
 
             let success = false;

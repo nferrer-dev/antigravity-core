@@ -41,7 +41,7 @@ const http = require('http');
                     });
                 });
                 req.on('error', reject);
-                req.write('{}');
+                req.write('{"filename":"real_image.png"}');
                 req.end();
             });
             
