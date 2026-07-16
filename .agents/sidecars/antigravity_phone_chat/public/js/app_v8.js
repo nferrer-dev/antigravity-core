@@ -85,6 +85,8 @@ function renderStagedAttachments() {
         });
         container.appendChild(chip);
     });
+    
+    updateInputButtons();
 }
 
 // --- Virtual Keyboard API ---
@@ -246,8 +248,8 @@ let generationPlaceholderInterval = null;
 function updateInputButtons() {
     const wrapper = document.querySelector('.input-wrapper');
     
-    // Always evaluate Send Button visibility based on input value
-    if (messageInput.value.trim().length > 0) {
+    // Always evaluate Send Button visibility based on input value or attachments
+    if (messageInput.value.trim().length > 0 || (window.stagedAttachments && window.stagedAttachments.length > 0)) {
         sendBtn.classList.add('visible');
     } else {
         sendBtn.classList.remove('visible');
