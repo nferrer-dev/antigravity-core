@@ -1983,32 +1983,53 @@ const wss = new WebSocketServer({ server });
             const { filename } = req.body;
             if (!filename) return res.status(400).json({ error: 'Filename is required' });
 
-            const REMOVE_SCRIPT = `(async () => {
-                const chips = Array.from(document.querySelectorAll('div, span')).filter(el => el.textContent && el.textContent.includes('${filename}'));
-                let targetButton = null;
-                for (const chip of chips) {
-                    const btn = chip.querySelector('button[aria-label="Remove file"]') || chip.parentElement?.querySelector('button[aria-label="Remove file"]');
-                    if (btn) {
-                        targetButton = btn;
+            const EXPRESSION = `(() => {
+                let clicked = 0;
+                
+                // Find all potential remove buttons
+                const btns = document.querySelectorAll('.group.relative.inline-flex button');
+                
+                // Filter buttons to only click the one associated with our filename
+                for (const btn of btns) {
+                    const container = btn.closest('.group') || btn.parentElement?.parentElement;
+                    if (container && container.textContent && container.textContent.includes('${filename}')) {
+                        btn.click();
+                        clicked++;
                         break;
                     }
                 }
-                if (targetButton) {
-                    targetButton.click();
-                    return { success: true };
+                
+                // Fallback to original chip approach if the new selector didn't match
+                if (clicked === 0) {
+                    const chips = Array.from(document.querySelectorAll('div, span')).filter(el => el.textContent && el.textContent.includes('${filename}'));
+                    for (const chip of chips) {
+                        const btn = chip.querySelector('button[aria-label="Remove file"]') || chip.parentElement?.querySelector('button[aria-label="Remove file"]');
+                        if (btn) {
+                            btn.click();
+                            clicked++;
+                            break;
+                        }
+                    }
                 }
-                return { error: 'Remove button not found' };
+                
+                const input = document.querySelector('input[type="file"]');
+                if (input) {
+                    input.value = "";
+                    input.dispatchEvent(new Event("change", { bubbles: true }));
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                }
+                return { clicked, inputFound: !!input, success: clicked > 0 };
             })()`;
 
             let success = false;
             for (const ctx of cdpConnection.contexts) {
                 try {
                     const result = await cdpConnection.call('Runtime.evaluate', {
-                        expression: REMOVE_SCRIPT,
-                        returnByValue: true,
-                        awaitPromise: true,
+                        expression: EXPRESSION,
+                        returnByValue: true
                     });
-                    if (result.result && result.result.value && result.result.value.success) {
+                    if (result && result.result && result.result.value && result.result.value.success) {
+                        console.log('[Remove Attachment] UI Cleanup result:', result.result.value);
                         success = true;
                         break;
                     }
