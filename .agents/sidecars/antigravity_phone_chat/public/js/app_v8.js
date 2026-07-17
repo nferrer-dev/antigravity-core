@@ -671,7 +671,7 @@ async function loadSnapshot() {
             '}';
         styleTag.textContent = darkModeOverrides;
         
-        if (!updateDOMPreservingScroll(chatContent, data.html)) {
+        if (!updateDOMPreservingScroll(chatContent, data.html, isNearBottom, isUserScrollLocked)) {
             chatContent.innerHTML = data.html;
         }
 
@@ -1103,7 +1103,7 @@ if (supportOverlay) {
 
 // --- DOM Morphing for Scroll Jitter Fix ---
 // Replaces DOM without destroying the scroll container, preserving native touch momentum!
-function updateDOMPreservingScroll(container, newHTML) {
+function updateDOMPreservingScroll(container, newHTML, isNearBottom, isUserScrollLocked) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(newHTML, 'text/html');
     
