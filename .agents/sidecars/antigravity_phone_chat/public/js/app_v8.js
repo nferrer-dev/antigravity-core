@@ -1175,14 +1175,23 @@ function updateDOMPreservingScroll(container, newHTML, isNearBottom, isUserScrol
     // Synchronously adjust scroll immediately to prevent a 1-frame jitter
     const activeScrollSync = getScrollContainer();
     if (activeScrollSync) {
-        const newScrollPosSync = activeScrollSync.scrollHeight - activeScrollSync.clientHeight - distanceFromBottom;
         isProgrammaticScroll = true;
         if (isUserScrollLocked) {
-            activeScrollSync.scrollTop = Math.max(0, newScrollPosSync);
+            // If the user is at the absolute top, they are likely loading older history.
+            // In this case, new content is injected at the top, so we must preserve distanceFromBottom
+            // to prevent the view from jumping to the very top.
+            // Otherwise, new content is streaming at the bottom, so we preserve absolute scrollPos.
+            if (window.isAtAbsoluteTop) {
+                const newScrollPosSync = activeScrollSync.scrollHeight - activeScrollSync.clientHeight - distanceFromBottom;
+                activeScrollSync.scrollTop = Math.max(0, newScrollPosSync);
+            } else {
+                activeScrollSync.scrollTop = scrollPos;
+            }
         } else if (isNearBottom) {
+            // Pin to bottom if user is already at the bottom
             activeScrollSync.scrollTop = activeScrollSync.scrollHeight;
         } else {
-            activeScrollSync.scrollTop = Math.max(0, newScrollPosSync);
+            activeScrollSync.scrollTop = scrollPos;
         }
     }
     
@@ -1192,22 +1201,27 @@ function updateDOMPreservingScroll(container, newHTML, isNearBottom, isUserScrol
         const activeScroll = getScrollContainer(); // Get the NEW scroll container in case morph replaced it
         if (!activeScroll) return;
         
-        const newScrollPos = activeScroll.scrollHeight - activeScroll.clientHeight - distanceFromBottom;
-        
-        // Lock the anchor for 1 second to handle CSS transitions and image loads that expand height
-        anchorDistanceFromBottom = distanceFromBottom;
-        clearTimeout(anchorScrollTimeout);
-        anchorScrollTimeout = setTimeout(() => {
-            anchorDistanceFromBottom = null;
-        }, 1000);
-        
         isProgrammaticScroll = true;
         if (isUserScrollLocked) {
-            activeScroll.scrollTop = Math.max(0, newScrollPos);
+            if (window.isAtAbsoluteTop) {
+                const newScrollPos = activeScroll.scrollHeight - activeScroll.clientHeight - distanceFromBottom;
+                activeScroll.scrollTop = Math.max(0, newScrollPos);
+            } else {
+                // Keep absolute scroll position to prevent jumping
+                activeScroll.scrollTop = scrollPos;
+            }
         } else if (isNearBottom) {
+            // Pin to bottom
             activeScroll.scrollTop = activeScroll.scrollHeight;
+            
+            // Lock the anchor for 1 second to handle CSS transitions and image loads that expand height
+            anchorDistanceFromBottom = distanceFromBottom;
+            clearTimeout(anchorScrollTimeout);
+            anchorScrollTimeout = setTimeout(() => {
+                anchorDistanceFromBottom = null;
+            }, 1000);
         } else {
-            activeScroll.scrollTop = Math.max(0, newScrollPos);
+            activeScroll.scrollTop = scrollPos;
         }
 
         // Hide infinite scroll loader if we just loaded older messages

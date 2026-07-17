@@ -2482,12 +2482,21 @@ async function main() {
                     }
 
                     if (confirmBtn) {
-                        confirmBtn.click();
-                        return true;
+                        if (confirmBtn.scrollIntoView) {
+                            confirmBtn.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+                        }
+                        const rect = confirmBtn.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
+                            return {
+                                x: Math.round(rect.left + (rect.width / 2)),
+                                y: Math.round(rect.top + (rect.height / 2))
+                            };
+                        }
                     }
-                    return false;
+                    return null;
                 })()`;
                 
+                let confirmCoords = null;
                 for (const ctx of cdpConnection.contexts) {
                     try {
                         const confirmRes = await cdpConnection.call("Runtime.evaluate", {
@@ -2495,11 +2504,34 @@ async function main() {
                             returnByValue: true,
                             awaitPromise: true,
                         });
-                        if (confirmRes.result?.value) {
-                            result.autoConfirmed = true;
+                        if (confirmRes.result?.value && confirmRes.result.value.x) {
+                            confirmCoords = confirmRes.result.value;
                             break;
                         }
                     } catch (e) { }
+                }
+
+                if (confirmCoords) {
+                    try {
+                        await cdpConnection.call('Input.dispatchMouseEvent', {
+                            type: 'mousePressed',
+                            button: 'left',
+                            x: confirmCoords.x,
+                            y: confirmCoords.y,
+                            clickCount: 1
+                        });
+                        await new Promise(r => setTimeout(r, 50));
+                        await cdpConnection.call('Input.dispatchMouseEvent', {
+                            type: 'mouseReleased',
+                            button: 'left',
+                            x: confirmCoords.x,
+                            y: confirmCoords.y,
+                            clickCount: 1
+                        });
+                        result.autoConfirmed = true;
+                    } catch (e) {
+                        console.error('Failed to dispatch auto-confirm mouse event:', e);
+                    }
                 }
             }
             
