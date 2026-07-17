@@ -2457,7 +2457,7 @@ async function main() {
             if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
             const result = await clickElement(cdpConnection, { id, selector, index, textContent });
             
-            if (autoConfirmText && result.success) {
+            if (autoConfirmText) {
                 // Wait for desktop modal/dialog to appear
                 await new Promise(r => setTimeout(r, 600));
                 
@@ -2468,8 +2468,19 @@ async function main() {
                     const modalButtons = buttons.filter(b => b.closest('[role="dialog"], [data-state="open"], .radix-dialog-content, .modal, dialog'));
                     const targetBtns = modalButtons.length > 0 ? modalButtons : buttons;
                     
-                    const confirmTextLower = "${autoConfirmText}".toLowerCase();
-                    const confirmBtn = targetBtns.find(b => (b.innerText || '').toLowerCase().includes(confirmTextLower));
+                    const confirmWords = ['revert', 'confirm', 'yes', 'undo', 'continue'];
+                    let confirmBtn = targetBtns.find(b => {
+                        const txt = (b.innerText || '').toLowerCase();
+                        return confirmWords.some(w => txt.includes(w));
+                    });
+                    
+                    if (!confirmBtn) {
+                        confirmBtn = targetBtns.find(b => {
+                            const txt = (b.innerText || '').toLowerCase();
+                            return txt && !txt.includes('cancel') && !txt.includes('no');
+                        });
+                    }
+
                     if (confirmBtn) {
                         confirmBtn.click();
                         return true;

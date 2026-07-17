@@ -1970,7 +1970,7 @@ chatContainer.addEventListener('click', async (e) => {
     // or just pass the exact element tapped, so the desktop can trigger it regardless of HTML tag.
     if (e.target.closest('.mobile-copy-btn')) return;
 
-    let interactiveEl = e.target.closest('button, a, [role="button"]');
+    let interactiveEl = e.target.closest('button, a, input, select, textarea, [role="button"], [data-testid]');
     
     if (!interactiveEl) {
         let curr = e.target;
@@ -2042,8 +2042,11 @@ chatContainer.addEventListener('click', async (e) => {
 
         // Generate robust fallback selector
         let fallbackSelector = elToClick.tagName.toLowerCase();
+        const testId = elToClick.getAttribute('data-testid');
         const ariaLabel = elToClick.getAttribute('aria-label');
-        if (ariaLabel) {
+        if (testId) {
+            fallbackSelector += `[data-testid="${testId}"]`;
+        } else if (ariaLabel) {
             fallbackSelector += `[aria-label="${ariaLabel}"]`;
         } else if (elToClick.className && typeof elToClick.className === 'string') {
             const cls = elToClick.className.trim().split(/\s+/)[0];
