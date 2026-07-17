@@ -2055,7 +2055,10 @@ chatContainer.addEventListener('click', async (e) => {
         if (textContent.length > 50) textContent = textContent.substring(0, 50);
 
         // Check if this is a Revert button
-        const isRevertBtn = (ariaLabel || '').toLowerCase().includes('revert') || textContent.toLowerCase().includes('revert');
+        const isRevertBtn = (ariaLabel || '').toLowerCase().includes('revert') || 
+                            (ariaLabel || '').toLowerCase().includes('undo changes') || 
+                            textContent.toLowerCase().includes('revert') || 
+                            elToClick.getAttribute('data-testid') === 'revert-button';
         let autoConfirmText = null;
         if (isRevertBtn) {
             if (!window.confirm('Are you sure you want to revert to this step?')) {
