@@ -2453,9 +2453,45 @@ async function main() {
 
         // Remote Click
         app.post('/remote-click', async (req, res) => {
-            const { id, selector, index, textContent } = req.body;
+            const { id, selector, index, textContent, autoConfirmText } = req.body;
             if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
             const result = await clickElement(cdpConnection, { id, selector, index, textContent });
+            
+            if (autoConfirmText && result.success) {
+                // Wait for desktop modal/dialog to appear
+                await new Promise(r => setTimeout(r, 600));
+                
+                const EXP = `(() => {
+                    // Find all buttons in the document
+                    const buttons = Array.from(document.querySelectorAll('button'));
+                    // Look for one in a dialog, modal, or popover
+                    const modalButtons = buttons.filter(b => b.closest('[role="dialog"], [data-state="open"], .radix-dialog-content, .modal, dialog'));
+                    const targetBtns = modalButtons.length > 0 ? modalButtons : buttons;
+                    
+                    const confirmTextLower = "${autoConfirmText}".toLowerCase();
+                    const confirmBtn = targetBtns.find(b => (b.innerText || '').toLowerCase().includes(confirmTextLower));
+                    if (confirmBtn) {
+                        confirmBtn.click();
+                        return true;
+                    }
+                    return false;
+                })()`;
+                
+                for (const ctx of cdpConnection.contexts) {
+                    try {
+                        const confirmRes = await cdpConnection.call("Runtime.evaluate", {
+                            expression: EXP,
+                            returnByValue: true,
+                            awaitPromise: true,
+                        });
+                        if (confirmRes.result?.value) {
+                            result.autoConfirmed = true;
+                            break;
+                        }
+                    } catch (e) { }
+                }
+            }
+            
             res.json(result);
         });
 

@@ -2054,6 +2054,16 @@ chatContainer.addEventListener('click', async (e) => {
         let textContent = (elToClick.innerText || elToClick.textContent || '').trim();
         if (textContent.length > 50) textContent = textContent.substring(0, 50);
 
+        // Check if this is a Revert button
+        const isRevertBtn = (ariaLabel || '').toLowerCase().includes('revert') || textContent.toLowerCase().includes('revert');
+        let autoConfirmText = null;
+        if (isRevertBtn) {
+            if (!window.confirm('Are you sure you want to revert to this step?')) {
+                return; // User cancelled
+            }
+            autoConfirmText = 'Revert'; // Tell backend to auto-click the confirm button in the desktop modal
+        }
+
         // Calculate index
         let elements = [];
         try {
@@ -2071,7 +2081,8 @@ chatContainer.addEventListener('click', async (e) => {
                         id: agId || '',
                         selector: fallbackSelector,
                         index: index,
-                        textContent: textContent
+                        textContent: textContent,
+                        autoConfirmText: autoConfirmText
                     })
                 });
                 
