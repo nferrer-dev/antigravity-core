@@ -2466,36 +2466,34 @@ async function main() {
             const result = await clickElement(cdpConnection, { id, selector, index, textContent });
             
             if (autoConfirmText) {
-                // Wait for desktop modal/dialog to appear
-                await new Promise(r => setTimeout(r, 600));
+                console.log(`[autoConfirm] Waiting for modal...`);
                 
-                // Just dispatch an Enter key after a short delay, because the modal traps focus 
-                // and the Confirm button is the default focused element.
-                console.log(`[autoConfirm] Attempting to auto-confirm using Enter key...`);
-                
-                // First check if a modal actually opened to prevent accidental Enter keys on the main page
-                const modalCheckExp = `(() => {
-                    const modals = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"], dialog, .radix-dialog-content');
-                    return modals.length > 0;
-                })()`;
+                const modalCheckExp = `new Promise((resolve) => {
+                    const check = () => {
+                        const modals = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"], dialog, .radix-dialog-content');
+                        if (modals.length > 0) resolve(true);
+                        else requestAnimationFrame(check);
+                    };
+                    check();
+                    setTimeout(() => resolve(false), 600);
+                })`;
                 
                 let isModalOpen = false;
-                for (const ctx of cdpConnection.contexts) {
-                    try {
-                        const checkRes = await cdpConnection.call("Runtime.evaluate", {
-                            expression: modalCheckExp,
-                            returnByValue: true
-                        });
-                        if (checkRes.result?.value) {
-                            isModalOpen = true;
-                            break;
-                        }
-                    } catch (e) {}
-                }
+                try {
+                    const checkRes = await cdpConnection.call("Runtime.evaluate", {
+                        expression: modalCheckExp,
+                        returnByValue: true,
+                        awaitPromise: true
+                    });
+                    if (checkRes.result?.value) {
+                        isModalOpen = true;
+                    }
+                } catch (e) {}
 
                 if (isModalOpen || autoConfirmText === 'Revert') {
-                    // We also fallback to always dispatching Enter if it's explicitly 'Revert',
-                    // because we know Revert ALWAYS opens a modal in this app.
+                    // Small delay to ensure the modal is fully rendered and focus is trapped
+                    await new Promise(r => setTimeout(r, 50));
+                    
                     try {
                         console.log(`[autoConfirm] Dispatching Enter key`);
                         await cdpConnection.call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
@@ -2507,8 +2505,6 @@ async function main() {
                 } else {
                     console.log(`[autoConfirm] No modal detected, skipping Enter key`);
                 }
-
-
             }
             
             res.json(result);
