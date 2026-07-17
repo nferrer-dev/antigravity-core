@@ -31,6 +31,9 @@ const closeSupportBtn = document.getElementById('closeSupportBtn');
 const backHistoryBtn = document.querySelector('.history-header .icon-btn');
 const quickActionChips = document.querySelectorAll('.action-chip');
 
+const SVG_SEND_STANDARD = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path></svg>`;
+const SVG_SEND_QUEUE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg>`;
+
 // --- State ---
 let autoRefreshEnabled = true;
 let userIsScrolling = false;
@@ -64,6 +67,9 @@ function renderStagedAttachments() {
                 <polyline points="14 2 14 8 20 8"></polyline>
             </svg>
             ${filename}
+            <button class="edit-btn" aria-label="Edit file" style="margin-left: auto; margin-right: 5px; background: none; border: none; color: #a1a1aa; cursor: pointer;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
+            </button>
             <button class="remove-btn" aria-label="Remove file">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -261,8 +267,12 @@ let generationPlaceholderInterval = null;
 function updateInputButtons() {
     const wrapper = document.querySelector('.input-wrapper');
     
-    // Always evaluate Send Button visibility based on input value or attachments
-    if (messageInput.value.trim().length > 0 || (window.stagedAttachments && window.stagedAttachments.length > 0)) {
+    const hasInput = messageInput.value.trim().length > 0 || (window.stagedAttachments && window.stagedAttachments.length > 0);
+    if (isGenerating && hasInput) {
+        sendBtn.innerHTML = SVG_SEND_QUEUE;
+        sendBtn.classList.add('visible');
+    } else if (hasInput) {
+        sendBtn.innerHTML = SVG_SEND_STANDARD;
         sendBtn.classList.add('visible');
     } else {
         sendBtn.classList.remove('visible');
