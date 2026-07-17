@@ -1172,6 +1172,20 @@ function updateDOMPreservingScroll(container, newHTML, isNearBottom, isUserScrol
     
     const distanceFromBottom = scrollHeight - scrollPos - clientHeight;
     
+    // Synchronously adjust scroll immediately to prevent a 1-frame jitter
+    const activeScrollSync = getScrollContainer();
+    if (activeScrollSync) {
+        const newScrollPosSync = activeScrollSync.scrollHeight - activeScrollSync.clientHeight - distanceFromBottom;
+        isProgrammaticScroll = true;
+        if (isUserScrollLocked) {
+            activeScrollSync.scrollTop = Math.max(0, newScrollPosSync);
+        } else if (isNearBottom) {
+            activeScrollSync.scrollTop = activeScrollSync.scrollHeight;
+        } else {
+            activeScrollSync.scrollTop = Math.max(0, newScrollPosSync);
+        }
+    }
+    
     // Wait for the browser to recalculate layout after DOM insertion
     // so that currentScroll.scrollHeight reflects the newly loaded messages
     requestAnimationFrame(() => {
