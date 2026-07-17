@@ -42,6 +42,7 @@ let idleTimer = null;
 let lastHash = '';
 let currentMode = 'Fast';
 let chatIsOpen = true; // Track if a chat is currently open
+let currentRunningTasksList = [];
 
 window.stagedAttachments = [];
 function renderStagedAttachments() {
@@ -151,8 +152,10 @@ async function fetchAppState() {
         if (data.runningTasksText) {
             taskIndicatorText.textContent = data.runningTasksText;
             taskIndicator.classList.remove('hidden');
+            currentRunningTasksList = data.runningTasksList || [];
         } else {
             taskIndicator.classList.add('hidden');
+            currentRunningTasksList = [];
         }
 
         console.log('[SYNC] State refreshed from Desktop:', data);
@@ -2208,6 +2211,18 @@ chatContent.addEventListener('click', (e) => {
         startNewChat();
     }
 });
+
+// Add click handler for task indicator
+const taskIndicator = document.getElementById('taskIndicator');
+if (taskIndicator) {
+    taskIndicator.addEventListener('click', () => {
+        if (currentRunningTasksList && currentRunningTasksList.length > 0) {
+            openModal('Running Tasks', currentRunningTasksList, () => {
+                // Do nothing when a task is clicked, just view them.
+            });
+        }
+    });
+}
 
 // --- Init ---
 updateInputButtons();

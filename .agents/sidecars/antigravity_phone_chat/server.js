@@ -1564,11 +1564,25 @@ async function getAppState(cdp) {
             return taskRegex.test(el.innerText.trim());
         });
         
+        let runningTasksList = [];
         if (taskEl) {
             state.runningTasksText = taskEl.innerText.trim();
+            try {
+                // Find the nearest common container for the tasks list. Usually it's a sibling of the button containing this text.
+                // The structure is typically: <button>1 task running</button> <div> ... <span>task name</span> ... </div>
+                const btn = taskEl.closest('button');
+                if (btn && btn.nextElementSibling) {
+                    const taskItems = btn.nextElementSibling.querySelectorAll('span.font-mono');
+                    taskItems.forEach(item => {
+                        const t = item.innerText.trim();
+                        if (t) runningTasksList.push(t);
+                    });
+                }
+            } catch(e) {}
         } else {
             state.runningTasksText = null;
         }
+        state.runningTasksList = runningTasksList;
 
         return state;
     } catch (e) { return { error: e.toString() }; }
