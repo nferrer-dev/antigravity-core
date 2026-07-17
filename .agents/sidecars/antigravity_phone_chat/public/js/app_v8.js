@@ -145,6 +145,16 @@ async function fetchAppState() {
             modelText.textContent = data.model;
         }
 
+        // Running Tasks Sync
+        const taskIndicator = document.getElementById('taskIndicator');
+        const taskIndicatorText = document.getElementById('taskIndicatorText');
+        if (data.runningTasksText) {
+            taskIndicatorText.textContent = data.runningTasksText;
+            taskIndicator.classList.remove('hidden');
+        } else {
+            taskIndicator.classList.add('hidden');
+        }
+
         console.log('[SYNC] State refreshed from Desktop:', data);
     } catch (e) { console.error('[SYNC] Failed to sync state', e); }
 }
@@ -2202,9 +2212,9 @@ chatContent.addEventListener('click', (e) => {
 // --- Init ---
 updateInputButtons();
 connectWebSocket();
-// Sync state initially and every 5 seconds to keep phone in sync with desktop changes
+// Sync state initially and every 2 seconds to keep phone in sync with desktop changes
 fetchAppState();
-setInterval(fetchAppState, 5000);
+setInterval(fetchAppState, 2000);
 
 // Check chat status initially and periodically
 checkChatStatus();

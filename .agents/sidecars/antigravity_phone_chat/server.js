@@ -1557,6 +1557,19 @@ async function getAppState(cdp) {
             state.model = modelEl.innerText.trim();
         }
 
+        // 3. Get Running Tasks
+        // Strategy: Look for an element containing text like "1 task running" or "N tasks running"
+        const taskRegex = /^\\d+ tasks? running$/i;
+        const taskEl = textNodes2.find(el => {
+            return taskRegex.test(el.innerText.trim());
+        });
+        
+        if (taskEl) {
+            state.runningTasksText = taskEl.innerText.trim();
+        } else {
+            state.runningTasksText = null;
+        }
+
         return state;
     } catch (e) { return { error: e.toString() }; }
 })()`;
