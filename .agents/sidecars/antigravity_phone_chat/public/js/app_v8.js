@@ -1030,7 +1030,7 @@ function scrollToBottom() {
 }
 
 // --- Inputs ---
-async function sendMessage() {
+async function sendMessage(lockedElement = null) {
     const message = messageInput.value.trim();
     if (!message && window.stagedAttachments.length === 0) return;
 
@@ -1068,6 +1068,24 @@ async function sendMessage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message, attachments: attachmentsToProcess })
         });
+        
+        const data = await res.json();
+        
+        if (data.success === false) {
+            // Revert optimistic UI
+            isGenerating = false;
+            optimisticGeneratingUntil = 0;
+            updateInputButtons();
+            if (lockedElement) {
+                lockedElement.style.opacity = '1';
+                lockedElement.classList.remove('modal-submit-lock');
+            }
+            alert('Failed to submit option to desktop UI: ' + (data.error || 'Unknown error'));
+        } else {
+            if (lockedElement) {
+                lockedElement.classList.add('modal-submit-success');
+            }
+        }
 
         // Always reload snapshot to check if message appeared
         setTimeout(loadSnapshot, 300);
@@ -1077,11 +1095,15 @@ async function sendMessage() {
         // Don't revert the input - if user sees the message in chat, it was sent
         // Only log errors for debugging, don't show alert popups
         if (!res.ok) {
-            console.warn('Send response not ok, but message may have been sent:', await res.json().catch(() => ({})));
+            console.warn('Send response not ok, but message may have been sent:', data);
         }
     } catch (e) {
         // Network error - still try to refresh in case it went through
         console.error('Send error:', e);
+        if (lockedElement) {
+            lockedElement.style.opacity = '1';
+            lockedElement.classList.remove('modal-submit-lock');
+        }
         setTimeout(loadSnapshot, 500);
     } finally {
         sendBtn.disabled = false;
@@ -1090,7 +1112,8 @@ async function sendMessage() {
 }
 
 // --- Event Listeners ---
-sendBtn.addEventListener('click', sendMessage);
+sendBtn.addEventListener('click', () => sendMessage());
+
 
 
 messageInput.addEventListener('input', function () {
@@ -1952,11 +1975,11 @@ chatContainer.addEventListener('click', async (e) => {
             
             // Provide visual feedback
             listElement.style.opacity = '0.5';
-            setTimeout(() => listElement.style.opacity = '1', 300);
+            listElement.classList.add('modal-submit-lock');
             
             // Set input and send
             messageInput.value = optionNumber;
-            sendMessage();
+            sendMessage(listElement);
             return;
         }
     }

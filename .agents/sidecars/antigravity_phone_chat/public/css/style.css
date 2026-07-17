@@ -1214,3 +1214,15 @@ textarea::-webkit-resizer {
     width: 14px;
     height: 14px;
 }
+
+.modal-submit-lock {
+    opacity: 0.5 !important;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+
+.modal-submit-success {
+    opacity: 1 !important;
+    background-color: rgba(34, 197, 94, 0.2);
+    transition: background-color 0.5s;
+}
