@@ -2217,8 +2217,18 @@ const taskIndicator = document.getElementById('taskIndicator');
 if (taskIndicator) {
     taskIndicator.addEventListener('click', () => {
         if (currentRunningTasksList && currentRunningTasksList.length > 0) {
-            openModal('Running Tasks', currentRunningTasksList, () => {
-                // Do nothing when a task is clicked, just view them.
+            const options = currentRunningTasksList.map(task => `Kill: ${task}`);
+            openModal('Running Tasks', options, async (selectedOption) => {
+                const taskName = selectedOption.replace('Kill: ', '');
+                try {
+                    await fetchWithAuth('/kill-task', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ taskName })
+                    });
+                } catch (e) {
+                    console.error('Failed to kill task:', e);
+                }
             });
         }
     });

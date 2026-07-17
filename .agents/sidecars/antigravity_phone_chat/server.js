@@ -2537,6 +2537,45 @@ async function main() {
             res.json(result);
         });
 
+        // Kill Task
+        app.post('/kill-task', async (req, res) => {
+            const { taskName } = req.body;
+            if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
+            
+            const KILL_EXP = `(async () => {
+                const spans = Array.from(document.querySelectorAll('span.font-mono'));
+                const span = spans.find(el => el.innerText.trim() === ${JSON.stringify(taskName)});
+                if (!span) return { success: false, error: 'Task not found' };
+                
+                const container = span.closest('.group');
+                if (!container) return { success: false, error: 'Task container not found' };
+                
+                const stopBtn = container.querySelector('button[data-tooltip-id^="stop-task"]');
+                if (!stopBtn) return { success: false, error: 'Stop button not found' };
+                
+                stopBtn.click();
+                return { success: true };
+            })()`;
+            
+            try {
+                let success = false;
+                for (const ctx of cdpConnection.contexts) {
+                    const resCDP = await cdpConnection.call("Runtime.evaluate", {
+                        expression: KILL_EXP,
+                        returnByValue: true,
+                        awaitPromise: true
+                    });
+                    if (resCDP.result?.value?.success) {
+                        success = true;
+                        break;
+                    }
+                }
+                res.json({ success });
+            } catch (e) {
+                res.json({ success: false, error: e.toString() });
+            }
+        });
+
         // Remote Scroll - sync phone scroll to desktop
         app.post('/remote-scroll', async (req, res) => {
             const { scrollTop, scrollPercent } = req.body;
