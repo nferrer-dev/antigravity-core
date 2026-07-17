@@ -929,6 +929,14 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
             const centerX = Math.round(x);
             const centerY = Math.round(y);
             
+            // Trigger hover state first
+            await cdp.call('Input.dispatchMouseEvent', {
+                type: 'mouseMoved',
+                x: centerX,
+                y: centerY
+            });
+            await new Promise(r => setTimeout(r, 100));
+
             // Perform true hardware click via CDP (isTrusted=true)
             await cdp.call('Input.dispatchMouseEvent', {
                 type: 'mousePressed',
@@ -2461,78 +2469,46 @@ async function main() {
                 // Wait for desktop modal/dialog to appear
                 await new Promise(r => setTimeout(r, 600));
                 
-                const EXP = `(() => {
-                    // Find all buttons in the document
-                    const buttons = Array.from(document.querySelectorAll('button'));
-                    // Look for one in a dialog, modal, or popover
-                    const modalButtons = buttons.filter(b => b.closest('[role="dialog"], [data-state="open"], .radix-dialog-content, .modal, dialog'));
-                    const targetBtns = modalButtons.length > 0 ? modalButtons : buttons;
-                    
-                    const confirmWords = ['revert', 'confirm', 'yes', 'undo', 'continue'];
-                    let confirmBtn = targetBtns.find(b => {
-                        const txt = (b.innerText || '').toLowerCase();
-                        return confirmWords.some(w => txt.includes(w));
-                    });
-                    
-                    if (!confirmBtn) {
-                        confirmBtn = targetBtns.find(b => {
-                            const txt = (b.innerText || '').toLowerCase();
-                            return txt && !txt.includes('cancel') && !txt.includes('no');
-                        });
-                    }
-
-                    if (confirmBtn) {
-                        if (confirmBtn.scrollIntoView) {
-                            confirmBtn.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
-                        }
-                        const rect = confirmBtn.getBoundingClientRect();
-                        if (rect.width > 0 && rect.height > 0) {
-                            return {
-                                x: Math.round(rect.left + (rect.width / 2)),
-                                y: Math.round(rect.top + (rect.height / 2))
-                            };
-                        }
-                    }
-                    return null;
+                // Just dispatch an Enter key after a short delay, because the modal traps focus 
+                // and the Confirm button is the default focused element.
+                console.log(`[autoConfirm] Attempting to auto-confirm using Enter key...`);
+                
+                // First check if a modal actually opened to prevent accidental Enter keys on the main page
+                const modalCheckExp = `(() => {
+                    const modals = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"], dialog, .radix-dialog-content');
+                    return modals.length > 0;
                 })()`;
                 
-                let confirmCoords = null;
+                let isModalOpen = false;
                 for (const ctx of cdpConnection.contexts) {
                     try {
-                        const confirmRes = await cdpConnection.call("Runtime.evaluate", {
-                            expression: EXP,
-                            returnByValue: true,
-                            awaitPromise: true,
+                        const checkRes = await cdpConnection.call("Runtime.evaluate", {
+                            expression: modalCheckExp,
+                            returnByValue: true
                         });
-                        if (confirmRes.result?.value && confirmRes.result.value.x) {
-                            confirmCoords = confirmRes.result.value;
+                        if (checkRes.result?.value) {
+                            isModalOpen = true;
                             break;
                         }
-                    } catch (e) { }
+                    } catch (e) {}
                 }
 
-                if (confirmCoords) {
+                if (isModalOpen || autoConfirmText === 'Revert') {
+                    // We also fallback to always dispatching Enter if it's explicitly 'Revert',
+                    // because we know Revert ALWAYS opens a modal in this app.
                     try {
-                        await cdpConnection.call('Input.dispatchMouseEvent', {
-                            type: 'mousePressed',
-                            button: 'left',
-                            x: confirmCoords.x,
-                            y: confirmCoords.y,
-                            clickCount: 1
-                        });
-                        await new Promise(r => setTimeout(r, 50));
-                        await cdpConnection.call('Input.dispatchMouseEvent', {
-                            type: 'mouseReleased',
-                            button: 'left',
-                            x: confirmCoords.x,
-                            y: confirmCoords.y,
-                            clickCount: 1
-                        });
+                        console.log(`[autoConfirm] Dispatching Enter key`);
+                        await cdpConnection.call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
+                        await cdpConnection.call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
                         result.autoConfirmed = true;
                     } catch (e) {
-                        console.error('Failed to dispatch auto-confirm mouse event:', e);
+                        console.error(`[autoConfirm] Failed to dispatch Enter:`, e);
                     }
+                } else {
+                    console.log(`[autoConfirm] No modal detected, skipping Enter key`);
                 }
+
+
             }
             
             res.json(result);
