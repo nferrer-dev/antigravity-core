@@ -707,7 +707,7 @@ async function loadSnapshot() {
             const messages = Array.from(document.querySelectorAll('.message li, .message p, .message div'));
             for (let i = messages.length - 1; i >= 0; i--) {
                 const el = messages[i];
-                const text = (el.innerText || '').trim();
+                const text = (el.textContent || el.innerText || '').trim();
                 const match = text.match(/^\[?(\d+)\]?[.:\)]?\s+(.+)/);
                 if (match && match[1] === lockedOptionNumber) {
                     el.classList.add('modal-submit-lock');
@@ -1985,7 +1985,7 @@ chatContainer.addEventListener('click', async (e) => {
     // If the user taps on a numbered list item or line, auto-send the number
     const listElement = e.target.closest('li, p, div');
     if (listElement && listElement.closest('.message')) {
-        const elText = (listElement.innerText || '').trim();
+        const elText = (listElement.textContent || listElement.innerText || '').trim();
         // Match standard option formats: "1. Option", "1) Option", "[1] Option"
         const optionMatch = elText.match(/^\[?(\d+)\]?[.:\)]?\s+(.+)/);
         
