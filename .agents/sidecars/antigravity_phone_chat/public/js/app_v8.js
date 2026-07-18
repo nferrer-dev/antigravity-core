@@ -704,8 +704,9 @@ async function loadSnapshot() {
 
         // Re-apply modal-submit-lock if a question option was clicked
         if (lockedOptionNumber) {
-            const messages = document.querySelectorAll('.message li, .message p, .message div');
-            for (const el of messages) {
+            const messages = Array.from(document.querySelectorAll('.message li, .message p, .message div'));
+            for (let i = messages.length - 1; i >= 0; i--) {
+                const el = messages[i];
                 const text = (el.innerText || '').trim();
                 const match = text.match(/^\[?(\d+)\]?[.:\)]?\s+(.+)/);
                 if (match && match[1] === lockedOptionNumber) {
