@@ -262,6 +262,7 @@ function connectWebSocket() {
 
 let isGenerating = false;
 let optimisticGeneratingUntil = 0;
+let lockedOptionNumber = null;
 let generationPlaceholderInterval = null;
 
 function updateInputButtons() {
@@ -382,6 +383,9 @@ async function loadSnapshot() {
             isGenerating = true;
         } else {
             isGenerating = data.isGenerating;
+            if (!isGenerating) {
+                lockedOptionNumber = null;
+            }
         }
         updateInputButtons();
 
@@ -696,6 +700,19 @@ async function loadSnapshot() {
         
         if (!updateDOMPreservingScroll(chatContent, data.html, isNearBottom, isUserScrollLocked)) {
             chatContent.innerHTML = data.html;
+        }
+
+        // Re-apply modal-submit-lock if a question option was clicked
+        if (lockedOptionNumber) {
+            const messages = document.querySelectorAll('.message li, .message p, .message div');
+            for (const el of messages) {
+                const text = (el.innerText || '').trim();
+                const match = text.match(/^\[?(\d+)\]?[.:\)]?\s+(.+)/);
+                if (match && match[1] === lockedOptionNumber) {
+                    el.classList.add('modal-submit-lock');
+                    break;
+                }
+            }
         }
 
         // Re-apply active thumb visual states based on data-message-id
@@ -1079,6 +1096,7 @@ async function sendMessage(lockedElement = null) {
             if (lockedElement) {
                 lockedElement.style.opacity = '1';
                 lockedElement.classList.remove('modal-submit-lock');
+                lockedOptionNumber = null;
             }
             alert('Failed to submit option to desktop UI: ' + (data.error || 'Unknown error'));
         } else {
@@ -1103,6 +1121,7 @@ async function sendMessage(lockedElement = null) {
         if (lockedElement) {
             lockedElement.style.opacity = '1';
             lockedElement.classList.remove('modal-submit-lock');
+            lockedOptionNumber = null;
         }
         setTimeout(loadSnapshot, 500);
     } finally {
@@ -1976,6 +1995,7 @@ chatContainer.addEventListener('click', async (e) => {
             // Provide visual feedback
             listElement.style.opacity = '0.5';
             listElement.classList.add('modal-submit-lock');
+            lockedOptionNumber = optionNumber;
             
             // Set input and send
             messageInput.value = optionNumber;

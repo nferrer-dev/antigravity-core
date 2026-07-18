@@ -648,7 +648,16 @@ async function injectMessage(cdp, text) {
             const index = parseInt(textToInsert.trim(), 10) - 1;
             const radios = Array.from(document.querySelectorAll('[role="dialog"] input[type="radio"], [aria-modal="true"] input[type="radio"]'));
             if (radios[index]) {
-                radios[index].click();
+                const radio = radios[index];
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+                if (nativeInputValueSetter) {
+                    nativeInputValueSetter.call(radio, true);
+                } else {
+                    radio.checked = true;
+                }
+                radio.dispatchEvent(new Event('input', { bubbles: true }));
+                radio.dispatchEvent(new Event('change', { bubbles: true }));
+                radio.click();
                 radioClicked = true;
             }
         }
