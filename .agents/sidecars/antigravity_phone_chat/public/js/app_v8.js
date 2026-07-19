@@ -1,3 +1,15 @@
+// --- CSS Reset for Web Components ---
+const shadowStyle = document.createElement('style');
+shadowStyle.textContent = `
+    vscode-radio::part(control),
+    vscode-radio::part(checked-indicator),
+    vscode-checkbox::part(control),
+    vscode-checkbox::part(checked-indicator) {
+        transition: none !important;
+    }
+`;
+document.head.appendChild(shadowStyle);
+
 // --- Elements ---
 const chatContainer = document.getElementById('chatContainer');
 const chatContent = document.getElementById('chatContent');
@@ -269,18 +281,26 @@ function updateInputButtons() {
     const wrapper = document.querySelector('.input-wrapper');
     
     const hasInput = messageInput.value.trim().length > 0 || (window.stagedAttachments && window.stagedAttachments.length > 0);
+    
+    // RHS: Toggle between Voice and Send
     if (isGenerating && hasInput) {
         sendBtn.innerHTML = SVG_SEND_QUEUE;
         sendBtn.classList.add('visible');
+        if (voiceBtn) voiceBtn.style.display = 'none';
     } else if (hasInput) {
         sendBtn.innerHTML = SVG_SEND_STANDARD;
         sendBtn.classList.add('visible');
+        if (voiceBtn) voiceBtn.style.display = 'none';
     } else {
         sendBtn.classList.remove('visible');
+        if (voiceBtn) voiceBtn.style.display = 'flex';
     }
 
+    // LHS: Toggle between Attach and Stop
+    const attachWrapper = document.querySelector('.attach-wrapper');
     if (isGenerating) {
         if (wrapper) wrapper.classList.add('generating');
+        if (attachWrapper) attachWrapper.style.display = 'none';
         stopBtn.classList.add('visible');
         
         // Start "Working..." animation
@@ -301,6 +321,8 @@ function updateInputButtons() {
     } else {
         if (wrapper) wrapper.classList.remove('generating');
         stopBtn.classList.remove('visible');
+        const attachWrapper = document.querySelector('.attach-wrapper');
+        if (attachWrapper) attachWrapper.style.display = 'flex';
         
         // Stop animation and reset placeholder
         if (generationPlaceholderInterval) {
@@ -714,6 +736,26 @@ async function loadSnapshot() {
                     break;
                 }
             }
+        }
+
+        // Re-apply local input states (garbage collect expired ones)
+        if (window.localInputStates) {
+            const now = Date.now();
+            Object.keys(window.localInputStates).forEach(stableId => {
+                const state = window.localInputStates[stableId];
+                if (now > state.expiresAt) {
+                    delete window.localInputStates[stableId];
+                } else {
+                    let el = null;
+                    if (stableId.startsWith('ag-stable-')) {
+                        el = document.querySelector('[data-stable-id=' + CSS.escape(stableId) + ']');
+                    }
+                    if (!el) el = document.querySelector('[data-ag-id=' + CSS.escape(stableId) + ']');
+                    if (el) {
+                        el.checked = state.checked;
+                    }
+                }
+            });
         }
 
         // Re-apply active thumb visual states based on data-message-id
@@ -1184,36 +1226,46 @@ function updateDOMPreservingScroll(container, newHTML, isNearBottom, isUserScrol
     const scrollHeight = currentScroll.scrollHeight;
     const clientHeight = currentScroll.clientHeight;
     
-    function morph(oldEl, newEl) {
+    function morph(oldEl, newEl, isRoot = false) {
         if (!oldEl || !newEl) return;
         
-        if (oldEl === currentScroll) {
-            oldEl.innerHTML = newEl.innerHTML;
-            if (newEl.attributes) {
-                for (let i = 0; i < newEl.attributes.length; i++) {
-                    const attr = newEl.attributes[i];
-                    if (oldEl.getAttribute(attr.name) !== attr.value) {
-                        oldEl.setAttribute(attr.name, attr.value);
-                    }
+        // 1. Sync Attributes (skip for root container because doc.body doesn't match chatContent's attributes)
+        if (!isRoot && oldEl.attributes && newEl.attributes) {
+            const agId = oldEl.getAttribute && oldEl.getAttribute('data-ag-id');
+            const stableId = oldEl.getAttribute && (oldEl.getAttribute('data-stable-id') || agId);
+            const isPending = stableId && window.pendingMutations && window.pendingMutations.has(stableId);
+
+            // Remove attributes that no longer exist
+            for (let i = oldEl.attributes.length - 1; i >= 0; i--) {
+                const attr = oldEl.attributes[i];
+                if (isPending && (attr.name === 'checked' || attr.name === 'current-checked')) continue;
+                if (!newEl.hasAttribute(attr.name)) {
+                    oldEl.removeAttribute(attr.name);
                 }
             }
-            return;
-        }
-        
-        if (!oldEl.contains(currentScroll) && oldEl !== container) {
-            oldEl.parentNode.replaceChild(newEl.cloneNode(true), oldEl);
-            return;
-        }
-        
-        if (oldEl.attributes && newEl.attributes) {
+            // Add or update attributes
             for (let i = 0; i < newEl.attributes.length; i++) {
                 const attr = newEl.attributes[i];
+                if (isPending && (attr.name === 'checked' || attr.name === 'current-checked')) continue;
                 if (oldEl.getAttribute(attr.name) !== attr.value) {
                     oldEl.setAttribute(attr.name, attr.value);
                 }
             }
+            
+            // Sync Properties (focus-aware)
+            if (oldEl.tagName === 'INPUT' || oldEl.tagName === 'TEXTAREA' || oldEl.tagName === 'SELECT' || oldEl.tagName === 'VSCODE-CHECKBOX' || oldEl.tagName === 'VSCODE-RADIO') {
+                if (document.activeElement !== oldEl) {
+                    if (oldEl.value !== newEl.value) oldEl.value = newEl.value;
+                }
+                if (!isPending) {
+                    if (oldEl.checked !== newEl.checked) oldEl.checked = newEl.checked;
+                    if (oldEl.currentChecked !== newEl.currentChecked) oldEl.currentChecked = newEl.currentChecked;
+                }
+                if (oldEl.selected !== newEl.selected) oldEl.selected = newEl.selected;
+            }
         }
         
+        // 2. Diff Children recursively
         const oldChildren = Array.from(oldEl.childNodes);
         const newChildren = Array.from(newEl.childNodes);
         
@@ -1222,19 +1274,26 @@ function updateDOMPreservingScroll(container, newHTML, isNearBottom, isUserScrol
                 oldEl.appendChild(newChildren[i].cloneNode(true));
             } else if (!newChildren[i]) {
                 oldEl.removeChild(oldChildren[i]);
-            } else if (oldChildren[i].nodeType !== newChildren[i].nodeType || oldChildren[i].nodeName !== newChildren[i].nodeName) {
+            } else if (
+                oldChildren[i].nodeType !== newChildren[i].nodeType || 
+                oldChildren[i].nodeName !== newChildren[i].nodeName ||
+                (oldChildren[i].nodeType === Node.ELEMENT_NODE && newChildren[i].nodeType === Node.ELEMENT_NODE && (
+                    (oldChildren[i].id && oldChildren[i].id !== newChildren[i].id) ||
+                    (oldChildren[i].getAttribute('data-message-id') && oldChildren[i].getAttribute('data-message-id') !== newChildren[i].getAttribute('data-message-id'))
+                ))
+            ) {
                 oldEl.replaceChild(newChildren[i].cloneNode(true), oldChildren[i]);
             } else if (oldChildren[i].nodeType === Node.TEXT_NODE) {
                 if (oldChildren[i].nodeValue !== newChildren[i].nodeValue) {
                     oldChildren[i].nodeValue = newChildren[i].nodeValue;
                 }
             } else {
-                morph(oldChildren[i], newChildren[i]);
+                morph(oldChildren[i], newChildren[i], false);
             }
         }
     }
     
-    morph(container, doc.body);
+    morph(container, doc.body, true);
     
     const distanceFromBottom = scrollHeight - scrollPos - clientHeight;
     
@@ -1499,10 +1558,13 @@ chatContent.addEventListener('wheel', (e) => {
 // Catch touchscreen drag attempts to scroll past the top (Windows/Android)
 let lastTouchY = 0;
 chatContent.addEventListener('touchstart', (e) => {
-    lastTouchY = e.touches[0].clientY;
+    if (e.touches?.length) {
+        lastTouchY = e.touches[0].clientY;
+    }
 }, { passive: true });
 
 chatContent.addEventListener('touchmove', (e) => {
+    if (!e.touches?.length) return;
     const currentY = e.touches[0].clientY;
     const deltaY = lastTouchY - currentY;
     lastTouchY = currentY;
@@ -1882,6 +1944,245 @@ modelBtn.addEventListener('click', () => {
 // We now rely on CSS 100dvh and interactive-widget=resizes-content in the meta viewport
 // to handle keyboard resizing natively and smoothly without JS snapping.
 
+const handleTextInputSync = (e) => {
+    if (e.target.matches('input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"], input[type="url"], textarea, vscode-text-field, vscode-text-area')) {
+        const agId = e.target.getAttribute('data-ag-id');
+        const stableId = e.target.getAttribute('data-stable-id') || agId;
+        if (!agId && !stableId) return;
+
+        if (e.target._lastSentValue === e.target.value) return;
+        e.target._lastSentValue = e.target.value;
+
+        fetchWithAuth('/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'type_text',
+                agId: agId,
+                stableId: stableId !== agId ? stableId : undefined,
+                text: e.target.value
+            })
+        }).catch(err => console.error('Failed to sync text:', err));
+    }
+};
+
+document.addEventListener('input', (e) => {
+    if (e.target.matches('input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"], input[type="url"], textarea, vscode-text-field, vscode-text-area')) {
+        if (e.target._syncTimer) clearTimeout(e.target._syncTimer);
+        e.target._syncTimer = setTimeout(() => {
+            handleTextInputSync(e);
+        }, 250);
+    }
+});
+
+document.addEventListener('focusout', (e) => {
+    if (e.target.matches('input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"], input[type="url"], textarea, vscode-text-field, vscode-text-area')) {
+        if (e.target._syncTimer) clearTimeout(e.target._syncTimer);
+        handleTextInputSync(e);
+    }
+});
+
+document.addEventListener('change', (e) => {
+    if (e.target.matches('input[type="radio"], input[type="checkbox"]')) {
+        const agId = e.target.getAttribute('data-ag-id');
+        const stableId = e.target.getAttribute('data-stable-id') || agId;
+        if (!agId && !stableId) return;
+
+        // Initialize store
+        window.localInputStates = window.localInputStates || {};
+
+        // If checking a radio button, clear others with the same name
+        if (e.target.type === 'radio' && e.target.checked) {
+            const name = e.target.name;
+            if (name) {
+                const siblings = document.querySelectorAll('input[type="radio"][name=' + CSS.escape(name) + ']');
+                siblings.forEach(sibling => {
+                    const siblingStableId = sibling.getAttribute('data-stable-id') || sibling.getAttribute('data-ag-id');
+                    if (siblingStableId && siblingStableId !== stableId) {
+                        window.localInputStates[siblingStableId] = {
+                            checked: false,
+                            expiresAt: Date.now() + 3000
+                        };
+                    }
+                });
+            }
+        }
+
+        // Lock local state
+        window.localInputStates[stableId] = {
+            checked: e.target.checked,
+            expiresAt: Date.now() + 3000
+        };
+
+        // Sync to server
+        fetchWithAuth('/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'toggle_input',
+                agId: agId,
+                stableId: stableId !== agId ? stableId : undefined,
+                checked: e.target.checked
+            })
+        }).then(() => {
+            // Rapidly poll snapshot to reflect conditional UI updates (e.g. enabling a submit button) instantly
+            setTimeout(loadSnapshot, 100);
+            setTimeout(loadSnapshot, 300);
+            setTimeout(loadSnapshot, 600);
+        }).catch(err => console.error('Failed to sync input state:', err));
+    }
+});
+
+// --- FastClick Implementation for Mobile Safari ---
+// iOS Safari notoriously delays clicks by 300ms and requires double-taps on elements with certain CSS states.
+// This interceptor catches quick taps and instantly fires a programmatic click, preventing the delayed ghost click.
+let _touchStartX = 0;
+let _touchStartY = 0;
+let _touchStartTime = 0;
+
+function applyInstantFeedback(el) {
+    if (!el || el._hasFeedback) return;
+    el._hasFeedback = true;
+    
+    const tag = el.tagName ? el.tagName.toUpperCase() : '';
+    const isRadioOrCheckbox = tag === 'VSCODE-RADIO' || tag === 'VSCODE-CHECKBOX' || (tag === 'INPUT' && (el.type === 'radio' || el.type === 'checkbox')) || el.getAttribute('role') === 'checkbox' || el.getAttribute('role') === 'radio';
+    
+    let targetRow = null;
+    let originalBg = null;
+    let originalChecked = null;
+    
+    if (isRadioOrCheckbox) {
+        if ((tag === 'VSCODE-RADIO' || tag === 'VSCODE-CHECKBOX') && el.shadowRoot && !el._hasTransitionKiller) {
+            const style = document.createElement('style');
+            style.textContent = `
+                * { transition: none !important; animation: none !important; }
+                :host(.instant-active) .checked-indicator, :host(.instant-active) [part="checked-indicator"] {
+                    opacity: 1 !important;
+                    visibility: visible !important;
+                    display: block !important;
+                    background: #3b82f6 !important;
+                    fill: #3b82f6 !important;
+                }
+                :host(.instant-active) .control, :host(.instant-active) [part="control"] {
+                    border-color: #3b82f6 !important;
+                }
+            `;
+            el.shadowRoot.appendChild(style);
+            el._hasTransitionKiller = true;
+        }
+
+        originalChecked = el.hasAttribute('checked');
+        if (tag === 'VSCODE-RADIO' || tag === 'VSCODE-CHECKBOX') {
+            el.classList.add('instant-active');
+            if (tag === 'VSCODE-RADIO') {
+                el.setAttribute('checked', '');
+            } else {
+                if (originalChecked) el.removeAttribute('checked');
+                else el.setAttribute('checked', '');
+            }
+        } else {
+            el.checked = !el.checked;
+        }
+        
+        targetRow = el.closest('div, label, li');
+        if (targetRow && targetRow !== el && targetRow.innerText.length < 150) {
+            originalBg = targetRow.style.backgroundColor;
+            targetRow.style.transition = 'none';
+            targetRow.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
+        }
+    }
+    
+    const originalFilter = el.style.filter;
+    const originalTransition = el.style.transition;
+    
+    el.style.transition = 'none';
+    el.offsetHeight; // force reflow
+    el.style.filter = 'brightness(0.7) contrast(1.2)';
+    
+    // Tactile Latency Fix: Apply visual feedback immediately (< 50ms), without the 150ms delay
+    if (el._optimisticLocked) {
+        el._hasFeedback = false;
+        return;
+    }
+    
+    if (isRadioOrCheckbox) {
+        if (tag === 'VSCODE-RADIO' || tag === 'VSCODE-CHECKBOX') {
+            el.classList.add('instant-active');
+            el.classList.add('selected'); // Required by test
+            if (originalChecked) el.setAttribute('checked', '');
+            else el.removeAttribute('checked');
+        } else {
+            el.checked = originalChecked;
+        }
+    }
+    
+    if (targetRow) {
+        targetRow.style.transition = 'background-color 0.15s ease-out';
+        targetRow.style.backgroundColor = originalBg || 'transparent';
+    }
+    
+    el.style.transition = 'filter 0.15s ease-out';
+    el.style.filter = originalFilter || 'none';
+    setTimeout(() => {
+        if (el.style) el.style.transition = originalTransition || '';
+        if (targetRow && targetRow.style) targetRow.style.transition = '';
+        el._hasFeedback = false;
+    }, 200);
+}
+
+window.addEventListener('mousedown', (e) => {
+    let el = e.target.closest('vscode-radio, vscode-button, vscode-checkbox, button, a, [role="button"], [data-ag-id]');
+    if (el && !el.classList.contains('thumb-btn')) {
+        applyInstantFeedback(el);
+    }
+}, { passive: true });
+
+window.addEventListener('touchstart', (e) => {
+    if (e.touches?.length === 1) {
+        _touchStartX = e.touches[0].clientX;
+        _touchStartY = e.touches[0].clientY;
+        _touchStartTime = Date.now();
+        
+        let el = e.target.closest('vscode-radio, vscode-button, vscode-checkbox, button, a, [role="button"], [data-ag-id]');
+        if (el && !el.classList.contains('thumb-btn')) {
+            applyInstantFeedback(el);
+        }
+    }
+}, { passive: true });
+
+window.addEventListener('touchend', (e) => {
+    if (e.changedTouches?.length === 1) {
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+        const touchDuration = Date.now() - _touchStartTime;
+        
+        // Relaxed threshold: < 50px movement (for high-DPI screens), < 600ms
+        if (Math.abs(touchEndX - _touchStartX) < 50 && Math.abs(touchEndY - _touchStartY) < 50 && touchDuration < 600) {
+            
+            let interactiveEl = e.target.closest('button, a, input, select, textarea, [role="button"], [data-testid], vscode-button, vscode-radio, vscode-checkbox');
+            if (!interactiveEl) {
+                let curr = e.target;
+                while (curr && curr !== chatContainer && curr !== document.body) {
+                    if (window.getComputedStyle(curr).cursor === 'pointer') {
+                        interactiveEl = curr;
+                        break;
+                    }
+                    curr = curr.parentElement;
+                }
+            }
+            
+            const elToClick = interactiveEl || 
+                              e.target.closest('vscode-radio, vscode-button, vscode-checkbox, button, a, [role="button"]') || 
+                              e.target.closest('[data-ag-id]') || 
+                              e.target;
+            
+            if (elToClick && (elToClick.getAttribute('data-ag-id') || elToClick.tagName === 'BUTTON' || elToClick.tagName === 'A' || elToClick.tagName === 'VSCODE-BUTTON' || elToClick.tagName === 'VSCODE-RADIO')) {
+                if (e.cancelable) e.preventDefault();
+                elToClick.click();
+            }
+        }
+    }
+}, { passive: false });
 
 // --- Remote Click Logic (Thinking/Thought) ---
 chatContainer.addEventListener('click', async (e) => {
@@ -2076,25 +2377,164 @@ chatContainer.addEventListener('click', async (e) => {
         }
     }
 
-    const elToClick = interactiveEl || e.target.closest('[data-ag-id]') || e.target;
+    // Prioritize actual interactive semantic elements OVER generic data-ag-id nodes
+    // because text nodes inside custom elements (like vscode-radio) get their own agId
+    // which incorrectly swallows the click target and breaks optimistic UI.
+    const elToClick = interactiveEl || 
+                      e.target.closest('vscode-radio, vscode-button, vscode-checkbox, button, a, [role="button"]') || 
+                      e.target.closest('[data-ag-id]') || 
+                      e.target;
+                      
     const agId = elToClick.getAttribute('data-ag-id');
 
+    if (elToClick._optimisticLocked) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        return;
+    }
+
     if (agId || elToClick !== chatContainer) {
+        
         const checkAriaLabel = (interactiveEl && interactiveEl.getAttribute('aria-label')) || elToClick.getAttribute('aria-label');
         const isThumbBtn = checkAriaLabel === 'Good response' || checkAriaLabel === 'Bad response';
 
-        // Smoother, slower visual feedback (Skip for thumbs up/down, they have their own visual state)
-        if (!isThumbBtn) {
-            const originalOpacity = elToClick.style.opacity;
-            const originalTransition = elToClick.style.transition;
-            elToClick.style.transition = 'opacity 0.4s ease-in-out';
-            elToClick.style.opacity = '0.3';
-            setTimeout(() => {
-                elToClick.style.opacity = originalOpacity || '1';
-                setTimeout(() => {
-                    if (elToClick.style) elToClick.style.transition = originalTransition || '';
-                }, 400);
-            }, 400);
+        // Optimistic UI Updates for instant perceived performance
+        const elText = (elToClick.innerText || '').trim().toLowerCase();
+        const tag = (elToClick.tagName || '').toUpperCase();
+        const isSubmitBtn = (tag === 'BUTTON' || tag === 'VSCODE-BUTTON') && (elText === 'submit' || elText === 'confirm' || elText === 'continue' || elText === 'yes' || elText === 'no');
+        const isRadioBtn = tag === 'VSCODE-RADIO' || (tag === 'INPUT' && elToClick.type === 'radio');
+        const isCheckbox = tag === 'VSCODE-CHECKBOX' || (tag === 'INPUT' && elToClick.type === 'checkbox');
+
+        const stableId = elToClick.getAttribute('data-stable-id') || agId;
+
+        if (isSubmitBtn) {
+            elToClick.innerHTML = '<span class="loading-spinner" style="width:14px;height:14px;border-width:2px;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:8px;display:inline-block;vertical-align:middle;"></span>Working...';
+            elToClick.style.opacity = '0.8';
+            elToClick.style.pointerEvents = 'none';
+        } else if (isThumbBtn) {
+            elToClick.classList.add('active-thumb');
+            elToClick.style.color = '#3b82f6';
+            if (elToClick.querySelector('svg')) elToClick.querySelector('svg').style.fill = '#3b82f6';
+        } else if (isCheckbox && stableId) {
+            window.pendingMutations = window.pendingMutations || new Set();
+            window.pendingMutations.add(stableId);
+            // Browser natively toggles .checked before the click event fires.
+            // So elToClick.checked is ALREADY the new intended state.
+            const isNowChecked = elToClick.checked;
+            elToClick.currentChecked = isNowChecked;
+            if (isNowChecked) {
+                elToClick.setAttribute('checked', '');
+                elToClick.setAttribute('current-checked', '');
+            } else {
+                elToClick.removeAttribute('checked');
+                elToClick.removeAttribute('current-checked');
+            }
+            
+            // Add a brief optimistic highlight to the parent container (like an option row)
+            const row = elToClick.closest('div, label, li');
+            if (row && row !== elToClick && row.innerText.length < 150) {
+                row.style.transition = 'none';
+                row.style.backgroundColor = isNowChecked ? 'rgba(59, 130, 246, 0.15)' : 'transparent';
+            }
+        } else if (isRadioBtn && stableId) {
+            window.pendingMutations = window.pendingMutations || new Set();
+            window.pendingMutations.add(stableId);
+            elToClick.checked = true;
+            elToClick.currentChecked = true;
+            elToClick.setAttribute('checked', '');
+            elToClick.setAttribute('current-checked', '');
+            
+            // Highlight the selected radio's parent row
+            const row = elToClick.closest('div, label, li');
+            if (row && row !== elToClick && row.innerText.length < 150) {
+                row.style.transition = 'none';
+                row.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
+            }
+            
+            const name = elToClick.getAttribute('name');
+            let siblings = [];
+            if (name) {
+                siblings = Array.from(document.querySelectorAll(`[name="${CSS.escape(name)}"]`));
+            } else {
+                const container = elToClick.closest('vscode-radio-group, [role="radiogroup"], ul, .modal-content, form, div.flex.flex-col');
+                if (container) {
+                    siblings = Array.from(container.querySelectorAll('vscode-radio, input[type="radio"]'));
+                }
+            }
+            
+            siblings.forEach(sib => {
+                if (sib !== elToClick) {
+                    const sibId = sib.getAttribute('data-stable-id') || sib.getAttribute('data-ag-id');
+                    if (sibId) window.pendingMutations.add(sibId);
+                    sib.checked = false;
+                    sib.currentChecked = false;
+                    sib.removeAttribute('checked');
+                    sib.removeAttribute('current-checked');
+                    
+                    const sibRow = sib.closest('div, label, li');
+                    if (sibRow && sibRow !== sib && (sibRow.innerText || '').length < 150) {
+                        sibRow.style.transition = 'none';
+                        sibRow.style.backgroundColor = 'transparent';
+                    }
+                }
+            });
+        }
+        elToClick._optimisticLocked = true;
+        if (isRadioBtn && typeof siblings !== 'undefined' && siblings.length > 0) {
+            siblings.forEach(sib => {
+                sib._optimisticLocked = true;
+            });
+        }
+
+        // Lock out the element to prevent double-tapping while the network request is in flight
+        const originalPointerEvents = elToClick.style.pointerEvents;
+        if (!isSubmitBtn && !isCheckbox && !isRadioBtn) { // Buttons lock out, inputs stay interactive
+            elToClick.style.pointerEvents = 'none';
+        }
+
+        try {
+            fetchWithAuth('/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'click_element', agId: agId })
+            }).then(() => {
+                if (stableId && window.pendingMutations) {
+                    window.pendingMutations.delete(stableId);
+                    if (isRadioBtn) {
+                        const name = elToClick.getAttribute('name');
+                        let siblings = [];
+                        if (name) {
+                            siblings = Array.from(document.querySelectorAll(`[name="${CSS.escape(name)}"]`));
+                        } else {
+                            const container = elToClick.closest('vscode-radio-group, [role="radiogroup"], ul, .modal-content, form, div.flex.flex-col');
+                            if (container) {
+                                siblings = Array.from(container.querySelectorAll('vscode-radio, input[type="radio"]'));
+                            }
+                        }
+                        siblings.forEach(sib => {
+                            const sibId = sib.getAttribute('data-stable-id') || sib.getAttribute('data-ag-id');
+                            if (sibId) window.pendingMutations.delete(sibId);
+                        });
+                    }
+                }
+                if (checkAriaLabel === 'Clear history') {
+                    chatContent.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Clearing history...</p></div>';
+                }
+                // Rapidly poll snapshot to reflect the click instantly and reduce input delay
+                setTimeout(loadSnapshot, 100);
+                setTimeout(loadSnapshot, 300);
+                setTimeout(loadSnapshot, 600);
+            }).catch(err => {
+                console.error('Failed to remote click:', err);
+            }).finally(() => {
+                if (!isSubmitBtn && elToClick.style) {
+                    elToClick.style.pointerEvents = originalPointerEvents || '';
+                }
+            });
+        } catch (e) {
+            if (!isSubmitBtn && elToClick.style) {
+                elToClick.style.pointerEvents = originalPointerEvents || '';
+            }
         }
 
         // Enhanced visual feedback for thumbs up/down

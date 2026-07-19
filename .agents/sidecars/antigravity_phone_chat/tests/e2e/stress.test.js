@@ -1,0 +1,131 @@
+const puppeteer = require('puppeteer');
+const { spawn } = require('child_process');
+
+jest.setTimeout(30000);
+
+let serverProcess;
+let browser;
+let page;
+const PORT = 3001;
+
+beforeAll(async () => {
+    serverProcess = spawn('node', ['server.js'], {
+        env: { ...process.env, PORT: PORT }
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 10000));
+
+    browser = await puppeteer.launch({
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+});
+
+afterAll(async () => {
+    if (browser) await browser.close();
+    if (serverProcess) {
+        serverProcess.kill();
+    }
+});
+
+beforeEach(async () => {
+    page = await browser.newPage();
+    page.on('dialog', async dialog => {
+        console.log('DIALOG:', dialog.message());
+        await dialog.dismiss();
+    });
+    const client = await page.target().createCDPSession();
+    await client.send('Network.enable');
+    await client.send('Network.emulateNetworkConditions', {
+        offline: false,
+        latency: 200,
+        downloadThroughput: 500 * 1024 / 8,
+        uploadThroughput: 500 * 1024 / 8
+    });
+    await client.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+
+    console.log('Navigating to server');
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+    console.log('Navigation complete');
+});
+
+afterEach(async () => {
+    await page.close();
+});
+
+test('Test 1 (Double Tap): Rapidly click a radio option 50 times in 100ms. Assert fetchWithAuth is only called ONCE', async () => {
+    let fetchCount = 0;
+    
+    page.on('console', msg => console.log('PAGE:', msg.text()));
+    
+    page.on('request', request => {
+        if (request.url().includes('/send')) {
+            fetchCount++;
+        }
+    });
+
+    await page.evaluate(() => {
+        window.alert = (msg) => console.log('ALERT:', msg);
+        const div = document.createElement('div');
+        div.innerHTML = `<vscode-radio data-ag-id="test-radio" name="test-group">Radio</vscode-radio>`;
+        document.getElementById('chatContainer').appendChild(div);
+    });
+
+    console.log('getting handle');
+    const radioHandle = await page.$('vscode-radio');
+    console.log('got handle', !!radioHandle);
+    for (let i = 0; i < 50; i++) {
+        await radioHandle.click();
+        await new Promise(r => setTimeout(r, 2));
+    }
+    console.log('finished clicking');
+
+    await new Promise(r => setTimeout(r, 1000));
+
+    console.log('checking assertions');
+    expect(fetchCount).toBe(1);
+}, 30000);
+
+test('Test 2 (Tactile Feedback): Measure the exact millisecond time between a touchstart dispatch and the classList.add(\'selected\') mutation. Assert it is < 50ms', async () => {
+    await page.evaluate(() => {
+        const div = document.createElement('div');
+        div.innerHTML = `<vscode-radio data-ag-id="test-radio2" name="test-group" id="tactile">Radio</vscode-radio>`;
+        document.getElementById('chatContainer').appendChild(div);
+        window._test2StartTime = performance.now();
+    });
+
+    const radioHandle = await page.$('#tactile');
+    await radioHandle.evaluate(el => el.scrollIntoView());
+    const box = await radioHandle.boundingBox();
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    
+    const resultPromise = page.evaluate(() => {
+        return new Promise((resolve) => {
+            const el = document.getElementById('tactile');
+            if (el.classList.contains('selected') || el.classList.contains('instant-active')) {
+                return resolve(0);
+            }
+            window._test2StartTime = performance.now();
+            const observer = new MutationObserver((mutations) => {
+                for (let mut of mutations) {
+                    if (mut.type === 'attributes' && mut.attributeName === 'class') {
+                        if (el.classList.contains('selected') || el.classList.contains('instant-active')) {
+                            observer.disconnect();
+                            resolve(performance.now() - window._test2StartTime);
+                        }
+                    }
+                }
+            });
+            observer.observe(el, { attributes: true });
+            
+            setTimeout(() => {
+                observer.disconnect();
+                resolve(9999);
+            }, 1000);
+        });
+    });
+
+    await page.touchscreen.touchStart(x, y);
+    const result = await resultPromise;
+    expect(result).toBeLessThan(50);
+}, 30000);

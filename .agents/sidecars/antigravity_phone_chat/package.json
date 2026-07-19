@@ -5,7 +5,8 @@
     "description": "Mobile web interface for monitoring Antigravity chat via visual snapshots",
     "scripts": {
         "start": "node server.js",
-        "dev": "node server.js"
+        "dev": "node server.js",
+        "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
     },
     "dependencies": {
         "chrome-remote-interface": "^0.34.0",
@@ -23,5 +24,10 @@
     "license": "GPL-3.0-only",
     "engines": {
         "node": ">=16.0.0"
+    },
+    "devDependencies": {
+        "jest": "^30.4.2",
+        "jest-environment-jsdom": "^30.4.1",
+        "puppeteer": "^19.11.1"
     }
 }

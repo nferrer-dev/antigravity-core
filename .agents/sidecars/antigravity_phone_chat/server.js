@@ -366,6 +366,26 @@ async function captureSnapshot(cdp) {
                 // This allows the phone to trigger clicks on ANY element (even divs acting as buttons)
                 el.setAttribute('data-ag-id', 'ag-n-' + (++nodeCounter));
 
+                if (el.tagName === 'INPUT' && (el.type === 'radio' || el.type === 'checkbox')) {
+                    let semanticId = '';
+                    if (el.name) semanticId += 'name-' + el.name;
+                    if (el.value) semanticId += (semanticId ? '-' : '') + 'val-' + el.value;
+                    if (el.id) semanticId += (semanticId ? '-' : '') + 'id-' + el.id;
+                    
+                    if (semanticId) {
+                        el.setAttribute('data-stable-id', 'ag-stable-' + semanticId);
+                    } else {
+                        const parentArticle = el.closest('[role="article"]');
+                        const articleId = parentArticle ? parentArticle.getAttribute('data-message-id') : null;
+                        if (articleId) {
+                            const root = parentArticle;
+                            const inputs = Array.from(root.querySelectorAll('input[type="' + el.type + '"]'));
+                            const index = inputs.indexOf(el);
+                            el.setAttribute('data-stable-id', 'ag-stable-' + articleId + '-' + el.type + '-' + index);
+                        }
+                    }
+                }
+
                 const pos = window.getComputedStyle(el).position;
                 if (pos === 'fixed' || pos === 'absolute') {
                     el.setAttribute('data-ag-rem', 'true');
@@ -565,7 +585,12 @@ async function captureSnapshot(cdp) {
         for (const sheet of document.styleSheets) {
             try {
                 for (const rule of sheet.cssRules) {
-                    rules.push(rule.cssText);
+                    // Strip :hover pseudo-classes to prevent double-tap issues on mobile devices
+                    if (rule.cssText.includes(':hover')) {
+                        rules.push(rule.cssText.replace(/:hover/g, '.ag-hover-disabled'));
+                    } else {
+                        rules.push(rule.cssText);
+                    }
                 }
             } catch (e) { }
         }
@@ -2219,8 +2244,194 @@ const wss = new WebSocketServer({ server });
         res.json(result);
     });
 
-    // Send message
+    // Send message or handle actions
     app.post('/send', async (req, res) => {
+        const { action, agId, stableId, checked } = req.body;
+        
+        if (action === 'click_element') {
+            if (!cdpConnection) return res.status(503).json({ error: 'CDP not connected' });
+            if (!agId || typeof agId !== 'string' || agId.length > 100) return res.status(400).json({ error: 'Invalid or missing agId' });
+            
+            // Try to find the element by data-ag-id and get its coordinates
+            const EXP = `(async () => {
+                function findNodeById(root, id) {
+                    if (!root) return null;
+                    let found = root.querySelector && root.querySelector('[data-ag-id=' + CSS.escape(id) + ']');
+                    if (found) return found;
+                    const all = root.querySelectorAll ? root.querySelectorAll('*') : [];
+                    for (const el of all) {
+                        if (el.shadowRoot) {
+                            const res = findNodeById(el.shadowRoot, id);
+                            if (res) return res;
+                        }
+                    }
+                    return null;
+                }
+                try {
+                    const el = findNodeById(document, ${JSON.stringify(agId)});
+                    if (!el) return { success: false, reason: 'not_found' };
+                    
+                    // Force instant scroll to avoid async animation race conditions
+                    el.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
+                    
+                    const rect = el.getBoundingClientRect();
+                    
+                    // If the element has no dimensions or is wildly off-screen despite scrolling, 
+                    // fallback to an untrusted programmatic click as a last resort.
+                    if (rect.width === 0 || rect.height === 0 || rect.x < -1000 || rect.y < -1000) {
+                        el.click();
+                        return { success: true, js_fallback: true };
+                    }
+                    
+                    return { 
+                        success: true, 
+                        x: rect.x + rect.width / 2, 
+                        y: rect.y + rect.height / 2 
+                    };
+                } catch (e) { return { success: false, reason: e.toString() }; }
+            })()`;
+            
+            let coords = null;
+            for (const ctx of cdpConnection.contexts) {
+                try {
+                    const result = await cdpConnection.call("Runtime.evaluate", {
+                        expression: EXP,
+                        contextId: ctx.id,
+                        returnByValue: true,
+                        awaitPromise: true,
+                    });
+                    if (result.result && result.result.value && result.result.value.success) {
+                        coords = result.result.value;
+                        break;
+                    }
+                } catch(e) {}
+            }
+            
+            if (coords) {
+                try {
+                    // If JS fallback was triggered, skip the hardware CDP click
+                    if (coords.js_fallback) {
+                        return res.json({ success: true, fallback: true });
+                    }
+                    
+                    // Perform true hardware click via CDP (isTrusted=true)
+                    await cdpConnection.call("Input.dispatchMouseEvent", {
+                        type: "mousePressed",
+                        x: coords.x, y: coords.y,
+                        button: "left", clickCount: 1
+                    });
+                    await new Promise(r => setTimeout(r, 50));
+                    await cdpConnection.call("Input.dispatchMouseEvent", {
+                        type: "mouseReleased",
+                        x: coords.x, y: coords.y,
+                        button: "left", clickCount: 1
+                    });
+                    return res.json({ success: true });
+                } catch (e) {
+                    console.error("CDP Click Failed:", e);
+                    return res.status(500).json({ error: e.toString() });
+                }
+            }
+            
+            return res.json({ success: false, error: 'Element not found' });
+        }
+        
+        if (action === 'type_text') {
+            if (!cdpConnection) return res.status(503).json({ error: 'CDP not connected' });
+            
+            const { text } = req.body;
+            if (agId !== undefined && (typeof agId !== 'string' || agId.length > 100)) return res.status(400).json({ error: 'Invalid agId' });
+            if (stableId !== undefined && (typeof stableId !== 'string' || stableId.length > 1000)) return res.status(400).json({ error: 'Invalid stableId' });
+            if (typeof text !== 'string' || text.length > 100000) return res.status(400).json({ error: 'Invalid text payload' });
+            
+            const TYPE_SCRIPT = `(async () => {
+                const sId = ${JSON.stringify(stableId || '')};
+                const aId = ${JSON.stringify(agId || '')};
+                let el = null;
+                if (sId) {
+                    el = document.querySelector('[data-stable-id=' + CSS.escape(sId) + ']');
+                }
+                if (!el && aId) {
+                    el = document.querySelector('[data-ag-id=' + CSS.escape(aId) + ']');
+                }
+                if (el) {
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+                    const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+                    
+                    if (nativeInputValueSetter && el.tagName === 'INPUT') {
+                        nativeInputValueSetter.call(el, ${JSON.stringify(text || '')});
+                    } else if (nativeTextAreaValueSetter && el.tagName === 'TEXTAREA') {
+                        nativeTextAreaValueSetter.call(el, ${JSON.stringify(text || '')});
+                    } else {
+                        el.value = ${JSON.stringify(text || '')};
+                    }
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            })();`;
+            
+            cdpConnection.send('Runtime.evaluate', {
+                expression: TYPE_SCRIPT,
+                awaitPromise: true
+            }).catch(console.error);
+            
+            return res.json({ success: true });
+        }
+
+        if (action === 'toggle_input') {
+            if (!cdpConnection) return res.status(503).json({ error: 'CDP not connected' });
+            
+            // Strict type and length validation to prevent payload abuse
+            if (agId !== undefined && (typeof agId !== 'string' || agId.length > 100)) {
+                return res.status(400).json({ error: 'Invalid agId' });
+            }
+            if (stableId !== undefined && (typeof stableId !== 'string' || stableId.length > 1000)) {
+                return res.status(400).json({ error: 'Invalid stableId' });
+            }
+            if (typeof checked !== 'boolean') {
+                return res.status(400).json({ error: 'Invalid checked value' });
+            }
+            
+            const TOGGLE_SCRIPT = `(async () => {
+                const sId = ${JSON.stringify(stableId || '')};
+                const aId = ${JSON.stringify(agId || '')};
+                let el = null;
+                if (sId) {
+                    el = document.querySelector('[data-stable-id=' + CSS.escape(sId) + ']');
+                }
+                if (!el && aId) {
+                    el = document.querySelector('[data-ag-id=' + CSS.escape(aId) + ']');
+                }
+                if (el) {
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+                    if (nativeInputValueSetter) {
+                        nativeInputValueSetter.call(el, ${!!checked});
+                    } else {
+                        el.checked = ${!!checked};
+                    }
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    return { ok: true, found: true };
+                }
+                return { ok: false, found: false };
+            })()`;
+            
+            for (const ctx of cdpConnection.contexts) {
+                try {
+                    const result = await cdpConnection.call("Runtime.evaluate", {
+                        expression: TOGGLE_SCRIPT,
+                        contextId: ctx.id,
+                        returnByValue: true,
+                        awaitPromise: true,
+                    });
+                    if (result.result && result.result.value && result.result.value.ok) {
+                        return res.json({ success: true });
+                    }
+                } catch(e) {}
+            }
+            return res.json({ success: false, error: 'Element not found' });
+        }
+
         let { message, attachments } = req.body;
 
         // Bypass for voice memos that persist across chat resets
