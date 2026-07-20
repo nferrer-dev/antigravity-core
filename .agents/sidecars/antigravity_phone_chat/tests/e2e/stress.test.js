@@ -137,3 +137,51 @@ test('Test 2 (Tactile Feedback): Measure the exact millisecond time between a to
     const result = await resultPromise;
     expect(result).toBeLessThan(50);
 }, 30000);
+
+test('Test 3: Race condition between type_text and click_element', async () => {
+    let requests = [];
+    
+    // Clear previous handlers if any, but since it's a new page we're good
+    await page.setRequestInterception(true);
+    page.on('request', async request => {
+        if (request.url().includes('/send')) {
+            try {
+                const body = JSON.parse(request.postData());
+                requests.push(body.action);
+                // Delay to exacerbate race conditions
+                setTimeout(() => request.continue(), 100);
+            } catch (e) {
+                request.continue();
+            }
+        } else {
+            request.continue();
+        }
+    });
+
+    await page.evaluate(() => {
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <vscode-text-field data-ag-id="test-input" id="test-input">Input</vscode-text-field>
+            <vscode-button data-ag-id="test-submit" id="test-submit">Submit</vscode-button>
+        `;
+        document.getElementById('chatContainer').appendChild(div);
+    });
+
+    page.on('console', msg => console.log('PAGE:', msg.text()));
+
+    await page.evaluate(() => {
+        console.log('Test evaluate started');
+        const input = document.getElementById('test-input');
+        input.value = 'hello world';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        const submit = document.getElementById('test-submit');
+        submit.click();
+        console.log('Submit clicked');
+    });
+
+    await new Promise(r => setTimeout(r, 3000));
+
+    console.log('Final requests:', requests);
+    expect(requests).toEqual(['type_text', 'click_element']);
+}, 30000);

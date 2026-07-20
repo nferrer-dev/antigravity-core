@@ -1948,12 +1948,12 @@ const handleTextInputSync = (e) => {
     if (e.target.matches('input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"], input[type="url"], textarea, vscode-text-field, vscode-text-area')) {
         const agId = e.target.getAttribute('data-ag-id');
         const stableId = e.target.getAttribute('data-stable-id') || agId;
-        if (!agId && !stableId) return;
+        if (!agId && !stableId) return Promise.resolve();
 
-        if (e.target._lastSentValue === e.target.value) return;
+        if (e.target._lastSentValue === e.target.value) return Promise.resolve();
         e.target._lastSentValue = e.target.value;
 
-        fetchWithAuth('/send', {
+        const promise = fetchWithAuth('/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1963,7 +1963,15 @@ const handleTextInputSync = (e) => {
                 text: e.target.value
             })
         }).catch(err => console.error('Failed to sync text:', err));
+
+        window.pendingTextSyncPromises = window.pendingTextSyncPromises || new Set();
+        window.pendingTextSyncPromises.add(promise);
+        promise.finally(() => window.pendingTextSyncPromises.delete(promise));
+
+        e.target._syncPromise = promise;
+        return promise;
     }
+    return Promise.resolve();
 };
 
 document.addEventListener('input', (e) => {
@@ -2485,6 +2493,22 @@ chatContainer.addEventListener('click', async (e) => {
         const originalPointerEvents = elToClick.style.pointerEvents;
         if (!isSubmitBtn && !isCheckbox && !isRadioBtn) { // Buttons lock out, inputs stay interactive
             elToClick.style.pointerEvents = 'none';
+        }
+
+        const activeInputs = Array.from(document.querySelectorAll('input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"], input[type="url"], textarea, vscode-text-field, vscode-text-area'));
+        
+        activeInputs.forEach(input => {
+            if (input._syncTimer) {
+                clearTimeout(input._syncTimer);
+                input._syncTimer = null;
+                handleTextInputSync({ target: input });
+            } else if (input.value !== input._lastSentValue) {
+                handleTextInputSync({ target: input });
+            }
+        });
+
+        if (window.pendingTextSyncPromises && window.pendingTextSyncPromises.size > 0) {
+            await Promise.all(Array.from(window.pendingTextSyncPromises)).catch(err => console.error('Sync error:', err));
         }
 
         try {
