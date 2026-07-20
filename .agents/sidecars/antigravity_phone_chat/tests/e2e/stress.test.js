@@ -57,9 +57,17 @@ test('Test 1 (Double Tap): Rapidly click a radio option 50 times in 100ms. Asser
     
     page.on('console', msg => console.log('PAGE:', msg.text()));
     
-    page.on('request', request => {
+    await page.setRequestInterception(true);
+    page.on('request', async request => {
         if (request.url().includes('/send')) {
+            console.log('SEND REQUEST BODY:', request.postData());
             fetchCount++;
+            // Stall the request to simulate network latency, keeping the optimistic lock active
+            setTimeout(() => {
+                request.continue();
+            }, 2000);
+        } else {
+            request.continue();
         }
     });
 

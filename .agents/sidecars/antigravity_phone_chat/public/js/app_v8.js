@@ -2527,6 +2527,7 @@ chatContainer.addEventListener('click', async (e) => {
             }).catch(err => {
                 console.error('Failed to remote click:', err);
             }).finally(() => {
+                elToClick._optimisticLocked = false;
                 if (!isSubmitBtn && elToClick.style) {
                     elToClick.style.pointerEvents = originalPointerEvents || '';
                 }
