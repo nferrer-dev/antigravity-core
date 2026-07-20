@@ -2480,11 +2480,6 @@ chatContainer.addEventListener('click', async (e) => {
             });
         }
         elToClick._optimisticLocked = true;
-        if (isRadioBtn && typeof siblings !== 'undefined' && siblings.length > 0) {
-            siblings.forEach(sib => {
-                sib._optimisticLocked = true;
-            });
-        }
 
         // Lock out the element to prevent double-tapping while the network request is in flight
         const originalPointerEvents = elToClick.style.pointerEvents;
