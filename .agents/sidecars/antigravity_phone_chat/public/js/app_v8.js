@@ -128,6 +128,7 @@ if ('virtualKeyboard' in navigator) {
 
 // --- Auth Utilities ---
 async function fetchWithAuth(url, options = {}) {
+    console.log("FETCH TYPE:", typeof fetch, fetch.name);
     // Add ngrok skip warning header to all requests
     if (!options.headers) options.headers = {};
     options.headers['ngrok-skip-browser-warning'] = 'true';
@@ -772,6 +773,11 @@ async function loadSnapshot() {
 
         // Add mobile copy buttons to all code blocks
         addMobileCopyButtons();
+        
+        // Inject Edit/Redirect buttons for queued messages
+        if (typeof injectQueuedMessageButtons === 'function') {
+            injectQueuedMessageButtons();
+        }
 
         // Setup resize observer for dynamic content loading (images/fonts)
         setupResizeObserver();
@@ -3029,3 +3035,69 @@ function initializeVoiceInput() {
     });
 }
 initializeVoiceInput();
+
+// --- Queued Messages Proxy Logic ---
+function injectQueuedMessageButtons() {
+    const queuedStatuses = document.querySelectorAll('.status-message.queued');
+    queuedStatuses.forEach(statusEl => {
+        if (statusEl.querySelector('.ag-queued-edit-btn')) return;
+
+        const messageEl = statusEl.closest('.message') || statusEl.closest('[role="article"]');
+        if (!messageEl) return;
+        
+        const revertBtn = messageEl.querySelector('button[data-testid="revert-button"]');
+        if (!revertBtn) return;
+        
+        const agId = revertBtn.getAttribute('data-ag-id');
+        if (!agId) return;
+
+        const actionContainer = document.createElement('div');
+        actionContainer.style.display = 'inline-flex';
+        actionContainer.style.alignItems = 'center';
+        actionContainer.style.gap = '8px';
+        actionContainer.style.marginLeft = '12px';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'action-icon edit-icon ag-queued-edit-btn';
+        editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+        editBtn.style.background = 'none';
+        editBtn.style.border = 'none';
+        editBtn.style.color = 'var(--text-muted)';
+        editBtn.style.cursor = 'pointer';
+        editBtn.style.padding = '4px';
+        editBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fetchWithAuth('/api/orchestrate/replace_input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetAgId: agId, prefix: '' })
+            });
+        };
+
+        const redirectBtn = document.createElement('button');
+        redirectBtn.className = 'action-icon redirect-icon ag-queued-redirect-btn';
+        redirectBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>';
+        redirectBtn.style.background = 'none';
+        redirectBtn.style.border = 'none';
+        redirectBtn.style.color = 'var(--text-muted)';
+        redirectBtn.style.cursor = 'pointer';
+        redirectBtn.style.padding = '4px';
+        redirectBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fetchWithAuth('/api/orchestrate/replace_input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetAgId: agId, prefix: '/redirect ' })
+            });
+        };
+
+        actionContainer.appendChild(editBtn);
+        actionContainer.appendChild(redirectBtn);
+        statusEl.appendChild(actionContainer);
+    });
+}
+window.injectQueuedMessageButtons = injectQueuedMessageButtons;
+
+

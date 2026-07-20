@@ -60,6 +60,103 @@ export function handleSnapshotUpdate(lastSnapshot, currentSnapshot, subscription
     return Promise.resolve();
 }
 
+export async function handleReplaceInputRoute(cdp, req, res) {
+    try {
+        const { targetAgId, prefix } = req.body;
+        if (!targetAgId) return res.status(400).json({ error: "Missing targetAgId" });
+        const pfx = prefix || '';
+
+        const SCRIPT = `(async () => {
+            try {
+                const targetNode = document.querySelector('[data-ag-id="${targetAgId}"]');
+                if (!targetNode) return { success: false, error: "Target node not found" };
+
+                // 1. Locate parent article
+                const article = targetNode.closest('[role="article"]');
+                if (!article) return { success: false, error: "Article not found" };
+
+                // 2. Extract raw Markdown text from React Fiber
+                const fiberKey = Object.keys(article).find(k => k.startsWith('__reactFiber$'));
+                if (!fiberKey) return { success: false, error: "Fiber key not found" };
+
+                let fiber = article[fiberKey];
+                let extractedText = null;
+                let depth = 0;
+                
+                while (fiber && depth < 20) {
+                    if (fiber.memoizedProps && fiber.memoizedProps.message && typeof fiber.memoizedProps.message.text === 'string') {
+                        extractedText = fiber.memoizedProps.message.text;
+                        break;
+                    }
+                    fiber = fiber.return;
+                    depth++;
+                }
+
+                if (!extractedText) {
+                    const mdContainer = article.querySelector('.markdown-body, [class*="markdown"]');
+                    extractedText = mdContainer ? (mdContainer.innerText || mdContainer.textContent) : article.textContent;
+                }
+
+                // 3. Locate main input field
+                const inputField = document.querySelector('vscode-text-field, textarea, [contenteditable="true"]');
+                if (!inputField) return { success: false, error: "Input field not found" };
+
+                // 4. Click the trash button
+                targetNode.click();
+
+                // 5. Polling loop to verify removal
+                let attempts = 0;
+                while (document.querySelector('[data-ag-id="${targetAgId}"]') && attempts < 10) {
+                    await new Promise(r => setTimeout(r, 100));
+                    attempts++;
+                }
+
+                // 6. Set value of input field
+                const finalValue = ${JSON.stringify(pfx)} + extractedText;
+                
+                if (inputField.tagName === 'VSCODE-TEXT-FIELD' || inputField.tagName === 'TEXTAREA' || inputField.tagName === 'INPUT') {
+                    inputField.value = finalValue;
+                    inputField.dispatchEvent(new Event("input", { bubbles: true }));
+                    inputField.dispatchEvent(new Event("change", { bubbles: true }));
+                } else {
+                    inputField.focus();
+                    document.execCommand("selectAll", false, null);
+                    document.execCommand("insertText", false, finalValue);
+                }
+
+                return { success: true };
+            } catch (err) {
+                return { success: false, error: err.toString() };
+            }
+        })()`;
+
+        let result = null;
+        for (const ctx of cdp.contexts) {
+            try {
+                const resp = await cdp.call("Runtime.evaluate", {
+                    expression: SCRIPT,
+                    returnByValue: true,
+                    awaitPromise: true
+                });
+                if (resp && resp.result && resp.result.value && resp.result.value.success) {
+                    result = resp.result.value;
+                    break;
+                } else if (resp && resp.result && resp.result.value) {
+                    result = resp.result.value; // capture error
+                }
+            } catch(e) {}
+        }
+
+        if (result && result.success) {
+            res.json(result);
+        } else {
+            res.status(500).json(result || { error: "Failed to evaluate script in any context" });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -1984,6 +2081,9 @@ const wss = new WebSocketServer({ server });
     app.get('/vapidPublicKey', (req, res) => {
         res.send(process.env.PUBLIC_KEY);
     });
+    app.post('/api/orchestrate/replace_input', express.json(), (req, res) => {
+        handleReplaceInputRoute(cdpConnection, req, res);
+    });
 
     app.post('/subscribe', (req, res) => {
         const subscription = req.body;
@@ -2271,6 +2371,9 @@ const wss = new WebSocketServer({ server });
                     const el = findNodeById(document, ${JSON.stringify(agId)});
                     if (!el) return { success: false, reason: 'not_found' };
                     
+                    const tagName = (el.tagName || '').toLowerCase();
+                    const forceJsClick = tagName === 'vscode-radio' || tagName === 'vscode-checkbox';
+                    
                     // Force instant scroll to avoid async animation race conditions
                     el.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
                     
@@ -2278,7 +2381,7 @@ const wss = new WebSocketServer({ server });
                     
                     // If the element has no dimensions or is wildly off-screen despite scrolling, 
                     // fallback to an untrusted programmatic click as a last resort.
-                    if (rect.width === 0 || rect.height === 0 || rect.x < -1000 || rect.y < -1000) {
+                    if (forceJsClick || rect.width === 0 || rect.height === 0 || rect.x < -1000 || rect.y < -1000) {
                         el.click();
                         return { success: true, js_fallback: true };
                     }
@@ -2370,7 +2473,7 @@ const wss = new WebSocketServer({ server });
                 }
             })();`;
             
-            cdpConnection.send('Runtime.evaluate', {
+            cdpConnection.call('Runtime.evaluate', {
                 expression: TYPE_SCRIPT,
                 awaitPromise: true
             }).catch(console.error);

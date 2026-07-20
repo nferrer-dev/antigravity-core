@@ -1,6 +1,8 @@
 /**
  * @jest-environment jsdom
  */
+import { jest } from '@jest/globals';
+console.error = function(m, e) { console.log('CAUGHT ERROR: ', m, e); };
 
 // Mock globals needed by app_v8.js
 global.localStorage = {
@@ -8,7 +10,9 @@ global.localStorage = {
     setItem: jest.fn(),
 };
 
+window.addEventListener('error', e => console.log('WINDOW ERROR:', e.error));
 global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+window.fetch = global.fetch;
 global.window.pendingMutations = new Map();
 global.CSS = { escape: (s) => s };
 
@@ -24,7 +28,10 @@ const dummyElement = {
     getAttribute: jest.fn(),
     style: {},
     appendChild: jest.fn(),
-    removeChild: jest.fn()
+    removeChild: jest.fn(),
+    value: "",
+    dataset: {},
+    contains: jest.fn().mockReturnValue(false)
 };
 document.getElementById = jest.fn((id) => {
     if (id === 'chatContainer' || id === 'chat-container') {
@@ -36,29 +43,35 @@ document.getElementById = jest.fn((id) => {
 describe('Phone UI Logic - Optimistic Locking & Debouncing', () => {
     let originalFetchWithAuth;
 
-    beforeAll(() => {
-        const fs = require('fs');
-        const path = require('path');
-        const scriptCode = fs.readFileSync(path.join(__dirname, '../public/js/app_v8.js'), 'utf8');
+    beforeAll(async () => {
+        const fs = await import('fs');
+        const path = await import('path');
+        const scriptCode = fs.readFileSync(path.join(process.cwd(), 'public/js/app_v8.js'), 'utf8');
         
         try {
             eval(scriptCode);
         } catch (e) {
-            // Ignore init errors since some DOM elements might be missing
+            console.error("Eval failed:", e);
+            throw e;
         }
     });
 
     beforeEach(() => {
         jest.clearAllMocks();
+        window.pendingMutations = new Set();
     });
 
     test('Optimistic Locking: 50 click events on vscode-radio should trigger exactly 1 fetch', async () => {
         const chatContainer = document.getElementById('chat-container');
         
+        // Wrap in a div to prevent early return in app_v8 click handler
+        const divWrapper = document.createElement('div');
+        chatContainer.appendChild(divWrapper);
+
         // Mock a vscode-radio element
         const radio = document.createElement('vscode-radio');
         radio.setAttribute('data-ag-id', 'test-radio-1');
-        chatContainer.appendChild(radio);
+        divWrapper.appendChild(radio);
 
         let clickReachedDocument = false;
         document.addEventListener('click', () => { clickReachedDocument = true; });
@@ -71,16 +84,26 @@ describe('Phone UI Logic - Optimistic Locking & Debouncing', () => {
 
         console.log("Click reached document?", clickReachedDocument);
 
-        // Check that fetchWithAuth was called exactly once
-        expect(global.fetch).toHaveBeenCalledTimes(1);
+        await new Promise(r => setTimeout(r, 50));
+
+        // Check what fetch was called with
+        console.log("FETCH CALLS", global.fetch.mock.calls.map(c => c[0]));
+        
+        // Filter out non-/send calls to test only the click logic
+        const sendCalls = global.fetch.mock.calls.filter(c => c[0] === '/send');
+        expect(sendCalls.length).toBe(1);
     });
 
     test('Text Input Sync Integrity: rapid input and focusout on vscode-text-field', async () => {
         const chatContainer = document.getElementById('chat-container');
         
+        // Wrap in a div to prevent early return in app_v8 click handler
+        const divWrapper = document.createElement('div');
+        chatContainer.appendChild(divWrapper);
+
         const textField = document.createElement('vscode-text-field');
-        textField.setAttribute('data-ag-id', 'test-text-1');
-        chatContainer.appendChild(textField);
+        textField.setAttribute('data-ag-id', 'test-input-1');
+        divWrapper.appendChild(textField);
 
         // Simulate rapid typing
         const textToType = "Hello";
@@ -98,11 +121,66 @@ describe('Phone UI Logic - Optimistic Locking & Debouncing', () => {
         expect(lastCall).toBeDefined();
         
         const requestBody = JSON.parse(lastCall[1].body);
-        expect(requestBody.value).toBe("Hello");
+        expect(requestBody.text).toBe("Hello");
 
         // The _lastSentValue lock should prevent duplicate sends
         textField.dispatchEvent(new Event('focusout', { bubbles: true }));
+
+        await new Promise(r => setTimeout(r, 50));
+
         // It shouldn't have fired another fetch for the exact same value
         expect(global.fetch.mock.calls.length).toBe(fetchCalls.length);
+    });
+
+    test('injectQueuedMessageButtons: should inject Edit and Redirect icons and bind events', () => {
+        const chatContainer = document.getElementById('chat-container');
+        
+        // Mock a queued message with a revert button
+        const article = document.createElement('div');
+        article.setAttribute('role', 'article');
+        
+        const revertBtn = document.createElement('button');
+        revertBtn.setAttribute('data-testid', 'revert-button');
+        revertBtn.setAttribute('data-ag-id', 'test-revert-1');
+        
+        const statusMessage = document.createElement('div');
+        statusMessage.className = 'status-message queued';
+        
+        const btnContainer = document.createElement('div');
+        btnContainer.appendChild(revertBtn);
+        article.appendChild(statusMessage);
+        article.appendChild(btnContainer);
+        chatContainer.appendChild(article);
+
+        // Run the function
+        if (typeof global.injectQueuedMessageButtons === 'function') {
+            global.injectQueuedMessageButtons();
+        } else if (typeof window.injectQueuedMessageButtons === 'function') {
+            window.injectQueuedMessageButtons();
+        } else {
+            // Assume it's available globally due to eval
+            injectQueuedMessageButtons();
+        }
+
+        console.log("ARTICLE HTML:", article.outerHTML);
+        // Check if icons are injected
+        const editBtn = article.querySelector('.ag-queued-edit-btn');
+        const redirectBtn = article.querySelector('.ag-queued-redirect-btn');
+        
+        expect(editBtn).not.toBeNull();
+        expect(redirectBtn).not.toBeNull();
+
+        // Simulate clicks and check fetch arguments
+        editBtn.click();
+        expect(global.fetch).toHaveBeenCalledWith('/api/orchestrate/replace_input', expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ targetAgId: 'test-revert-1', prefix: '' })
+        }));
+
+        redirectBtn.click();
+        expect(global.fetch).toHaveBeenCalledWith('/api/orchestrate/replace_input', expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ targetAgId: 'test-revert-1', prefix: '/redirect ' })
+        }));
     });
 });

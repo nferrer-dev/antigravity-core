@@ -556,6 +556,9 @@ textarea::-webkit-resizer {
 .send-btn svg {
     width: 24px;
     height: 24px;
+}
+
+#stopBtn svg {
     fill: currentColor;
     stroke: none;
 }

@@ -1,5 +1,6 @@
-const puppeteer = require('puppeteer');
-const { spawn } = require('child_process');
+import puppeteer from 'puppeteer';
+import { spawn } from 'child_process';
+import { jest } from '@jest/globals';
 
 jest.setTimeout(30000);
 
