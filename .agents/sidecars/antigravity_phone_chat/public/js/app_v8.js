@@ -2321,6 +2321,40 @@ window.addEventListener('touchend', (e) => {
 
 // --- Remote Click Logic (Thinking/Thought) ---
 chatContainer.addEventListener('click', async (e) => {
+    // --- Universal Click Proxy ---
+    // Intercept injected queued message buttons
+    const editBtn = e.target.closest('.ag-queued-edit-btn');
+    if (editBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const agId = editBtn.getAttribute('data-target-ag-id') || editBtn.getAttribute('data-ag-id');
+        try {
+            await fetchWithAuth('/api/orchestrate/replace_input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetAgId: agId, prefix: '' })
+            });
+            setTimeout(loadSnapshot, 500);
+        } catch (err) { console.error(err); }
+        return;
+    }
+    
+    const redirectBtn = e.target.closest('.ag-queued-redirect-btn');
+    if (redirectBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const agId = redirectBtn.getAttribute('data-target-ag-id') || redirectBtn.getAttribute('data-ag-id');
+        try {
+            await fetchWithAuth('/api/orchestrate/replace_input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetAgId: agId, prefix: '/redirect ' })
+            });
+            setTimeout(loadSnapshot, 500);
+        } catch (err) { console.error(err); }
+        return;
+    }
+
     // --- Native Mobile Copy Intercept (Bypass Backend) ---
     const copyBtn = e.target.closest('button[aria-label="Copy"]');
     if (copyBtn) {
@@ -2494,39 +2528,6 @@ chatContainer.addEventListener('click', async (e) => {
         return;
     }
 
-    // --- Universal Click Proxy ---
-    // Intercept injected queued message buttons
-    const editBtn = e.target.closest('.ag-queued-edit-btn');
-    if (editBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-        const agId = editBtn.getAttribute('data-target-ag-id') || editBtn.getAttribute('data-ag-id');
-        try {
-            await fetchWithAuth('/api/orchestrate/replace_input', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetAgId: agId, prefix: '' })
-            });
-            setTimeout(loadSnapshot, 500);
-        } catch (err) { console.error(err); }
-        return;
-    }
-    
-    const redirectBtn = e.target.closest('.ag-queued-redirect-btn');
-    if (redirectBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-        const agId = redirectBtn.getAttribute('data-target-ag-id') || redirectBtn.getAttribute('data-ag-id');
-        try {
-            await fetchWithAuth('/api/orchestrate/replace_input', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetAgId: agId, prefix: '/redirect ' })
-            });
-            setTimeout(loadSnapshot, 500);
-        } catch (err) { console.error(err); }
-        return;
-    }
 
     // --- Native Mobile Copy Intercept (Bypass Backend) ---
     // Instead of only looking for <button>, we find the nearest interactive element 
