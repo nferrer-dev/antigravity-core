@@ -19,33 +19,7 @@ app.post('/api/orchestrate/replace_input', (req, res) => {
 });
 
 describe('Backend CDP Orchestration - replace_input', () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
-    });
-
-    test('should fail if cdp is disconnected', async () => {
-        const res = await request(app)
-            .post('/api/orchestrate/replace_input')
-            .send({ targetAgId: 'test-ag-id', prefix: '' });
-        // Depending on implementation, it might return 503 or something else, but let's assume it errors
-        // Wait, if we pass mockCdp, it won't fail because cdp is provided. We need to test the logic.
-    });
-
-    test('should call cdp Runtime.evaluate with the replacement script', async () => {
-        mockCdp.call.mockResolvedValueOnce({
-            result: { value: { success: true } }
-        });
-
-        const res = await request(app)
-            .post('/api/orchestrate/replace_input')
-            .send({ targetAgId: 'revert-123', prefix: '/redirect ' });
-
-        expect(res.status).toBe(200);
-        expect(res.body.success).toBe(true);
-        expect(mockCdp.call).toHaveBeenCalledWith("Runtime.evaluate", expect.objectContaining({
-            expression: expect.stringContaining('revert-123'),
-            returnByValue: true,
-            awaitPromise: true
-        }));
+    test('handleReplaceInputRoute should no longer exist', () => {
+        expect(server.handleReplaceInputRoute).toBeUndefined();
     });
 });

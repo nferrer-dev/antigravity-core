@@ -132,55 +132,9 @@ describe('Phone UI Logic - Optimistic Locking & Debouncing', () => {
         expect(global.fetch.mock.calls.length).toBe(fetchCalls.length);
     });
 
-    test('injectQueuedMessageButtons: should inject Edit and Redirect icons and bind events', () => {
-        const chatContainer = document.getElementById('chat-container');
-        
-        // Mock a queued message with a revert button
-        const article = document.createElement('div');
-        article.setAttribute('role', 'article');
-        
-        const revertBtn = document.createElement('button');
-        revertBtn.setAttribute('data-testid', 'revert-button');
-        revertBtn.setAttribute('data-ag-id', 'test-revert-1');
-        
-        const statusMessage = document.createElement('div');
-        statusMessage.className = 'status-message queued';
-        
-        const btnContainer = document.createElement('div');
-        btnContainer.appendChild(revertBtn);
-        article.appendChild(statusMessage);
-        article.appendChild(btnContainer);
-        chatContainer.appendChild(article);
-
-        // Run the function
-        if (typeof global.injectQueuedMessageButtons === 'function') {
-            global.injectQueuedMessageButtons();
-        } else if (typeof window.injectQueuedMessageButtons === 'function') {
-            window.injectQueuedMessageButtons();
-        } else {
-            // Assume it's available globally due to eval
-            injectQueuedMessageButtons();
-        }
-
-        console.log("ARTICLE HTML:", article.outerHTML);
-        // Check if icons are injected
-        const editBtn = article.querySelector('.ag-queued-edit-btn');
-        const redirectBtn = article.querySelector('.ag-queued-redirect-btn');
-        
-        expect(editBtn).not.toBeNull();
-        expect(redirectBtn).not.toBeNull();
-
-        // Simulate clicks and check fetch arguments
-        editBtn.click();
-        expect(global.fetch).toHaveBeenCalledWith('/api/orchestrate/replace_input', expect.objectContaining({
-            method: 'POST',
-            body: JSON.stringify({ targetAgId: 'test-revert-1', prefix: '' })
-        }));
-
-        redirectBtn.click();
-        expect(global.fetch).toHaveBeenCalledWith('/api/orchestrate/replace_input', expect.objectContaining({
-            method: 'POST',
-            body: JSON.stringify({ targetAgId: 'test-revert-1', prefix: '/redirect ' })
-        }));
+    test('injectQueuedMessageButtons should not exist and buttons should not be injected', () => {
+        expect(typeof window.injectQueuedMessageButtons).toBe('undefined');
+        expect(typeof global.injectQueuedMessageButtons).toBe('undefined');
+        expect(document.querySelector('.ag-queued-edit-btn')).toBeNull();
     });
 });
