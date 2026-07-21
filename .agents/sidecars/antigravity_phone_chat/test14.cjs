@@ -1,0 +1,1 @@
+const { JSDOM } = require('jsdom'); fetch('http://localhost:3000/snapshot').then(res => res.json()).then(data => { const dom = new JSDOM(data.html); const doc = dom.window.document; const steps = doc.querySelectorAll('[data-testid="user-input-step"]'); steps.forEach(step => { console.log('Revert button INSIDE step:', !!step.querySelector('[data-testid="revert-button"]')); }); })

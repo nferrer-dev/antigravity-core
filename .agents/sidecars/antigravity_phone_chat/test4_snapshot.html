@@ -1,0 +1,1021 @@
+<div class="w-full flex h-full min-h-0 flex-col items-center relative overflow-y-auto" data-testid="conversation-view"><div class="relative w-full flex-grow min-h-0" data-ag-id="ag-n-1"><div class="h-full overflow-y-auto min-h-0 w-full h-full overflow-y-auto min-h-0 w-full scrollbar-hide" data-ag-id="ag-n-2" style="scrollbar-color: var(--scrollbar-color); scrollbar-width: thin; container-type: size;"><div class="mx-auto w-full" data-ag-id="ag-n-3" style="max-width: max(30vw, var(--max-conversation-width, 48rem));"><div data-ag-id="ag-n-4"><div class="h-px w-full" aria-hidden="true" data-ag-id="ag-n-5"></div><button type="button" class="sr-only opacity-0" aria-label="Load older messages, showing 355 of 8915" aria-disabled="false" data-ag-id="ag-n-6" data-ag-rem="true">Load older messages</button><div class="relative flex flex-col gap-y-3 px-4" data-ag-id="ag-n-7"><div class="flex items-start" data-ag-id="ag-n-8"><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-9"><div role="article" aria-label="Agent response" data-message-id="b5e542bc-f5a7-40e9-bca3-44a6ca85fa7a" data-ag-id="ag-n-10"><div class="relative" data-ag-id="ag-n-11"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-12"><span class="text-secondary-foreground" data-ag-id="ag-n-13">Worked for 34s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-14"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-15"></path></svg></button></div><div class="px-2 py-1" data-ag-id="ag-n-16"><div class="leading-relaxed select-text text-sm flex flex-col [&amp;_code:not(pre_code)]:bg-code-background [&amp;_code:not(pre_code)]:text-code-foreground [&amp;_code:not(pre_code)]:rounded [&amp;_code:not(pre_code)]:px-1 [&amp;_code:not(pre_code)]:py-0.5 [&amp;_code:not(pre_code)]:text-[0.9em] [&amp;_summary]:cursor-pointer [&amp;_h1]:text-xl [&amp;_h2]:text-lg [&amp;_h3]:text-base [&amp;_h4]:text-sm [&amp;_h1]:font-semibold [&amp;_h2]:font-semibold [&amp;_h3]:font-medium [&amp;_h4]:font-medium [&amp;_h1]:!mb-2 [&amp;_h1]:!mt-6 [&amp;_h2]:!mb-2 [&amp;_h2]:!mt-6 [&amp;_h3]:!mb-1 [&amp;_h3]:!mt-3 [&amp;_h4]:!mb-1 [&amp;_h4]:!mt-3 [&amp;_li.task-list-item]:list-none [&amp;_ul:has(li.task-list-item)]:list-none [&amp;_ul]:my-2 [&amp;_ol]:my-2 [&amp;&gt;ul.contains-task-list]:pl-0 [&amp;&gt;ol.contains-task-list]:pl-0 [&amp;_ul]:pl-10 [&amp;_ol]:pl-10 [&amp;&gt;ul:not(.contains-task-list)]:!pl-4 [&amp;&gt;ol:not(.contains-task-list)]:!pl-4 [&amp;_ul]:list-disc [&amp;_ol]:list-decimal [&amp;_li.task-checked&gt;.task-checked-content]:opacity-50 break-words gap-2" data-ag-id="ag-n-17"><style data-ag-id="ag-n-18">
+/* Copied from remark-github-blockquote-alert/alert.css */
+@media (prefers-color-scheme: dark) {
+.markdown-alert {
+	--color-border-border: #30363d;
+	--color-accent-fg: #58a6ff;
+	--color-accent-emphasis: #1f6feb;
+	--color-danger-fg: #f85149;
+	--color-danger-emphasis: #da3633;
+	--color-attention-fg: #d29922;
+	--color-attention-emphasis: #9e6a03;
+	--color-done-fg: #a371f7;
+	--color-done-emphasis: #8957e5;
+	--color-success-fg: #3fb950;
+	--color-success-emphasis: #238636;
+	}
+}
+
+@media (prefers-color-scheme: light) {
+.markdown-alert {
+	--color-border-border: #d0d7de;
+	--color-accent-fg: #0969da;
+	--color-accent-emphasis: #0969da;
+	--color-danger-fg: #d1242f;
+	--color-danger-emphasis: #cf222e;
+	--color-attention-fg: #9a6700;
+	--color-attention-emphasis: #9a6700;
+	--color-done-fg: #8250df;
+	--color-done-emphasis: #8250df;
+	--color-success-fg: #1a7f37;
+	--color-success-emphasis: #1f883d;
+	}
+}
+
+.markdown-alert {
+	border-left: .25em solid var(--borderColor-default, var(--color-border-border));
+	color: inherit;
+	margin-bottom: 16px;
+	padding: .5rem 1em
+}
+
+.markdown-alert>:last-child {
+	margin-bottom: 0 !important
+}
+
+.markdown-alert .markdown-alert-title {
+	align-items: center;
+	display: flex;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1
+}
+
+.markdown-alert .markdown-alert-title svg.octicon {
+	margin-right: 8px !important;
+	margin-right: var(--base-size-8, 8px) !important;
+	fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+	border-left-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis))
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+	color: var(--color-accent-fg);
+	color: var(--fgColor-accent, var(--color-accent-fg))
+}
+
+.markdown-alert.markdown-alert-tip {
+	border-left-color: var(--borderColor-success-emphasis, var(--color-success-emphasis))
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+	color: var(--color-success-fg);
+	color: var(--fgColor-success, var(--color-success-fg))
+}
+
+.markdown-alert.markdown-alert-important {
+	border-left-color: var(--borderColor-done-emphasis, var(--color-done-emphasis))
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+	color: var(--color-done-fg);
+	color: var(--fgColor-done, var(--color-done-fg))
+}
+
+.markdown-alert.markdown-alert-warning {
+	border-left-color: var(--borderColor-attention-emphasis, var(--color-attention-emphasis))
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+	color: var(--color-attention-fg);
+	color: var(--fgColor-attention, var(--color-attention-fg))
+}
+
+.markdown-alert.markdown-alert-caution {
+	border-left-color: var(--borderColor-danger-emphasis, var(--color-danger-emphasis))
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+	color: var(--color-danger-fg);
+	color: var(--fgColor-danger, var(--color-danger-fg))
+}
+
+div:has(> table),
+table th,
+table td {
+  border-style: solid;
+  border-color: rgba(128, 128, 128, 0.2);
+}
+</style><p node="[object Object]" class="" data-ag-id="ag-n-19">I sincerely apologize! I didn't actually kill the proxy server (it's still running and polling happily), but I accidentally introduced a JavaScript syntax error (an unclosed bracket) in the phone's <code node="[object Object]" class="whitespace-pre-wrap" data-ag-id="ag-n-20" style="word-break: break-word;">app_v8.js</code> file.</p>
+  <p node="[object Object]" class="" data-ag-id="ag-n-21">Because of that syntax error, the browser on your phone completely failed to load the UI, which made it look like the server was dead!</p>
+  <p node="[object Object]" class="" data-ag-id="ag-n-22">I've fixed the syntax error. Could you refresh the page on your phone? It should instantly come back to life, and the Edit/Redirect buttons should now be fully functional.</p></div></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-23"><div class="flex flex-col w-full select-none" data-ag-id="ag-n-24"><div class="flex flex-wrap items-center justify-between pl-3 p-2 border text-sm files-changed-header gap-1 transition-colors duration-200 rounded-xl cursor-pointer hover:bg-muted active:bg-secondary/80" data-ag-id="ag-n-25"><div class="flex items-center gap-1.5 overflow-hidden" data-ag-id="ag-n-26"><span class="text-secondary-foreground truncate" data-ag-id="ag-n-27">1 file changed</span><div class="flex items-center gap-0.5 text-sm" data-ag-id="ag-n-28"><span class="text-green-500" data-ag-id="ag-n-29">+0</span><span class="text-red-500" data-ag-id="ag-n-30">-1</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right h-3.5 w-3.5 shrink-0 text-muted-foreground text-muted-foreground" aria-hidden="true" data-ag-id="ag-n-31"><path d="m9 18 6-6-6-6" data-ag-id="ag-n-32"></path></svg></div><button class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-sm cursor-pointer select-none border bg-muted hover:bg-secondary transition-colors text-secondary-foreground hover:text-foreground review-button" data-ag-id="ag-n-33"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 opacity-70" data-ag-id="ag-n-34"><path d="M510-530h60v-80h80v-60H570v-80H510v80H430v60h80v80ZM430-370H650v-60H430v60ZM332.31-220Q302-220 281-241t-21-51.31V-827.69Q260-858 281-879t51.31-21H610L820-690v397.69Q820-262 799-241t-51.31,21H332.31Zm0-60H747.69q4.62,0 8.46-3.85t3.85-8.46V-660L580-840H332.31q-4.62,0-8.46,3.85T320-827.69v535.38q0,4.62 3.85,8.46t8.46,3.85Zm-160,220Q142-60 121-81t-21-51.31V-660h60v527.69q0,4.62 3.85,8.46t8.46,3.85H580v60H172.31ZM320-280q0,0 0-3.85t0-8.46V-827.69q0-4.62 0-8.46t0-3.85v180v367.69q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-35"></path></svg><span data-ag-id="ag-n-36">Review</span></button></div></div></div></div><div class="pt-3" data-ag-id="ag-n-37"><div data-ag-id="ag-n-38"><div class="flex flex-col gap-2" data-ag-id="ag-n-39"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-40"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-41">5:06 PM</div><div class="flex items-center" data-ag-id="ag-n-42"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r13:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-43"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-44"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-45"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r13:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-46"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-47"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-48"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r13:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-49"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-50"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-51"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" data-ag-id="ag-n-52" style=""><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-53"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="369dfa79-210b-49d0-b130-e526bb8afb07" data-ag-id="ag-n-54"><div class="flex w-full flex-row" data-ag-id="ag-n-55"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-56"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-57"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-58"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-59"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-60"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-61"><div class="relative" data-ag-id="ag-n-62"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-63"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-64"></div><div class="whitespace-pre-wrap text-sm" data-ag-id="ag-n-65" style="word-break: break-word;">Well, I can't connect via the phone UI</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-66" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-67">5:07 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r18:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-68"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-69"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-70"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r19:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r19:" data-tooltip-place="top-end" data-ag-id="ag-n-71"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-72"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-73"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="369dfa79-210b-49d0-b130-e526bb8afb07" data-ag-id="ag-n-74"><div class="relative" data-ag-id="ag-n-75"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-76"><span class="text-secondary-foreground" data-ag-id="ag-n-77">Worked for 2m</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-78"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-79"></path></svg></button></div><div class="flex flex-row" data-ag-id="ag-n-80"><div class="min-w-0 grow" data-ag-id="ag-n-81"><div class="w-full my-0.5" data-ag-id="ag-n-82"><div class="flex items-center" data-ag-id="ag-n-83"><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-84"></div><span class="px-3 text-sm text-secondary-foreground whitespace-nowrap" data-ag-id="ag-n-85">Test snapshot finished</span><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-86"></div></div></div></div></div><div class="px-2 py-1" data-ag-id="ag-n-87"><div class="leading-relaxed select-text text-sm flex flex-col [&amp;_code:not(pre_code)]:bg-code-background [&amp;_code:not(pre_code)]:text-code-foreground [&amp;_code:not(pre_code)]:rounded [&amp;_code:not(pre_code)]:px-1 [&amp;_code:not(pre_code)]:py-0.5 [&amp;_code:not(pre_code)]:text-[0.9em] [&amp;_summary]:cursor-pointer [&amp;_h1]:text-xl [&amp;_h2]:text-lg [&amp;_h3]:text-base [&amp;_h4]:text-sm [&amp;_h1]:font-semibold [&amp;_h2]:font-semibold [&amp;_h3]:font-medium [&amp;_h4]:font-medium [&amp;_h1]:!mb-2 [&amp;_h1]:!mt-6 [&amp;_h2]:!mb-2 [&amp;_h2]:!mt-6 [&amp;_h3]:!mb-1 [&amp;_h3]:!mt-3 [&amp;_h4]:!mb-1 [&amp;_h4]:!mt-3 [&amp;_li.task-list-item]:list-none [&amp;_ul:has(li.task-list-item)]:list-none [&amp;_ul]:my-2 [&amp;_ol]:my-2 [&amp;&gt;ul.contains-task-list]:pl-0 [&amp;&gt;ol.contains-task-list]:pl-0 [&amp;_ul]:pl-10 [&amp;_ol]:pl-10 [&amp;&gt;ul:not(.contains-task-list)]:!pl-4 [&amp;&gt;ol:not(.contains-task-list)]:!pl-4 [&amp;_ul]:list-disc [&amp;_ol]:list-decimal [&amp;_li.task-checked&gt;.task-checked-content]:opacity-50 break-words gap-2" data-ag-id="ag-n-88"><style data-ag-id="ag-n-89">
+/* Copied from remark-github-blockquote-alert/alert.css */
+@media (prefers-color-scheme: dark) {
+.markdown-alert {
+	--color-border-border: #30363d;
+	--color-accent-fg: #58a6ff;
+	--color-accent-emphasis: #1f6feb;
+	--color-danger-fg: #f85149;
+	--color-danger-emphasis: #da3633;
+	--color-attention-fg: #d29922;
+	--color-attention-emphasis: #9e6a03;
+	--color-done-fg: #a371f7;
+	--color-done-emphasis: #8957e5;
+	--color-success-fg: #3fb950;
+	--color-success-emphasis: #238636;
+	}
+}
+
+@media (prefers-color-scheme: light) {
+.markdown-alert {
+	--color-border-border: #d0d7de;
+	--color-accent-fg: #0969da;
+	--color-accent-emphasis: #0969da;
+	--color-danger-fg: #d1242f;
+	--color-danger-emphasis: #cf222e;
+	--color-attention-fg: #9a6700;
+	--color-attention-emphasis: #9a6700;
+	--color-done-fg: #8250df;
+	--color-done-emphasis: #8250df;
+	--color-success-fg: #1a7f37;
+	--color-success-emphasis: #1f883d;
+	}
+}
+
+.markdown-alert {
+	border-left: .25em solid var(--borderColor-default, var(--color-border-border));
+	color: inherit;
+	margin-bottom: 16px;
+	padding: .5rem 1em
+}
+
+.markdown-alert>:last-child {
+	margin-bottom: 0 !important
+}
+
+.markdown-alert .markdown-alert-title {
+	align-items: center;
+	display: flex;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1
+}
+
+.markdown-alert .markdown-alert-title svg.octicon {
+	margin-right: 8px !important;
+	margin-right: var(--base-size-8, 8px) !important;
+	fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+	border-left-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis))
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+	color: var(--color-accent-fg);
+	color: var(--fgColor-accent, var(--color-accent-fg))
+}
+
+.markdown-alert.markdown-alert-tip {
+	border-left-color: var(--borderColor-success-emphasis, var(--color-success-emphasis))
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+	color: var(--color-success-fg);
+	color: var(--fgColor-success, var(--color-success-fg))
+}
+
+.markdown-alert.markdown-alert-important {
+	border-left-color: var(--borderColor-done-emphasis, var(--color-done-emphasis))
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+	color: var(--color-done-fg);
+	color: var(--fgColor-done, var(--color-done-fg))
+}
+
+.markdown-alert.markdown-alert-warning {
+	border-left-color: var(--borderColor-attention-emphasis, var(--color-attention-emphasis))
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+	color: var(--color-attention-fg);
+	color: var(--fgColor-attention, var(--color-attention-fg))
+}
+
+.markdown-alert.markdown-alert-caution {
+	border-left-color: var(--borderColor-danger-emphasis, var(--color-danger-emphasis))
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+	color: var(--color-danger-fg);
+	color: var(--fgColor-danger, var(--color-danger-fg))
+}
+
+div:has(> table),
+table th,
+table td {
+  border-style: solid;
+  border-color: rgba(128, 128, 128, 0.2);
+}
+</style><p node="[object Object]" class="" data-ag-id="ag-n-90">The proxy server is definitely still running on my end and actively processing requests! It's listening on <code node="[object Object]" class="whitespace-pre-wrap" data-ag-id="ag-n-91" style="word-break: break-word;">http://192.168.1.239:3000</code>.</p>
+  <p node="[object Object]" class="" data-ag-id="ag-n-92">If you can't connect, one of a few things is happening:</p>
+  <ol data-ag-id="ag-n-93">
+  <li node="[object Object]" data-ag-id="ag-n-94">
+  <p node="[object Object]" class="" data-ag-id="ag-n-95"><strong data-ag-id="ag-n-96">Aggressive Browser Caching</strong>: Because the app crashed from the syntax error earlier, your phone's browser (or home screen shortcut) might be aggressively caching that broken state.</p>
+  <ul data-ag-id="ag-n-97">
+  <li node="[object Object]" data-ag-id="ag-n-98"><strong data-ag-id="ag-n-99">Fix</strong>: Force-close the browser/app (swipe it away in the app switcher) and reopen it. If that doesn't work, try opening <code node="[object Object]" class="whitespace-pre-wrap" data-ag-id="ag-n-100" style="word-break: break-word;">http://192.168.1.239:3000</code> in a Private/Incognito tab to bypass the cache.</li>
+  </ul>
+  </li>
+  <li node="[object Object]" data-ag-id="ag-n-101">
+  <p node="[object Object]" class="" data-ag-id="ag-n-102"><strong data-ag-id="ag-n-103">WiFi Disconnect</strong>: Your phone may have dropped off the local WiFi network or switched to cellular data while you were away.</p>
+  <ul data-ag-id="ag-n-104">
+  <li node="[object Object]" data-ag-id="ag-n-105"><strong data-ag-id="ag-n-106">Fix</strong>: Double-check that your phone is connected to the exact same WiFi network as this computer.</li>
+  </ul>
+  </li>
+  <li node="[object Object]" data-ag-id="ag-n-107">
+  <p node="[object Object]" class="" data-ag-id="ag-n-108"><strong data-ag-id="ag-n-109">Session Expiry</strong>: I noticed in the server logs from about 2 hours ago that your session expired and the server tried to redirect you to the login page.</p>
+  <ul data-ag-id="ag-n-110">
+  <li node="[object Object]" data-ag-id="ag-n-111"><strong data-ag-id="ag-n-112">Fix</strong>: If you just see a blank screen instead of the login page, the Incognito tab trick above will definitely fix it!</li>
+  </ul>
+  </li>
+  </ol>
+  <p node="[object Object]" class="" data-ag-id="ag-n-113">Let me know what you see when you try an Incognito tab!</p></div></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-114"></div></div><div class="pt-3" data-ag-id="ag-n-115"><div data-ag-id="ag-n-116"><div class="flex flex-col gap-2" data-ag-id="ag-n-117"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-118"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-119">5:07 PM</div><div class="flex items-center" data-ag-id="ag-n-120"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:rv:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-121"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-122"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-123"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:rv:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-124"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-125"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-126"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:rv:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-127"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-128"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-129"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" style="" data-ag-id="ag-n-130"><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-131"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="892c35e1-a275-42f8-88a0-8c1bb042759f" data-ag-id="ag-n-132"><div class="flex w-full flex-row" data-ag-id="ag-n-133"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-134"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-135"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-136"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-137"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-138"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-139"><div class="relative" data-ag-id="ag-n-140"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-141"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-142"></div><div class="whitespace-pre-wrap text-sm" style="word-break: break-word;" data-ag-id="ag-n-143">Test1</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-144" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-145">5:10 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r1b:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-146"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-147"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-148"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r1c:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r1c:" data-tooltip-place="top-end" data-ag-id="ag-n-149"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-150"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-151"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="892c35e1-a275-42f8-88a0-8c1bb042759f" data-ag-id="ag-n-152"><div class="relative" data-ag-id="ag-n-153"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-154"><span class="text-secondary-foreground" data-ag-id="ag-n-155">Worked for 9s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-156"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-157"></path></svg></button></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-158"></div></div><div class="pt-3" data-ag-id="ag-n-159"><div data-ag-id="ag-n-160"><div class="flex flex-col gap-2" data-ag-id="ag-n-161"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-162"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-163">5:10 PM</div><div class="flex items-center" data-ag-id="ag-n-164"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r1j:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-165"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-166"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-167"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r1j:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-168"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-169"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-170"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r1j:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-171"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-172"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-173"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" data-ag-id="ag-n-174" style=""><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-175"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="892c35e1-a275-42f8-88a0-8c1bb042759f" data-ag-id="ag-n-176"><div class="flex w-full flex-row" data-ag-id="ag-n-177"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-178"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-179"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-180"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-181"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-182"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-183"><div class="relative" data-ag-id="ag-n-184"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-185"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-186"></div><div class="whitespace-pre-wrap text-sm" data-ag-id="ag-n-187" style="word-break: break-word;">Test2</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-188" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-189">5:10 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r1o:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-190"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-191"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-192"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r1p:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r1p:" data-tooltip-place="top-end" data-ag-id="ag-n-193"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-194"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-195"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="892c35e1-a275-42f8-88a0-8c1bb042759f" data-ag-id="ag-n-196"><div class="relative" data-ag-id="ag-n-197"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-198"><span class="text-secondary-foreground" data-ag-id="ag-n-199">Worked for 24s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-200"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-201"></path></svg></button></div><div class="px-2 py-1" data-ag-id="ag-n-202"><div class="leading-relaxed select-text text-sm flex flex-col [&amp;_code:not(pre_code)]:bg-code-background [&amp;_code:not(pre_code)]:text-code-foreground [&amp;_code:not(pre_code)]:rounded [&amp;_code:not(pre_code)]:px-1 [&amp;_code:not(pre_code)]:py-0.5 [&amp;_code:not(pre_code)]:text-[0.9em] [&amp;_summary]:cursor-pointer [&amp;_h1]:text-xl [&amp;_h2]:text-lg [&amp;_h3]:text-base [&amp;_h4]:text-sm [&amp;_h1]:font-semibold [&amp;_h2]:font-semibold [&amp;_h3]:font-medium [&amp;_h4]:font-medium [&amp;_h1]:!mb-2 [&amp;_h1]:!mt-6 [&amp;_h2]:!mb-2 [&amp;_h2]:!mt-6 [&amp;_h3]:!mb-1 [&amp;_h3]:!mt-3 [&amp;_h4]:!mb-1 [&amp;_h4]:!mt-3 [&amp;_li.task-list-item]:list-none [&amp;_ul:has(li.task-list-item)]:list-none [&amp;_ul]:my-2 [&amp;_ol]:my-2 [&amp;&gt;ul.contains-task-list]:pl-0 [&amp;&gt;ol.contains-task-list]:pl-0 [&amp;_ul]:pl-10 [&amp;_ol]:pl-10 [&amp;&gt;ul:not(.contains-task-list)]:!pl-4 [&amp;&gt;ol:not(.contains-task-list)]:!pl-4 [&amp;_ul]:list-disc [&amp;_ol]:list-decimal [&amp;_li.task-checked&gt;.task-checked-content]:opacity-50 break-words gap-2" data-ag-id="ag-n-203"><style data-ag-id="ag-n-204">
+/* Copied from remark-github-blockquote-alert/alert.css */
+@media (prefers-color-scheme: dark) {
+.markdown-alert {
+	--color-border-border: #30363d;
+	--color-accent-fg: #58a6ff;
+	--color-accent-emphasis: #1f6feb;
+	--color-danger-fg: #f85149;
+	--color-danger-emphasis: #da3633;
+	--color-attention-fg: #d29922;
+	--color-attention-emphasis: #9e6a03;
+	--color-done-fg: #a371f7;
+	--color-done-emphasis: #8957e5;
+	--color-success-fg: #3fb950;
+	--color-success-emphasis: #238636;
+	}
+}
+
+@media (prefers-color-scheme: light) {
+.markdown-alert {
+	--color-border-border: #d0d7de;
+	--color-accent-fg: #0969da;
+	--color-accent-emphasis: #0969da;
+	--color-danger-fg: #d1242f;
+	--color-danger-emphasis: #cf222e;
+	--color-attention-fg: #9a6700;
+	--color-attention-emphasis: #9a6700;
+	--color-done-fg: #8250df;
+	--color-done-emphasis: #8250df;
+	--color-success-fg: #1a7f37;
+	--color-success-emphasis: #1f883d;
+	}
+}
+
+.markdown-alert {
+	border-left: .25em solid var(--borderColor-default, var(--color-border-border));
+	color: inherit;
+	margin-bottom: 16px;
+	padding: .5rem 1em
+}
+
+.markdown-alert>:last-child {
+	margin-bottom: 0 !important
+}
+
+.markdown-alert .markdown-alert-title {
+	align-items: center;
+	display: flex;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1
+}
+
+.markdown-alert .markdown-alert-title svg.octicon {
+	margin-right: 8px !important;
+	margin-right: var(--base-size-8, 8px) !important;
+	fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+	border-left-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis))
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+	color: var(--color-accent-fg);
+	color: var(--fgColor-accent, var(--color-accent-fg))
+}
+
+.markdown-alert.markdown-alert-tip {
+	border-left-color: var(--borderColor-success-emphasis, var(--color-success-emphasis))
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+	color: var(--color-success-fg);
+	color: var(--fgColor-success, var(--color-success-fg))
+}
+
+.markdown-alert.markdown-alert-important {
+	border-left-color: var(--borderColor-done-emphasis, var(--color-done-emphasis))
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+	color: var(--color-done-fg);
+	color: var(--fgColor-done, var(--color-done-fg))
+}
+
+.markdown-alert.markdown-alert-warning {
+	border-left-color: var(--borderColor-attention-emphasis, var(--color-attention-emphasis))
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+	color: var(--color-attention-fg);
+	color: var(--fgColor-attention, var(--color-attention-fg))
+}
+
+.markdown-alert.markdown-alert-caution {
+	border-left-color: var(--borderColor-danger-emphasis, var(--color-danger-emphasis))
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+	color: var(--color-danger-fg);
+	color: var(--fgColor-danger, var(--color-danger-fg))
+}
+
+div:has(> table),
+table th,
+table td {
+  border-style: solid;
+  border-color: rgba(128, 128, 128, 0.2);
+}
+</style><p node="[object Object]" class="" data-ag-id="ag-n-205">I apologize for that brief interruption! The Antigravity IDE did a system restart which temporarily brought down the background proxy server, but I just restarted it for you.</p>
+  <p node="[object Object]" class="" data-ag-id="ag-n-206">Your phone should be automatically reconnecting now, and you should see "Test1" and "Test2" in the queue.</p>
+  <p node="[object Object]" class="" data-ag-id="ag-n-207">Since the syntax error in <code node="[object Object]" class="whitespace-pre-wrap" data-ag-id="ag-n-208" style="word-break: break-word;">app_v8.js</code> is fully fixed, the Edit and Redirect icons should now be appearing properly next to those queued messages. Go ahead and tap them—they should now trigger the correct <code node="[object Object]" class="whitespace-pre-wrap" data-ag-id="ag-n-209" style="word-break: break-word;">/api/orchestrate/replace_input</code> backend logic to pull those messages into your input box!</p></div></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-210"></div></div><div class="pt-3" data-ag-id="ag-n-211"><div data-ag-id="ag-n-212"><div class="flex flex-col gap-2" data-ag-id="ag-n-213"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-214"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-215">5:10 PM</div><div class="flex items-center" data-ag-id="ag-n-216"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r1u:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-217"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-218"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-219"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r1u:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-220"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-221"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-222"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r1u:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-223"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-224"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-225"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" data-ag-id="ag-n-226" style=""><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-227"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="8d166de6-7a29-47c3-a19f-fee298ea432c" data-ag-id="ag-n-228"><div class="flex w-full flex-row" data-ag-id="ag-n-229"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-230"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-231"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-232"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-233"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-234"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-235"><div class="relative" data-ag-id="ag-n-236"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-237"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-238"></div><div class="whitespace-pre-wrap text-sm" data-ag-id="ag-n-239" style="word-break: break-word;">Once again the icons in the phone UI are not present for pending messages but they are for sent messages, which makes no sense</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-240" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-241">5:12 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r23:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-242"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-243"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-244"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r24:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r24:" data-tooltip-place="top-end" data-ag-id="ag-n-245"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-246"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-247"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="8d166de6-7a29-47c3-a19f-fee298ea432c" data-ag-id="ag-n-248"><div class="relative" data-ag-id="ag-n-249"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-250"><span class="text-secondary-foreground" data-ag-id="ag-n-251">Worked for 3m</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-252"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-253"></path></svg></button></div><div class="px-2 py-1" data-ag-id="ag-n-254"><div class="leading-relaxed select-text text-sm flex flex-col [&amp;_code:not(pre_code)]:bg-code-background [&amp;_code:not(pre_code)]:text-code-foreground [&amp;_code:not(pre_code)]:rounded [&amp;_code:not(pre_code)]:px-1 [&amp;_code:not(pre_code)]:py-0.5 [&amp;_code:not(pre_code)]:text-[0.9em] [&amp;_summary]:cursor-pointer [&amp;_h1]:text-xl [&amp;_h2]:text-lg [&amp;_h3]:text-base [&amp;_h4]:text-sm [&amp;_h1]:font-semibold [&amp;_h2]:font-semibold [&amp;_h3]:font-medium [&amp;_h4]:font-medium [&amp;_h1]:!mb-2 [&amp;_h1]:!mt-6 [&amp;_h2]:!mb-2 [&amp;_h2]:!mt-6 [&amp;_h3]:!mb-1 [&amp;_h3]:!mt-3 [&amp;_h4]:!mb-1 [&amp;_h4]:!mt-3 [&amp;_li.task-list-item]:list-none [&amp;_ul:has(li.task-list-item)]:list-none [&amp;_ul]:my-2 [&amp;_ol]:my-2 [&amp;&gt;ul.contains-task-list]:pl-0 [&amp;&gt;ol.contains-task-list]:pl-0 [&amp;_ul]:pl-10 [&amp;_ol]:pl-10 [&amp;&gt;ul:not(.contains-task-list)]:!pl-4 [&amp;&gt;ol:not(.contains-task-list)]:!pl-4 [&amp;_ul]:list-disc [&amp;_ol]:list-decimal [&amp;_li.task-checked&gt;.task-checked-content]:opacity-50 break-words gap-2" data-ag-id="ag-n-255"><style data-ag-id="ag-n-256">
+/* Copied from remark-github-blockquote-alert/alert.css */
+@media (prefers-color-scheme: dark) {
+.markdown-alert {
+	--color-border-border: #30363d;
+	--color-accent-fg: #58a6ff;
+	--color-accent-emphasis: #1f6feb;
+	--color-danger-fg: #f85149;
+	--color-danger-emphasis: #da3633;
+	--color-attention-fg: #d29922;
+	--color-attention-emphasis: #9e6a03;
+	--color-done-fg: #a371f7;
+	--color-done-emphasis: #8957e5;
+	--color-success-fg: #3fb950;
+	--color-success-emphasis: #238636;
+	}
+}
+
+@media (prefers-color-scheme: light) {
+.markdown-alert {
+	--color-border-border: #d0d7de;
+	--color-accent-fg: #0969da;
+	--color-accent-emphasis: #0969da;
+	--color-danger-fg: #d1242f;
+	--color-danger-emphasis: #cf222e;
+	--color-attention-fg: #9a6700;
+	--color-attention-emphasis: #9a6700;
+	--color-done-fg: #8250df;
+	--color-done-emphasis: #8250df;
+	--color-success-fg: #1a7f37;
+	--color-success-emphasis: #1f883d;
+	}
+}
+
+.markdown-alert {
+	border-left: .25em solid var(--borderColor-default, var(--color-border-border));
+	color: inherit;
+	margin-bottom: 16px;
+	padding: .5rem 1em
+}
+
+.markdown-alert>:last-child {
+	margin-bottom: 0 !important
+}
+
+.markdown-alert .markdown-alert-title {
+	align-items: center;
+	display: flex;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1
+}
+
+.markdown-alert .markdown-alert-title svg.octicon {
+	margin-right: 8px !important;
+	margin-right: var(--base-size-8, 8px) !important;
+	fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+	border-left-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis))
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+	color: var(--color-accent-fg);
+	color: var(--fgColor-accent, var(--color-accent-fg))
+}
+
+.markdown-alert.markdown-alert-tip {
+	border-left-color: var(--borderColor-success-emphasis, var(--color-success-emphasis))
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+	color: var(--color-success-fg);
+	color: var(--fgColor-success, var(--color-success-fg))
+}
+
+.markdown-alert.markdown-alert-important {
+	border-left-color: var(--borderColor-done-emphasis, var(--color-done-emphasis))
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+	color: var(--color-done-fg);
+	color: var(--fgColor-done, var(--color-done-fg))
+}
+
+.markdown-alert.markdown-alert-warning {
+	border-left-color: var(--borderColor-attention-emphasis, var(--color-attention-emphasis))
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+	color: var(--color-attention-fg);
+	color: var(--fgColor-attention, var(--color-attention-fg))
+}
+
+.markdown-alert.markdown-alert-caution {
+	border-left-color: var(--borderColor-danger-emphasis, var(--color-danger-emphasis))
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+	color: var(--color-danger-fg);
+	color: var(--fgColor-danger, var(--color-danger-fg))
+}
+
+div:has(> table),
+table th,
+table td {
+  border-style: solid;
+  border-color: rgba(128, 128, 128, 0.2);
+}
+</style><p node="[object Object]" class="" data-ag-id="ag-n-257">Ah! You are completely right—I see exactly what happened!</p>
+  <p node="[object Object]" class="" data-ag-id="ag-n-258">In the Antigravity desktop DOM structure, both sent messages and queued messages share a very similar outer container class. Earlier, my regex specifically targeted the <code node="[object Object]" class="whitespace-pre-wrap" data-ag-id="ag-n-259" style="word-break: break-word;">data-testid="revert-button"</code> to inject the new icons next to it. Since queued messages haven't been sent yet, they <em data-ag-id="ag-n-260">don't</em> have a revert button, meaning my code completely skipped them and accidentally injected the "Edit/Redirect queued message" icons onto your past sent messages instead!</p>
+  <p node="[object Object]" class="" data-ag-id="ag-n-261">I've completely ripped out that hacky regex and replaced it with a robust <code node="[object Object]" class="whitespace-pre-wrap" data-ag-id="ag-n-262" style="word-break: break-word;">DOMParser</code> approach inside <code node="[object Object]" class="whitespace-pre-wrap" data-ag-id="ag-n-263" style="word-break: break-word;">app_v8.js</code> that correctly identifies pending messages (by checking that they are <em data-ag-id="ag-n-264">not</em> wrapped in a <code node="[object Object]" class="whitespace-pre-wrap" data-ag-id="ag-n-265" style="word-break: break-word;">role="article"</code> container) and precisely injects the buttons only where they belong.</p>
+  <p node="[object Object]" class="" data-ag-id="ag-n-266">Please completely close the app or refresh the page on your phone to grab the updated <code node="[object Object]" class="whitespace-pre-wrap" data-ag-id="ag-n-267" style="word-break: break-word;">app_v8.js</code> script. The icons will now permanently disappear from sent messages, and they will correctly populate for your pending "Test1" and "Test2" messages! Let me know if the click actions execute successfully!</p></div></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-268"><div class="flex flex-col w-full select-none" data-ag-id="ag-n-269"><div class="flex flex-wrap items-center justify-between pl-3 p-2 border text-sm files-changed-header gap-1 transition-colors duration-200 rounded-xl cursor-pointer hover:bg-muted active:bg-secondary/80" data-ag-id="ag-n-270"><div class="flex items-center gap-1.5 overflow-hidden" data-ag-id="ag-n-271"><span class="text-secondary-foreground truncate" data-ag-id="ag-n-272">1 file changed</span><div class="flex items-center gap-0.5 text-sm" data-ag-id="ag-n-273"><span class="text-green-500" data-ag-id="ag-n-274">+41</span><span class="text-red-500" data-ag-id="ag-n-275">-6</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right h-3.5 w-3.5 shrink-0 text-muted-foreground text-muted-foreground" aria-hidden="true" data-ag-id="ag-n-276"><path d="m9 18 6-6-6-6" data-ag-id="ag-n-277"></path></svg></div><button class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-sm cursor-pointer select-none border bg-muted hover:bg-secondary transition-colors text-secondary-foreground hover:text-foreground review-button" data-ag-id="ag-n-278"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 opacity-70" data-ag-id="ag-n-279"><path d="M510-530h60v-80h80v-60H570v-80H510v80H430v60h80v80ZM430-370H650v-60H430v60ZM332.31-220Q302-220 281-241t-21-51.31V-827.69Q260-858 281-879t51.31-21H610L820-690v397.69Q820-262 799-241t-51.31,21H332.31Zm0-60H747.69q4.62,0 8.46-3.85t3.85-8.46V-660L580-840H332.31q-4.62,0-8.46,3.85T320-827.69v535.38q0,4.62 3.85,8.46t8.46,3.85Zm-160,220Q142-60 121-81t-21-51.31V-660h60v527.69q0,4.62 3.85,8.46t8.46,3.85H580v60H172.31ZM320-280q0,0 0-3.85t0-8.46V-827.69q0-4.62 0-8.46t0-3.85v180v367.69q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-280"></path></svg><span data-ag-id="ag-n-281">Review</span></button></div></div></div></div><div class="pt-3" data-ag-id="ag-n-282"><div data-ag-id="ag-n-283"><div class="flex flex-col gap-2" data-ag-id="ag-n-284"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-285"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-286">5:12 PM</div><div class="flex items-center" data-ag-id="ag-n-287"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r43:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-288"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-289"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-290"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r43:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-291"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-292"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-293"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r43:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-294"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-295"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-296"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" style="" data-ag-id="ag-n-297"><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-298"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="c39050c3-1b80-4efa-a3b3-7959f4cf0eb5" data-ag-id="ag-n-299"><div class="flex w-full flex-row" data-ag-id="ag-n-300"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-301"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-302"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-303"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-304"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-305"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-306"><div class="relative" data-ag-id="ag-n-307"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-308"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-309"></div><div class="whitespace-pre-wrap text-sm" style="word-break: break-word;" data-ag-id="ag-n-310">Test1</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-311" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-312">5:16 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r48:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-313"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-314"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-315"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r49:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r49:" data-tooltip-place="top-end" data-ag-id="ag-n-316"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-317"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-318"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="c39050c3-1b80-4efa-a3b3-7959f4cf0eb5" data-ag-id="ag-n-319"><div class="relative" data-ag-id="ag-n-320"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-321"><span class="text-secondary-foreground" data-ag-id="ag-n-322">Worked for 6s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-323"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-324"></path></svg></button></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-325"></div></div><div class="pt-3" data-ag-id="ag-n-326"><div data-ag-id="ag-n-327"><div class="flex flex-col gap-2" data-ag-id="ag-n-328"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-329"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-330">5:16 PM</div><div class="flex items-center" data-ag-id="ag-n-331"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r4g:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-332"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-333"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-334"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r4g:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-335"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-336"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-337"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r4g:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-338"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-339"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-340"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" data-ag-id="ag-n-341" style=""><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-342"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="c39050c3-1b80-4efa-a3b3-7959f4cf0eb5" data-ag-id="ag-n-343"><div class="flex w-full flex-row" data-ag-id="ag-n-344"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-345"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-346"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-347"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-348"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-349"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-350"><div class="relative" data-ag-id="ag-n-351"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-352"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-353"></div><div class="whitespace-pre-wrap text-sm" data-ag-id="ag-n-354" style="word-break: break-word;">Test2</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-355" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-356">5:16 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r4l:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-357"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-358"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-359"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r4m:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r4m:" data-tooltip-place="top-end" data-ag-id="ag-n-360"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-361"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-362"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="c39050c3-1b80-4efa-a3b3-7959f4cf0eb5" data-ag-id="ag-n-363"><div class="relative" data-ag-id="ag-n-364"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-365"><span class="text-secondary-foreground" data-ag-id="ag-n-366">Worked for 15s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-367"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-368"></path></svg></button></div><div class="px-2 py-1" data-ag-id="ag-n-369"><div class="leading-relaxed select-text text-sm flex flex-col [&amp;_code:not(pre_code)]:bg-code-background [&amp;_code:not(pre_code)]:text-code-foreground [&amp;_code:not(pre_code)]:rounded [&amp;_code:not(pre_code)]:px-1 [&amp;_code:not(pre_code)]:py-0.5 [&amp;_code:not(pre_code)]:text-[0.9em] [&amp;_summary]:cursor-pointer [&amp;_h1]:text-xl [&amp;_h2]:text-lg [&amp;_h3]:text-base [&amp;_h4]:text-sm [&amp;_h1]:font-semibold [&amp;_h2]:font-semibold [&amp;_h3]:font-medium [&amp;_h4]:font-medium [&amp;_h1]:!mb-2 [&amp;_h1]:!mt-6 [&amp;_h2]:!mb-2 [&amp;_h2]:!mt-6 [&amp;_h3]:!mb-1 [&amp;_h3]:!mt-3 [&amp;_h4]:!mb-1 [&amp;_h4]:!mt-3 [&amp;_li.task-list-item]:list-none [&amp;_ul:has(li.task-list-item)]:list-none [&amp;_ul]:my-2 [&amp;_ol]:my-2 [&amp;&gt;ul.contains-task-list]:pl-0 [&amp;&gt;ol.contains-task-list]:pl-0 [&amp;_ul]:pl-10 [&amp;_ol]:pl-10 [&amp;&gt;ul:not(.contains-task-list)]:!pl-4 [&amp;&gt;ol:not(.contains-task-list)]:!pl-4 [&amp;_ul]:list-disc [&amp;_ol]:list-decimal [&amp;_li.task-checked&gt;.task-checked-content]:opacity-50 break-words gap-2" data-ag-id="ag-n-370"><style data-ag-id="ag-n-371">
+/* Copied from remark-github-blockquote-alert/alert.css */
+@media (prefers-color-scheme: dark) {
+.markdown-alert {
+	--color-border-border: #30363d;
+	--color-accent-fg: #58a6ff;
+	--color-accent-emphasis: #1f6feb;
+	--color-danger-fg: #f85149;
+	--color-danger-emphasis: #da3633;
+	--color-attention-fg: #d29922;
+	--color-attention-emphasis: #9e6a03;
+	--color-done-fg: #a371f7;
+	--color-done-emphasis: #8957e5;
+	--color-success-fg: #3fb950;
+	--color-success-emphasis: #238636;
+	}
+}
+
+@media (prefers-color-scheme: light) {
+.markdown-alert {
+	--color-border-border: #d0d7de;
+	--color-accent-fg: #0969da;
+	--color-accent-emphasis: #0969da;
+	--color-danger-fg: #d1242f;
+	--color-danger-emphasis: #cf222e;
+	--color-attention-fg: #9a6700;
+	--color-attention-emphasis: #9a6700;
+	--color-done-fg: #8250df;
+	--color-done-emphasis: #8250df;
+	--color-success-fg: #1a7f37;
+	--color-success-emphasis: #1f883d;
+	}
+}
+
+.markdown-alert {
+	border-left: .25em solid var(--borderColor-default, var(--color-border-border));
+	color: inherit;
+	margin-bottom: 16px;
+	padding: .5rem 1em
+}
+
+.markdown-alert>:last-child {
+	margin-bottom: 0 !important
+}
+
+.markdown-alert .markdown-alert-title {
+	align-items: center;
+	display: flex;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1
+}
+
+.markdown-alert .markdown-alert-title svg.octicon {
+	margin-right: 8px !important;
+	margin-right: var(--base-size-8, 8px) !important;
+	fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+	border-left-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis))
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+	color: var(--color-accent-fg);
+	color: var(--fgColor-accent, var(--color-accent-fg))
+}
+
+.markdown-alert.markdown-alert-tip {
+	border-left-color: var(--borderColor-success-emphasis, var(--color-success-emphasis))
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+	color: var(--color-success-fg);
+	color: var(--fgColor-success, var(--color-success-fg))
+}
+
+.markdown-alert.markdown-alert-important {
+	border-left-color: var(--borderColor-done-emphasis, var(--color-done-emphasis))
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+	color: var(--color-done-fg);
+	color: var(--fgColor-done, var(--color-done-fg))
+}
+
+.markdown-alert.markdown-alert-warning {
+	border-left-color: var(--borderColor-attention-emphasis, var(--color-attention-emphasis))
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+	color: var(--color-attention-fg);
+	color: var(--fgColor-attention, var(--color-attention-fg))
+}
+
+.markdown-alert.markdown-alert-caution {
+	border-left-color: var(--borderColor-danger-emphasis, var(--color-danger-emphasis))
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+	color: var(--color-danger-fg);
+	color: var(--fgColor-danger, var(--color-danger-fg))
+}
+
+div:has(> table),
+table th,
+table td {
+  border-style: solid;
+  border-color: rgba(128, 128, 128, 0.2);
+}
+</style><p node="[object Object]" class="" data-ag-id="ag-n-372">Got it, I see your new queued "Test1" and "Test2" messages coming through!</p>
+  <p node="[object Object]" class="" data-ag-id="ag-n-373">You should definitely see the icons exclusively on those pending messages now. Let me know if clicking them properly pulls the text into your input box!</p></div></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-374"></div></div><div class="pt-3" data-ag-id="ag-n-375"><div data-ag-id="ag-n-376"><div class="flex flex-col gap-2" data-ag-id="ag-n-377"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-378"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-379">5:16 PM</div><div class="flex items-center" data-ag-id="ag-n-380"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r4t:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-381"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-382"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-383"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r4t:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-384"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-385"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-386"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r4t:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-387"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-388"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-389"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" data-ag-id="ag-n-390" style=""><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-391"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="c39050c3-1b80-4efa-a3b3-7959f4cf0eb5" data-ag-id="ag-n-392"><div class="flex w-full flex-row" data-ag-id="ag-n-393"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-394"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-395"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-396"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-397"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-398"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-399"><div class="relative" data-ag-id="ag-n-400"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-401"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-402"></div><div class="whitespace-pre-wrap text-sm" data-ag-id="ag-n-403" style="word-break: break-word;">Once again the icons in the phone UI are not present for pending messages but they are for sent messages, which makes no sense</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-404" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-405">5:17 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r52:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-406"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-407"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-408"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r53:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r53:" data-tooltip-place="top-end" data-ag-id="ag-n-409"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-410"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-411"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="c39050c3-1b80-4efa-a3b3-7959f4cf0eb5" data-ag-id="ag-n-412"><div class="relative" data-ag-id="ag-n-413"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-414"><span class="text-secondary-foreground" data-ag-id="ag-n-415">Worked for 3m</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-416"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-417"></path></svg></button></div><div class="px-2 py-1" data-ag-id="ag-n-418"><div class="leading-relaxed select-text text-sm flex flex-col [&amp;_code:not(pre_code)]:bg-code-background [&amp;_code:not(pre_code)]:text-code-foreground [&amp;_code:not(pre_code)]:rounded [&amp;_code:not(pre_code)]:px-1 [&amp;_code:not(pre_code)]:py-0.5 [&amp;_code:not(pre_code)]:text-[0.9em] [&amp;_summary]:cursor-pointer [&amp;_h1]:text-xl [&amp;_h2]:text-lg [&amp;_h3]:text-base [&amp;_h4]:text-sm [&amp;_h1]:font-semibold [&amp;_h2]:font-semibold [&amp;_h3]:font-medium [&amp;_h4]:font-medium [&amp;_h1]:!mb-2 [&amp;_h1]:!mt-6 [&amp;_h2]:!mb-2 [&amp;_h2]:!mt-6 [&amp;_h3]:!mb-1 [&amp;_h3]:!mt-3 [&amp;_h4]:!mb-1 [&amp;_h4]:!mt-3 [&amp;_li.task-list-item]:list-none [&amp;_ul:has(li.task-list-item)]:list-none [&amp;_ul]:my-2 [&amp;_ol]:my-2 [&amp;&gt;ul.contains-task-list]:pl-0 [&amp;&gt;ol.contains-task-list]:pl-0 [&amp;_ul]:pl-10 [&amp;_ol]:pl-10 [&amp;&gt;ul:not(.contains-task-list)]:!pl-4 [&amp;&gt;ol:not(.contains-task-list)]:!pl-4 [&amp;_ul]:list-disc [&amp;_ol]:list-decimal [&amp;_li.task-checked&gt;.task-checked-content]:opacity-50 break-words gap-2" data-ag-id="ag-n-419"><style data-ag-id="ag-n-420">
+/* Copied from remark-github-blockquote-alert/alert.css */
+@media (prefers-color-scheme: dark) {
+.markdown-alert {
+	--color-border-border: #30363d;
+	--color-accent-fg: #58a6ff;
+	--color-accent-emphasis: #1f6feb;
+	--color-danger-fg: #f85149;
+	--color-danger-emphasis: #da3633;
+	--color-attention-fg: #d29922;
+	--color-attention-emphasis: #9e6a03;
+	--color-done-fg: #a371f7;
+	--color-done-emphasis: #8957e5;
+	--color-success-fg: #3fb950;
+	--color-success-emphasis: #238636;
+	}
+}
+
+@media (prefers-color-scheme: light) {
+.markdown-alert {
+	--color-border-border: #d0d7de;
+	--color-accent-fg: #0969da;
+	--color-accent-emphasis: #0969da;
+	--color-danger-fg: #d1242f;
+	--color-danger-emphasis: #cf222e;
+	--color-attention-fg: #9a6700;
+	--color-attention-emphasis: #9a6700;
+	--color-done-fg: #8250df;
+	--color-done-emphasis: #8250df;
+	--color-success-fg: #1a7f37;
+	--color-success-emphasis: #1f883d;
+	}
+}
+
+.markdown-alert {
+	border-left: .25em solid var(--borderColor-default, var(--color-border-border));
+	color: inherit;
+	margin-bottom: 16px;
+	padding: .5rem 1em
+}
+
+.markdown-alert>:last-child {
+	margin-bottom: 0 !important
+}
+
+.markdown-alert .markdown-alert-title {
+	align-items: center;
+	display: flex;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1
+}
+
+.markdown-alert .markdown-alert-title svg.octicon {
+	margin-right: 8px !important;
+	margin-right: var(--base-size-8, 8px) !important;
+	fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+	border-left-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis))
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+	color: var(--color-accent-fg);
+	color: var(--fgColor-accent, var(--color-accent-fg))
+}
+
+.markdown-alert.markdown-alert-tip {
+	border-left-color: var(--borderColor-success-emphasis, var(--color-success-emphasis))
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+	color: var(--color-success-fg);
+	color: var(--fgColor-success, var(--color-success-fg))
+}
+
+.markdown-alert.markdown-alert-important {
+	border-left-color: var(--borderColor-done-emphasis, var(--color-done-emphasis))
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+	color: var(--color-done-fg);
+	color: var(--fgColor-done, var(--color-done-fg))
+}
+
+.markdown-alert.markdown-alert-warning {
+	border-left-color: var(--borderColor-attention-emphasis, var(--color-attention-emphasis))
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+	color: var(--color-attention-fg);
+	color: var(--fgColor-attention, var(--color-attention-fg))
+}
+
+.markdown-alert.markdown-alert-caution {
+	border-left-color: var(--borderColor-danger-emphasis, var(--color-danger-emphasis))
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+	color: var(--color-danger-fg);
+	color: var(--fgColor-danger, var(--color-danger-fg))
+}
+
+div:has(> table),
+table th,
+table td {
+  border-style: solid;
+  border-color: rgba(128, 128, 128, 0.2);
+}
+</style><p node="[object Object]" class="" data-ag-id="ag-n-421">I'm back from my sleep! Did you get a chance to refresh the page and test it while I was busy? You should have seen the Edit/Redirect icons on any pending messages you queued, and they should be completely gone from the older sent messages. Let me know if everything worked as expected!</p></div></div><div class="flex flex-row" data-ag-id="ag-n-422"><div class="min-w-0 grow" data-ag-id="ag-n-423"><div class="w-full my-0.5" data-ag-id="ag-n-424"><div class="flex items-center" data-ag-id="ag-n-425"><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-426"></div><span class="px-3 text-sm text-secondary-foreground whitespace-nowrap" data-ag-id="ag-n-427">Sleep for 30s finished</span><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-428"></div></div></div></div></div><div class="relative" data-ag-id="ag-n-429"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-430"><span class="text-secondary-foreground" data-ag-id="ag-n-431">Worked for 9s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-432"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-433"></path></svg></button></div><div class="px-2 py-1" data-ag-id="ag-n-434"><div class="leading-relaxed select-text text-sm flex flex-col [&amp;_code:not(pre_code)]:bg-code-background [&amp;_code:not(pre_code)]:text-code-foreground [&amp;_code:not(pre_code)]:rounded [&amp;_code:not(pre_code)]:px-1 [&amp;_code:not(pre_code)]:py-0.5 [&amp;_code:not(pre_code)]:text-[0.9em] [&amp;_summary]:cursor-pointer [&amp;_h1]:text-xl [&amp;_h2]:text-lg [&amp;_h3]:text-base [&amp;_h4]:text-sm [&amp;_h1]:font-semibold [&amp;_h2]:font-semibold [&amp;_h3]:font-medium [&amp;_h4]:font-medium [&amp;_h1]:!mb-2 [&amp;_h1]:!mt-6 [&amp;_h2]:!mb-2 [&amp;_h2]:!mt-6 [&amp;_h3]:!mb-1 [&amp;_h3]:!mt-3 [&amp;_h4]:!mb-1 [&amp;_h4]:!mt-3 [&amp;_li.task-list-item]:list-none [&amp;_ul:has(li.task-list-item)]:list-none [&amp;_ul]:my-2 [&amp;_ol]:my-2 [&amp;&gt;ul.contains-task-list]:pl-0 [&amp;&gt;ol.contains-task-list]:pl-0 [&amp;_ul]:pl-10 [&amp;_ol]:pl-10 [&amp;&gt;ul:not(.contains-task-list)]:!pl-4 [&amp;&gt;ol:not(.contains-task-list)]:!pl-4 [&amp;_ul]:list-disc [&amp;_ol]:list-decimal [&amp;_li.task-checked&gt;.task-checked-content]:opacity-50 break-words gap-2" data-ag-id="ag-n-435"><style data-ag-id="ag-n-436">
+/* Copied from remark-github-blockquote-alert/alert.css */
+@media (prefers-color-scheme: dark) {
+.markdown-alert {
+	--color-border-border: #30363d;
+	--color-accent-fg: #58a6ff;
+	--color-accent-emphasis: #1f6feb;
+	--color-danger-fg: #f85149;
+	--color-danger-emphasis: #da3633;
+	--color-attention-fg: #d29922;
+	--color-attention-emphasis: #9e6a03;
+	--color-done-fg: #a371f7;
+	--color-done-emphasis: #8957e5;
+	--color-success-fg: #3fb950;
+	--color-success-emphasis: #238636;
+	}
+}
+
+@media (prefers-color-scheme: light) {
+.markdown-alert {
+	--color-border-border: #d0d7de;
+	--color-accent-fg: #0969da;
+	--color-accent-emphasis: #0969da;
+	--color-danger-fg: #d1242f;
+	--color-danger-emphasis: #cf222e;
+	--color-attention-fg: #9a6700;
+	--color-attention-emphasis: #9a6700;
+	--color-done-fg: #8250df;
+	--color-done-emphasis: #8250df;
+	--color-success-fg: #1a7f37;
+	--color-success-emphasis: #1f883d;
+	}
+}
+
+.markdown-alert {
+	border-left: .25em solid var(--borderColor-default, var(--color-border-border));
+	color: inherit;
+	margin-bottom: 16px;
+	padding: .5rem 1em
+}
+
+.markdown-alert>:last-child {
+	margin-bottom: 0 !important
+}
+
+.markdown-alert .markdown-alert-title {
+	align-items: center;
+	display: flex;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1
+}
+
+.markdown-alert .markdown-alert-title svg.octicon {
+	margin-right: 8px !important;
+	margin-right: var(--base-size-8, 8px) !important;
+	fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+	border-left-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis))
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+	color: var(--color-accent-fg);
+	color: var(--fgColor-accent, var(--color-accent-fg))
+}
+
+.markdown-alert.markdown-alert-tip {
+	border-left-color: var(--borderColor-success-emphasis, var(--color-success-emphasis))
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+	color: var(--color-success-fg);
+	color: var(--fgColor-success, var(--color-success-fg))
+}
+
+.markdown-alert.markdown-alert-important {
+	border-left-color: var(--borderColor-done-emphasis, var(--color-done-emphasis))
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+	color: var(--color-done-fg);
+	color: var(--fgColor-done, var(--color-done-fg))
+}
+
+.markdown-alert.markdown-alert-warning {
+	border-left-color: var(--borderColor-attention-emphasis, var(--color-attention-emphasis))
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+	color: var(--color-attention-fg);
+	color: var(--fgColor-attention, var(--color-attention-fg))
+}
+
+.markdown-alert.markdown-alert-caution {
+	border-left-color: var(--borderColor-danger-emphasis, var(--color-danger-emphasis))
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+	color: var(--color-danger-fg);
+	color: var(--fgColor-danger, var(--color-danger-fg))
+}
+
+div:has(> table),
+table th,
+table td {
+  border-style: solid;
+  border-color: rgba(128, 128, 128, 0.2);
+}
+</style><p node="[object Object]" class="" data-ag-id="ag-n-437">I'm standing by—let me know how the test went!</p></div></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-438"><div class="flex flex-col w-full select-none" data-ag-id="ag-n-439"><div class="flex flex-wrap items-center justify-between pl-3 p-2 border text-sm files-changed-header gap-1 transition-colors duration-200 rounded-xl cursor-pointer hover:bg-muted active:bg-secondary/80" data-ag-id="ag-n-440"><div class="flex items-center gap-1.5 overflow-hidden" data-ag-id="ag-n-441"><span class="text-secondary-foreground truncate" data-ag-id="ag-n-442">1 file changed</span><div class="flex items-center gap-0.5 text-sm" data-ag-id="ag-n-443"><span class="text-green-500" data-ag-id="ag-n-444">+1</span><span class="text-red-500" data-ag-id="ag-n-445">-1</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right h-3.5 w-3.5 shrink-0 text-muted-foreground text-muted-foreground" aria-hidden="true" data-ag-id="ag-n-446"><path d="m9 18 6-6-6-6" data-ag-id="ag-n-447"></path></svg></div><button class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-sm cursor-pointer select-none border bg-muted hover:bg-secondary transition-colors text-secondary-foreground hover:text-foreground review-button" data-ag-id="ag-n-448"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 opacity-70" data-ag-id="ag-n-449"><path d="M510-530h60v-80h80v-60H570v-80H510v80H430v60h80v80ZM430-370H650v-60H430v60ZM332.31-220Q302-220 281-241t-21-51.31V-827.69Q260-858 281-879t51.31-21H610L820-690v397.69Q820-262 799-241t-51.31,21H332.31Zm0-60H747.69q4.62,0 8.46-3.85t3.85-8.46V-660L580-840H332.31q-4.62,0-8.46,3.85T320-827.69v535.38q0,4.62 3.85,8.46t8.46,3.85Zm-160,220Q142-60 121-81t-21-51.31V-660h60v527.69q0,4.62 3.85,8.46t8.46,3.85H580v60H172.31ZM320-280q0,0 0-3.85t0-8.46V-827.69q0-4.62 0-8.46t0-3.85v180v367.69q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-450"></path></svg><span data-ag-id="ag-n-451">Review</span></button></div></div></div></div><div class="pt-3" data-ag-id="ag-n-452"><div data-ag-id="ag-n-453"><div class="flex flex-col gap-2" data-ag-id="ag-n-454"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-455"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-456">5:17 PM</div><div class="flex items-center" data-ag-id="ag-n-457"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r6m:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-458"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-459"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-460"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r6m:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-461"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-462"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-463"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r6m:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-464"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-465"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-466"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" data-ag-id="ag-n-467" style=""><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-468"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="8604e9c6-eeb5-4f0f-bb6b-c770ec2fe934" data-ag-id="ag-n-469"><div class="flex w-full flex-row" data-ag-id="ag-n-470"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-471"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-472"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-473"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-474"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-475"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-476"><div class="relative" data-ag-id="ag-n-477"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-478"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-479"></div><div class="whitespace-pre-wrap text-sm" data-ag-id="ag-n-480" style="word-break: break-word;">Test1</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-481" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-482">5:22 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r6r:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-483"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-484"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-485"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r6s:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r6s:" data-tooltip-place="top-end" data-ag-id="ag-n-486"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-487"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-488"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="8604e9c6-eeb5-4f0f-bb6b-c770ec2fe934" data-ag-id="ag-n-489"><div class="relative" data-ag-id="ag-n-490"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-491"><span class="text-secondary-foreground" data-ag-id="ag-n-492">Worked for 5s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-493"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-494"></path></svg></button></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-495"></div></div><div class="pt-3" data-ag-id="ag-n-496"><div data-ag-id="ag-n-497"><div class="flex flex-col gap-2" data-ag-id="ag-n-498"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-499"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-500">5:22 PM</div><div class="flex items-center" data-ag-id="ag-n-501"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r73:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-502"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-503"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-504"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r73:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-505"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-506"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-507"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r73:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-508"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-509"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-510"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" data-ag-id="ag-n-511" style=""><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-512"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="8604e9c6-eeb5-4f0f-bb6b-c770ec2fe934" data-ag-id="ag-n-513"><div class="flex w-full flex-row" data-ag-id="ag-n-514"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-515"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-516"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-517"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-518"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-519"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-520"><div class="relative" data-ag-id="ag-n-521"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-522"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-523"></div><div class="whitespace-pre-wrap text-sm" data-ag-id="ag-n-524" style="word-break: break-word;">Test2</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-525" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-526">5:22 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r78:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-527"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-528"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-529"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r79:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r79:" data-tooltip-place="top-end" data-ag-id="ag-n-530"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-531"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-532"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="8604e9c6-eeb5-4f0f-bb6b-c770ec2fe934" data-ag-id="ag-n-533"><div class="relative" data-ag-id="ag-n-534"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-535"><span class="text-secondary-foreground" data-ag-id="ag-n-536">Worked for 35s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-537"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-538"></path></svg></button></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-539"></div></div><div class="pt-3" data-ag-id="ag-n-540"><div data-ag-id="ag-n-541"><div class="flex flex-col gap-2" data-ag-id="ag-n-542"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-543"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-544">5:22 PM</div><div class="flex items-center" data-ag-id="ag-n-545"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r7g:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-546"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-547"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-548"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r7g:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-549"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-550"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-551"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r7g:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-552"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-553"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-554"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" data-ag-id="ag-n-555" style=""><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-556"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="8604e9c6-eeb5-4f0f-bb6b-c770ec2fe934" data-ag-id="ag-n-557"><div class="flex w-full flex-row" data-ag-id="ag-n-558"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-559"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-560"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-561"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-562"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-563"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-564"><div class="relative" data-ag-id="ag-n-565"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-566"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-567"></div><div class="whitespace-pre-wrap text-sm" data-ag-id="ag-n-568" style="word-break: break-word;">Test3</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-569" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-570">5:22 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r7l:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-571"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-572"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-573"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r7m:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r7m:" data-tooltip-place="top-end" data-ag-id="ag-n-574"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-575"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-576"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="8604e9c6-eeb5-4f0f-bb6b-c770ec2fe934" data-ag-id="ag-n-577"><div class="relative" data-ag-id="ag-n-578"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-579"><span class="text-secondary-foreground" data-ag-id="ag-n-580">Worked for 26s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-581"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-582"></path></svg></button></div><div class="flex flex-row" data-ag-id="ag-n-583"><div class="min-w-0 grow" data-ag-id="ag-n-584"><div class="w-full my-0.5" data-ag-id="ag-n-585"><div class="flex items-center" data-ag-id="ag-n-586"><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-587"></div><span class="px-3 text-sm text-secondary-foreground whitespace-nowrap" data-ag-id="ag-n-588">Sleep for 30s finished</span><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-589"></div></div></div></div></div><div class="px-2 py-1" data-ag-id="ag-n-590"><div class="leading-relaxed select-text text-sm flex flex-col [&amp;_code:not(pre_code)]:bg-code-background [&amp;_code:not(pre_code)]:text-code-foreground [&amp;_code:not(pre_code)]:rounded [&amp;_code:not(pre_code)]:px-1 [&amp;_code:not(pre_code)]:py-0.5 [&amp;_code:not(pre_code)]:text-[0.9em] [&amp;_summary]:cursor-pointer [&amp;_h1]:text-xl [&amp;_h2]:text-lg [&amp;_h3]:text-base [&amp;_h4]:text-sm [&amp;_h1]:font-semibold [&amp;_h2]:font-semibold [&amp;_h3]:font-medium [&amp;_h4]:font-medium [&amp;_h1]:!mb-2 [&amp;_h1]:!mt-6 [&amp;_h2]:!mb-2 [&amp;_h2]:!mt-6 [&amp;_h3]:!mb-1 [&amp;_h3]:!mt-3 [&amp;_h4]:!mb-1 [&amp;_h4]:!mt-3 [&amp;_li.task-list-item]:list-none [&amp;_ul:has(li.task-list-item)]:list-none [&amp;_ul]:my-2 [&amp;_ol]:my-2 [&amp;&gt;ul.contains-task-list]:pl-0 [&amp;&gt;ol.contains-task-list]:pl-0 [&amp;_ul]:pl-10 [&amp;_ol]:pl-10 [&amp;&gt;ul:not(.contains-task-list)]:!pl-4 [&amp;&gt;ol:not(.contains-task-list)]:!pl-4 [&amp;_ul]:list-disc [&amp;_ol]:list-decimal [&amp;_li.task-checked&gt;.task-checked-content]:opacity-50 break-words gap-2" data-ag-id="ag-n-591"><style data-ag-id="ag-n-592">
+/* Copied from remark-github-blockquote-alert/alert.css */
+@media (prefers-color-scheme: dark) {
+.markdown-alert {
+	--color-border-border: #30363d;
+	--color-accent-fg: #58a6ff;
+	--color-accent-emphasis: #1f6feb;
+	--color-danger-fg: #f85149;
+	--color-danger-emphasis: #da3633;
+	--color-attention-fg: #d29922;
+	--color-attention-emphasis: #9e6a03;
+	--color-done-fg: #a371f7;
+	--color-done-emphasis: #8957e5;
+	--color-success-fg: #3fb950;
+	--color-success-emphasis: #238636;
+	}
+}
+
+@media (prefers-color-scheme: light) {
+.markdown-alert {
+	--color-border-border: #d0d7de;
+	--color-accent-fg: #0969da;
+	--color-accent-emphasis: #0969da;
+	--color-danger-fg: #d1242f;
+	--color-danger-emphasis: #cf222e;
+	--color-attention-fg: #9a6700;
+	--color-attention-emphasis: #9a6700;
+	--color-done-fg: #8250df;
+	--color-done-emphasis: #8250df;
+	--color-success-fg: #1a7f37;
+	--color-success-emphasis: #1f883d;
+	}
+}
+
+.markdown-alert {
+	border-left: .25em solid var(--borderColor-default, var(--color-border-border));
+	color: inherit;
+	margin-bottom: 16px;
+	padding: .5rem 1em
+}
+
+.markdown-alert>:last-child {
+	margin-bottom: 0 !important
+}
+
+.markdown-alert .markdown-alert-title {
+	align-items: center;
+	display: flex;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1
+}
+
+.markdown-alert .markdown-alert-title svg.octicon {
+	margin-right: 8px !important;
+	margin-right: var(--base-size-8, 8px) !important;
+	fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+	border-left-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis))
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+	color: var(--color-accent-fg);
+	color: var(--fgColor-accent, var(--color-accent-fg))
+}
+
+.markdown-alert.markdown-alert-tip {
+	border-left-color: var(--borderColor-success-emphasis, var(--color-success-emphasis))
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+	color: var(--color-success-fg);
+	color: var(--fgColor-success, var(--color-success-fg))
+}
+
+.markdown-alert.markdown-alert-important {
+	border-left-color: var(--borderColor-done-emphasis, var(--color-done-emphasis))
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+	color: var(--color-done-fg);
+	color: var(--fgColor-done, var(--color-done-fg))
+}
+
+.markdown-alert.markdown-alert-warning {
+	border-left-color: var(--borderColor-attention-emphasis, var(--color-attention-emphasis))
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+	color: var(--color-attention-fg);
+	color: var(--fgColor-attention, var(--color-attention-fg))
+}
+
+.markdown-alert.markdown-alert-caution {
+	border-left-color: var(--borderColor-danger-emphasis, var(--color-danger-emphasis))
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+	color: var(--color-danger-fg);
+	color: var(--fgColor-danger, var(--color-danger-fg))
+}
+
+div:has(> table),
+table th,
+table td {
+  border-style: solid;
+  border-color: rgba(128, 128, 128, 0.2);
+}
+</style><p node="[object Object]" class="" data-ag-id="ag-n-593">I see the new messages! Did the icons show up for you, and did clicking them successfully redirect the text into the input field? Let me know!</p></div></div><div class="flex flex-row" data-ag-id="ag-n-594"><div class="min-w-0 grow" data-ag-id="ag-n-595"><div class="w-full my-0.5" data-ag-id="ag-n-596"><div class="flex items-center" data-ag-id="ag-n-597"><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-598"></div><span class="px-3 text-sm text-secondary-foreground whitespace-nowrap" data-ag-id="ag-n-599">Sleep for 30s finished</span><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-600"></div></div></div></div></div><div class="relative" data-ag-id="ag-n-601"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-602"><span class="text-secondary-foreground" data-ag-id="ag-n-603">Worked for 9s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-604"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-605"></path></svg></button></div><div class="px-2 py-1" data-ag-id="ag-n-606"><div class="leading-relaxed select-text text-sm flex flex-col [&amp;_code:not(pre_code)]:bg-code-background [&amp;_code:not(pre_code)]:text-code-foreground [&amp;_code:not(pre_code)]:rounded [&amp;_code:not(pre_code)]:px-1 [&amp;_code:not(pre_code)]:py-0.5 [&amp;_code:not(pre_code)]:text-[0.9em] [&amp;_summary]:cursor-pointer [&amp;_h1]:text-xl [&amp;_h2]:text-lg [&amp;_h3]:text-base [&amp;_h4]:text-sm [&amp;_h1]:font-semibold [&amp;_h2]:font-semibold [&amp;_h3]:font-medium [&amp;_h4]:font-medium [&amp;_h1]:!mb-2 [&amp;_h1]:!mt-6 [&amp;_h2]:!mb-2 [&amp;_h2]:!mt-6 [&amp;_h3]:!mb-1 [&amp;_h3]:!mt-3 [&amp;_h4]:!mb-1 [&amp;_h4]:!mt-3 [&amp;_li.task-list-item]:list-none [&amp;_ul:has(li.task-list-item)]:list-none [&amp;_ul]:my-2 [&amp;_ol]:my-2 [&amp;&gt;ul.contains-task-list]:pl-0 [&amp;&gt;ol.contains-task-list]:pl-0 [&amp;_ul]:pl-10 [&amp;_ol]:pl-10 [&amp;&gt;ul:not(.contains-task-list)]:!pl-4 [&amp;&gt;ol:not(.contains-task-list)]:!pl-4 [&amp;_ul]:list-disc [&amp;_ol]:list-decimal [&amp;_li.task-checked&gt;.task-checked-content]:opacity-50 break-words gap-2" data-ag-id="ag-n-607"><style data-ag-id="ag-n-608">
+/* Copied from remark-github-blockquote-alert/alert.css */
+@media (prefers-color-scheme: dark) {
+.markdown-alert {
+	--color-border-border: #30363d;
+	--color-accent-fg: #58a6ff;
+	--color-accent-emphasis: #1f6feb;
+	--color-danger-fg: #f85149;
+	--color-danger-emphasis: #da3633;
+	--color-attention-fg: #d29922;
+	--color-attention-emphasis: #9e6a03;
+	--color-done-fg: #a371f7;
+	--color-done-emphasis: #8957e5;
+	--color-success-fg: #3fb950;
+	--color-success-emphasis: #238636;
+	}
+}
+
+@media (prefers-color-scheme: light) {
+.markdown-alert {
+	--color-border-border: #d0d7de;
+	--color-accent-fg: #0969da;
+	--color-accent-emphasis: #0969da;
+	--color-danger-fg: #d1242f;
+	--color-danger-emphasis: #cf222e;
+	--color-attention-fg: #9a6700;
+	--color-attention-emphasis: #9a6700;
+	--color-done-fg: #8250df;
+	--color-done-emphasis: #8250df;
+	--color-success-fg: #1a7f37;
+	--color-success-emphasis: #1f883d;
+	}
+}
+
+.markdown-alert {
+	border-left: .25em solid var(--borderColor-default, var(--color-border-border));
+	color: inherit;
+	margin-bottom: 16px;
+	padding: .5rem 1em
+}
+
+.markdown-alert>:last-child {
+	margin-bottom: 0 !important
+}
+
+.markdown-alert .markdown-alert-title {
+	align-items: center;
+	display: flex;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1
+}
+
+.markdown-alert .markdown-alert-title svg.octicon {
+	margin-right: 8px !important;
+	margin-right: var(--base-size-8, 8px) !important;
+	fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+	border-left-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis))
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+	color: var(--color-accent-fg);
+	color: var(--fgColor-accent, var(--color-accent-fg))
+}
+
+.markdown-alert.markdown-alert-tip {
+	border-left-color: var(--borderColor-success-emphasis, var(--color-success-emphasis))
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+	color: var(--color-success-fg);
+	color: var(--fgColor-success, var(--color-success-fg))
+}
+
+.markdown-alert.markdown-alert-important {
+	border-left-color: var(--borderColor-done-emphasis, var(--color-done-emphasis))
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+	color: var(--color-done-fg);
+	color: var(--fgColor-done, var(--color-done-fg))
+}
+
+.markdown-alert.markdown-alert-warning {
+	border-left-color: var(--borderColor-attention-emphasis, var(--color-attention-emphasis))
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+	color: var(--color-attention-fg);
+	color: var(--fgColor-attention, var(--color-attention-fg))
+}
+
+.markdown-alert.markdown-alert-caution {
+	border-left-color: var(--borderColor-danger-emphasis, var(--color-danger-emphasis))
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+	color: var(--color-danger-fg);
+	color: var(--fgColor-danger, var(--color-danger-fg))
+}
+
+div:has(> table),
+table th,
+table td {
+  border-style: solid;
+  border-color: rgba(128, 128, 128, 0.2);
+}
+</style><p node="[object Object]" class="" data-ag-id="ag-n-609">Waiting on you! Take your time.</p></div></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-610"></div></div><div class="pt-3" data-ag-id="ag-n-611"><div data-ag-id="ag-n-612"><div class="flex flex-col gap-2" data-ag-id="ag-n-613"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-614"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-615">5:22 PM</div><div class="flex items-center" data-ag-id="ag-n-616"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r81:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-617"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-618"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-619"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r81:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-620"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-621"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-622"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r81:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-623"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-624"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-625"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" style="" data-ag-id="ag-n-626"><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-627"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="2c8fa38d-c09c-42ea-b4f1-7be02a16c5f1" data-ag-id="ag-n-628"><div class="flex w-full flex-row" data-ag-id="ag-n-629"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-630"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-631"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-632"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-633"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-634"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-635"><div class="relative cursor-pointer" data-ag-id="ag-n-636"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-637" style="mask-image: linear-gradient(black 85%, transparent 100%);"><div class="relative flex flex-wrap gap-2 mb-2" data-ag-id="ag-n-638"><div class="relative inline-block cursor-pointer overflow-hidden rounded-md border border-gray-500/25 transition-opacity hover:opacity-50" data-tooltip-id=":r86:-img-0" data-tooltip-place="top" data-ag-id="ag-n-639"><img src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/2wBDAQMDAwQDBAgEBAgQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD/wAARCAFAAJMDASIAAhEBAxEB/8QAHQABAAMBAQADAQAAAAAAAAAAAAUGBwQDAQIICf/EAEsQAAICAQMBBAMKDAUCBAcAAAECAwQABQYREgcTFCEiMZIVFkFRUlWRoaPSCBcjMlNUV2GV09XhQmJxk9EYJAkzNYFjc4KisvDx/8QAGwEBAQADAQEBAAAAAAAAAAAAAAECAwQGBQf/xAA1EQACAQIEBQIDBQkBAAAAAAAAARECAwQSEyEFMUFRYRTwBpGhFSIjgZIyQnFyc5OxwdHh/9oADAMBAAIRAxEAPwD+eWXfR+yu9rkO0ZNN3No80u7bklFK0cV2WejMs8MQSRErsZ5G8RG4iqeIl6TyUB4U1j3Og+U/0j/jLHQ3tv3S4NOraXv7c1SHSEmj06ODVZo1prMVMqwhWAjDlELBeOroXnngZ2enrOfWpPbe/ZNqWxquk27e59C1SPWLuqU4Dpsk8ilaNgwNYR5IkjmrysGMU0LSI3Q6kq6Oi7LvL/w/+2DY+maPe1TU9u2bGq7g0/a70al92np6hciSSGOYtGsfHTJHyyO4HWOORyRhetbj3XuXwvvk3brerCk8slYX70lgQtK3VIUDk9JdgC3H5x8zzli1Htk7WtZ0zTNG1ntL3VfoaNNDY06ra1izLDTlhUrFJCjOVjZFJClQCoJA4zjxOExdT/C5fxS3+R6bgeO4NaojH0/ely3S6k6YUJRUoacztvK32h90f4NnaFI+odWmd1Dpla/bsSzTJH0pTimksAxtxKrJ3BR1ZA0cksCSBGljDfTTPwb+0PWtL2vrGlaQbFbeYlGikWYka5JHNPC8SKxBZw8BUgAgGauCQZow0Bo++t47eCDQNy6ppgilSdPB3JYemRBIquOhhwwE0wB9YErj/EefvHv/AHtCtdIt1aui1JK8tcLemAheBGSBk9L0TGjuqEfmhiBwCc4VgeJ9X9V/w9TVxf4P3y2l+ivs+mfvD59Go3lcO6OzvVto6vqG3tbCV9T0ufw1qATxTd1LweULRsy9SkEMAeVYEEAgjIXSds65runa3q2lUDPU27STUdTl61UV672YayvwxBbmazCnC8n0+eOAxElf1TUdTmntXbk0ti1I0s87uWkkdiSzMzcksSSST5+eRXudD8p/pH/GduCwmMoVXqHPY8x8TY/gWIqtfY9t0wnncNJvaITbajf5rnBH4yQ9zoPlP9I/4x7nQfKf6R/xnb6es8vrUkfjJD3Og+U/0j/jHudB8p/pH/GPT1jWpLBs/sf7T9/6Pd3DszY2saxpWmpZe7dp1XlgqiCDv5O9dQRGe781DcdZ9Feo+WTv/Tx2ip2PN25W4aFXbDVFuVXmnIluJ4/wLiFQpDNHN0lwSOEkRvPnjITQN7b82ppz6Ptbf25dHoSStYerp+qzV4WlZVVnKIwUsVRATxyQqj4BkRDPfr6bY0aDVr8en25ElsVEnYQzOnPQzoPRYryeCRyOTxj09wa1JoPaR+DNvXso7QtJ7Nt66/t6jqOr6XPqkU8stmKvGIpLMRiYywK5dpaciRlEaOXriaN3Rw+V2z2L75btHfsr2/Urbj19AS0ekTiZFKx9codmC90YuHEgkC9BRueAOTAahNf1ezFc1XVr12eCCCrFLYnaR0hhjWKGNS3JCJGiIqjyVVUDgADOjbur6/tHUfdjae5NW0W/3UkHitOuPWm7t16XTrjIbpZSQRzwQeDj09wa1Jctl9iFDX66ybm35W0Ka1Ndi0+FaTWBZFNWay7SM0ccKqFJBdhyAfV5c1PtJ7PdX7NNzvtzVnEnXClqtN09BlgfnpZkPJRvIqynnhlIBYcMZva3an2h7M0y1o2390TQ0rsjy2IZ60FkSM44bnvo2PB+Eeo8nn15Xdx6nqu7tatbi3Hqc97UbjB5p36QWIAAAAAAAAAAAAAAAzGnD3f3oNl2/Zb/AA00oXPvCn6zHgruMkPc6D5T/SP+MZl6es161JPbY0ca/uDT9GMvdLcsRws4HJUMwBIHwkDP1tt7sX2oNBtWNP2/t16+mRmSU6hZq+Jk445KrM3eOTz6lBHPkPPgZ+P9M1CzpV+vqNOTu560qyxvwD0sp5B4Pl6xmyVvwiOa6C5txWm6QHaO0UVj+5SpIH7uTn6V8IcQ4Vgrdz1sKttQ6qXVt1Sjl75weR47hcbiaqPTy6VMpON+5ucPYLUu1RepbO2xJXNIXmldasMaJwpZC8vSveKHjJj56uJEIBDA543ewjT9Kglsbi2tt3RQtGO9ClqmjyT94JDFEEhjdkkcQykd4EUBQWZeperGf+o0AFV0SZQy9LAXz5rxxx+Z6uPL/TPOX8IkzzS2JdHnaWcESu14ln59fUejz/8AfPYLj/BJ3vW4/pVT/hr6HxPsziEfsVT/ADqPf5m16l+Dlqem0b+pWez3b5r6ZFBYsvDJQm6Y5lZ43ARyXBVHblQeFjcngKxHLf8Awer9HqEuxdtsyiFikNjT5X6ZZO7RulHJ6ev0S3HCnyYg5jr/AIRM7hwdPtcSebg6g3peTDz9Hz8ncf8A1t8ZzzP4Q1nvhYWnbEo44cag3UOG6x59PPk3pf6+fry0/EPB1zvWv7Vfj/35rtvl9mY3pRX+un32Nr1r8GnVtDmsVbuy9uLPUv19LsxCSorQ2po0kSM9RAJ4c8lSQvQ5JCgMcE7bOzertGxZKUY6F6hdehdrQyK8QkQsrdJUlfJkI9AlT6x8Z7Zvwgbc5ZpK1xixLEtfY8ksHJPo/CwDf6jn15Sd9dolzeHTC0XdQhzKwZy7ySH/ABMx9frP0nnnPlcb4zwbE8NuWnXRXW193Lbqpaq23l8lz27bb9e/AYHG2sVTWlVTT1mpNR2hfkVCMqqmT1spHSCvI+HzP0er9+WSPZXjTp9fT9Zhlu3blajLG8LpFFLP5p0yAHqC+piQvmQY+9XlxWkk6VZGBKt58c8eY9R+s/Sck7G4NWuU6lC5uPVpq1Ag1YJJWeOuQOB3al+F44HqA9WflB60kqXZzubUU1GaklKWLSaK6hckFyMLFC0YcHzPpfnBfR5AYjkgeect/Ze4dIsWIbkVBZKamSYLqNaUKoQP1ei5BUghQfUzkIOXIXIxbATgJqFteGVhwvHBX80/nesfB8WfZb8sUVmOHUrYFuMQzrxwJUDq4RvS816kRuPVyqn1gYByydLBXVQvI4IHq5H/AOj68kKMEMcKTlFkd+T6a8hRyRxwfI/Hz/p+/mPkdXb0E6VHko+Hj95+E/vz3r3mhj7p1Lqo9D0uOnz5+j1+XxnBUW3b+2r+41utp9So3gKsl2fqijXpiTjqPmPP1jyHnnsNla3Lp1bVa1ShNBZRZB0xxgorSWE5blRwAKkzsfUqDqJHnxVI9ZkiBCRkc/5v7Z5nUyx5MPmf839sxSqzNt7dNjXQriuVOtp09FG67y+vyRNatpt3Q9Ut6Nqmn1oLlGZ69iIwxN0SKeGXkAg8EEeR4yG1CGIIJ0UI/V0kKvAPPJ5/d6vg/wD78e6X/wAH/wC7+2eVq41hRGqdCAgkdXPJ4+H6+P8AXM9ja4ObGMZDEj/fA/zbT+0+/j3wP820/tPv5FYzIyhEr74H+baf2n38e+B/m2n9p9/IrGBCJX3wP820/tPv498D/NtP7T7+RWMCESvvgf5tp/affx74H+baf2n38isYEIlffA/zbT+0+/j3wP8ANtP7T7+RWMCESvvgf5tp/affx74H+baf2n38isYEIlffA/zbT+0+/j3wP820/tPv5FYwIRK++B/m2n9p9/Hvgf5tp/affyKz1Wpaau1ta0pgQ8NKEPQD8RPq+EfTgQiQ98D/ADbT+0+/j3wP820/tPv5GIjyuscaM7sQqqo5JJ9QAz6kEEgjgjAhEr74H+baf2n38ZFYwIQxjGCjGMYAxjGAMYxgDGMYAxjGAMYxgDLjsLf1PaFeehqOgHU6tu/XtTdFhIZUSOtcgPcs8cgjmHjO8jm6W7uSJGCsfVTsYanYGw6L247YSeoN17A1G5TZjJrFXRNdTQo9V9MBarR1aoihp9wZkaGKNZGksTSmYdQQZtvHcDbs3frm6XWwrazqVnUCLEkckoM0rP6bRRxRs3peZSONSeeEUcKIfGRUpcizIxjGUgxjGAMYxgDGMYAxjGAMYxgDLd2T7j0HaXaBpO4NzRQyaZVM3iFm0CrrakNC6D/srUkcMp5YcdbjoPDgMVCmo4w1OwNL2xujst03atKlrNPUJ9Vhqav33RoNGWNrFlFhgQTSSd4yKqmRpGBKE9NdK8ha23xpXaFsJNN0TSdZ2FVsJpenzRWp5KkDtdmEyWYl/ICvMivJF4eSWSeeRYbExj6emOJc1xkylk6pZ6r6m9lYeKxnLiPpA4Tq56ePV6vLjO7cmv8AvhbT7ElOlXsV6hgn8Jp9enHI/fSMG6IFVSeh0HURz6PHqAyHxlIWfXZtj2tDW5plJ6OrONPhiqVZ5ZYESKs0d2WczLz3s06xTIsTFEDzKeOI+KxjGFsBjGMAYxlv0Lb2zbmg0NQ1jX5K1ueTXVsQxzRFoxWoQzUj0NwR3th5IySfSC8IOpTybgFQxmq632JaRUNY7f7Vdq6xE8Ni1PP7r6fVWOCFanedKS2hK0olsWEWEoryiqZIe9R+Us26vwd9ndmfa5tXYO/9/wBhNL1vUavi7wggpiHTH1izSknLNLIIT4eutj01JjMhjdeYyTjnRYZgmMt229nabuLR9Xlk3JpWn3tEinttXsW4YpLcSRM35FpZUil6XSNO7jZpn7/qjjlCMFl9v7D2Xqtrd+nzbmXudFuVotN1RtUoVPEwm4IZGWnPKviGaFmlHRYVI+6IdiHDLZQgzrGWrXdoaHt7eWobXu74021Vo1JZF1XTQblWxZWoZY4Y2Q+krz9MHeeQXq62AAKiq5ZkgxjGAMYxgDGMYAxjGAMYxgDGMYAxjNT0/dnY1f2ttvbO4tualSsU9OevqurUNNrTTNYEusPHIqGWJpjxd00EvKnlVKlWCR8m4CMsxmpbm3d2MjcW3NW2Bs21pkWm60lu6upU1uxTU1raeFjavJYKTf8Acxai5RmQOk6KX44WPnq6v2JXtw65qG56e45acy3204UNNq1XkmNtJK0ksccyxQq0JljeKJemPhOjqB9CT4LBmuM0Cruzs0m2drWialsg1r02raLboTacv5R6lZLcdyJrE8kjV3nFiGQlEePrgX8kAF4l9O3v2TmjolPU9DsxQaXpO46PcRbfozTd9cSwtGae2ZI3uyxNPG3eskQiFaMRRclnJvwIMoxmxT67+DA1bjTtn7or2DDpyp44eKRH8eZbhcxW4S5WrxCjqEEoP/l13HfHN9Rs7Tbcerz1NOuyaPLJa9zYopBUeMEt3DOrmwQq+iWj7x24BXvSfTJORBC4zaLW8fwfb7Rz6noOr3rdSLTq0De9+rRptEmoGSz1V6VuGQnwYWIPLYmllZ35lhIjkTh29rn4OFSokO5tqbh1KYIsJmqQtVIA1mGVpWVrsgeRtN7+FQOhI36ARMW8QkzeBBkuM1XfO5+wjWttx09p7T1vTNSoaJFUoNJBCFNxtXt2ZWsSpL1T9FOeCuszJ1OYB+TjXpC+my+0Lsz0XbGm6XuzbMWt2atPUImC7cpwvE01mtIEa0JDJaEkMViFZpEWSp4pni7wpGFZnHIQZNjJrQ9W0qnSvVdVopYD1p1rotWMu8zqFQtMT1RrGQJB0g9RUoeA5YRXewir3Phl70ydXfFm5CgcdIHPHHJ5JIJ8hxx585EPLGMYAxjGAMYxgDPehSm1K9W06u8CS2pUhRrE6QRBmIALySFUjXk+bMQoHJJAHOeGMA67unNXu2a1KzHqMEEzxR260cghnVWIEiCRVcKw8wGVW4I5APlnl4O3+qzewcsegxQTVakVmyK8TBg0hQt0jrbz4Hmc0Tams9lFfUqkm7NqC3RtS6P4xI57ImqJDOovGMpIqv38SOxBHoGYBCvRyT2JJjHg7f6rN7Bx4O3+qzewc/Q2mbs7Eam7dp3o9j0o9Kpa7p+qa4lpLU5kreEqm1TiRpmWSIWUudIlBYhoAXKmQZzQr2dbX2Dp+oaztXa+vando3xRmg1m1JLJZF2qqm7WisRvXCQC2YyVj7zrXlW6OtpIMC8Hb/VZvYOPB2/1Wb2Dm06rqPY6+mqNG0G2mpV9JrwB5zN4a1b67EcszqJi8bmKSrOOljGsteSPoeNwx6IJdibi3Vd0ijo+2aVPUdYv2U1K5PbrpQ0+WFygRTMiN4f0pFjIaSSRI4174N0MkSYd4O3+qzewceDt/qs3sHNx7N/xSXdf3fq2+tIavoFeiLOnaeL7m1GH1SnG8ddgyd/YSnLZMYf0CyB5F6Fbjx0TXuyO3JqTbr2c1cd2kVM6Y86l+lbDd83XMVErSmmrKFEfcLP0KkvQxSJMU8Hb/VZvYOPB2/1Wb2Dmva3rfZje2tbTTNlyUdwWbcMkMla7OtapCsEIZFSVpWlVpBaLdTqykwFWKh48mez3c3ZBpFGKnvLZ8GpLboeFvzPHObAmbVKztJEyzBUCUo5e7ZArGRpFkDxsAUiTCPB2/wBVm9g48Hb/AFWb2Dmuy7j2INMnp1NjaUtmTQIafipZbrsNQWXl7KDvuFkeMjkFTGHThVCluquGfQve9HXNWQ6sLMzGVVKjuisPQGYyMHAKzeiIkILgmSQcIlkSUXwdv9Vm9g48Hb/VZvYOa7pO69sVtF0zTNS2po2qTVq+oRNLfjeJEMvdtE5NMRTySoyygGWWZOmRQEj6TnZuPWuyagKR2ftJNUYVKaWzqhtQq88NmYySBIrHKGeBKveJ1uEaWcRMOlJMkiTFvB2/1Wb2DnW2iSDQG15b9I91d8FPTMpW1CSnXHIUYDqjbplXqQt0mMiQJ1xd5+hKGwdib+7MO1DtI0rTZ9L1fa2paVFpWn6XZdqFiG47goIbCvY6o0rTyE98QevyVVjPViG+6OmaXufcWmaJc8Xp1TVWgqWO8WTvoUMio/UvCtyoB5A4PPljNJSs4xjKBjGe1O3Y0+5BfqOEnrSLNExUMA6nkHggg+Y9RHGAaD2cLtWTTdTj3S1NOdKkNCWxLZUx2Vsxt+TSBG7yRoxKgSVo4/TJMilV5tEWhdlVrV6li3vCpV0x62iGzBX8as8ckgiXUAvXVkVnjInc+kF4ZDGZeDHlP0jtQ27pWnV6D9iezLkkUarJamv67HJYcAAyOsOopGGPHJ6EVfiAHlnZ+OHbn7B9j/xPcX9UzFyIJvcm2+znSNjU9R0vePuluS1PGvhK7O0KwLNfjmlbqhQp1CKg0aMwk4klLIAU4jdnLs+SPVxuiWrCU02w9J51su7Wu5kEaIkPAJLshBkdVUqrHvFDQyc344dufsH2P/E9xf1TH44dufsH2P8AxPcX9UxuILHZ252SV4FhXfhsWjcs1WmriyYBE1SBqtkB6aOYxY8Qky8CQL0GNH6Sz9FHS+w995arXfcOpx6BUmmk0yxdMh8ZEmoxiNJVhg61Z6IlPl0/lSnpIAVyqfjh25+wfY/8T3F/VMfjh25+wfY/8T3F/VMb+RB76/o+zqtvb8G3N2peW/Rim1WWxWmji06088gaE8R9cipEImZ0U8lm6QeAMnN7w9k8ehXX2RZR7x1aJYkla00q1uidpO7LIsbwgtAgkfpmcx9XdQgsprn44dufsH2P/E9xf1TH44dufsH2P/E9xf1TG4ggcZPfjh25+wfY/wDE9xf1TH44dufsH2P/ABPcX9Uyz4Jl8kDjJ78cO3P2D7H/AInuL+qY/HDtz9g+x/4nuL+qYnwMvkgcZPfjh25+wfY/8T3F/VMfjh25+wfY/wDE9xf1TE+Bl8kDkJqXrt//ADov/wAGy8/jh25+wfY/8T3F/VMqe592Q6/K66VtbStt0ZjHJLQ0yW3JDLMnWFlZrU80hbiRh+f0+fkASSUz0LEEBjGMoGSO27mj6duLS9Q3Dox1fSqt2Ca9p4naDxldZAZIe8T0k61BXqXzHPI8xkdjANd3DonYBNoQq6HvCKPXqFe9LPZWC/Dp+oCBfD1kgDxTSixO0C3OJFih4uPEXrmJRklvXS/wWRodOTZG5tZ8fTFuG5BMk3VeQ65IKkqyNAVEg0wdUvoxKGNboVnNhFxDGY5fJZNW1Ts/7MU7ENP39R3xSh3TdvRV30WXVEmnijB1VpXavHF3iKVr6YkbMfz5pGfpR4yuU4xlSggxjGUDGMYAxjGAMYxgDGMYAxjGAMYxgH2jZUdXaNZADyVbng/uPBB+vOrx1X5mp+1N/Mxo9elb1ejV1KwIKk1mKOxKX6RHGWAZueluOByeek/6H1ZYNU2xtGrSq6jU3kswuxXnWtFCsj13hfphSQlkbpkHJDmNW4APd+fAMFf8dV+ZqftTfzMeOq/M1P2pv5mWBNo6JPqz6PU1+eaZ7lOpUWKKvK1gzcdR9Gx0L0+Y8nYFiqlk8yPRdl7fhjuw6ru/3Pv1rd+qtaWrGSvho0ZTKVmJTvGcoAok80fgtxxklFgrfjqvzNT9qb+Zjx1X5mp+1N/My4aj2ebYpTX4q/aTpdtatSxZgeMR8WGSOF40HMvkXaSROPMgxHyPOSUvZBt6NJbP40dJ8CLEcEN1oG7iUvC8gUMGPDqUAYcdIDD0y4MYShDM98dV+ZqftTfzMeOq/M1P2pv5mTkOlbc0fc8+n3tQp6pShihInaVlh6n7vvCRCzGQxh5OAjjloweWHoNCax4Q6jI1KtFXidUfuYpzKkbMgLKrHz6QxIAJYgcAsxHUQPjx1X5mp+1N/Mx46r8zU/am/mZx4ykOzx1X5mp+1N/Mx46r8zU/am/mZx4wDs8dV+ZqftTfzMeOq/M1P2pv5mceMA7PHVfman7U38zHjqvzNT9qb+ZnHjAOzx1X5mp+1N/MzysWYZkCx6fXgIPPVG0hJ/d6TEZ4YwBjGMAYxjAGMYwBjGMAYxjAGMYwBjGMAYxjAGMYwBjLjsDsi7QO0+tqt3ZeiwXK+iLEb00+oVqaRtIJDGgaxIgeRxFJ0xpy7dDcA8ZTsSgMYxgDNJ7K+3HcHZp06dbprubbgkknk2zq87zaPYlaCZEaao3McnTLJFN5gHqgQgggMubYw0nswnBs9rt/2+mmHTds9mkW1fToypPod6KvYjlqVrCwyLOa7ThzPZLSOsgkeGNYiwYvO2cdoe6oN9doG5t7VtIj0mHcOsXdVjoRuHWos87yiEMFUMED9IIVeePUPVlfxkVKXIrbYxjGUgxjGAMYxgDGMYAxjGAMYxgGm9j/AOEBu7sX0rX9F27o+h6jT3LNSmvR6nFM3nVE4jCmKWMqCLMnV58nheCOPPMsYwkk5EjGMYAxjGAMYxgDGMYAxjGAMYxgDGMYAxjGAMYxgDGMYAxjGAMYxgDGMYAxjGAMYxgDGMYAxjGAMYxgDGMYAxjGAMYxgDGMYAxjGAMYxgDGMYAxjGAMYxgDGMYAz0r1p7bmOvGXIBJ8wAP9SfLPM+rLJpVURVIEUIHlAdm6uAS3mOSfVwCB8XlgciLl0O7GitG0UxKliqMeV4+DzA5P7hzkf8PBHBGbz2odgu9OyrbG2dy7j0+atFrtN5Ju+aJUWyLt2ER12DnxUZhqxTmaLqQLagJPTLE0mL67EkdqOVEVe8X0uPhYH1/QR9GRNPdBdmR2MYygYxloraFtCzoVK0+5RBfeOSa2jcllKu4EMcRUAkIschkaVQ3e9CKzowygq+M0G5sfs4g0/X5KnagtizpluGvQDUBGL6l+l3Ve8bhB1qwbnnhH9E8jIa9pG0a4uSVNRksx1tRsV4uLiK89bzWKZV7vy6W6GYE+mr8Jx0uyCSVfGXxtr9mduajFX3vZ08dzpovPNAtlQ81XvbMqcGMgQygxmLhmI4KuzEJkZHou0venBqVnVpIdXlhsuK62I5EYpNCsRKqvVFyrT+ixJPdhhwpAISVbGXDXNpbb0mrq5p7lN23py1OiCQQ12bvQC7ACR+8MbcxtGhJHUH54V1FYmTT1qQvBZneyw/LRvEFWM8t+awY9QI6DzwvmWHHkGYU5sYxkAxjGAesFWzaYrVryzFRyRGhYj6M9vcfVvmu3/sN/xk/oEWnSSQw3ox3TRjpC2BEvWQPMuVbj4fWOAeOeAOM99Mi0RriVtWmmSE2olazC3orB1cSHpKFiekgg+XHSQVPI4klKydH1bj/0u3/sN/xkpo63IohRt0J4SnPdu0TBWBPPBJHkfM+Z8uPi485WehoMenabYg195rdmOZrlbwjKtN1YiNesn8p1ABiQB0hgPM8jPg6Vt9005n3HwbNnuriim5NSLohPe+v8p6TzL0jz/I8/4xjcQjq1DWtc1etRqatq965W0qv4alFYnklWrB1ljHEpJ6U6nZulBxyxPHJOUrUrLW7rOYWiEY7tVccNwPP0v38k/wCnq8+Mucm3toLoFe9W3f3mrSXzBLQNGRVSt6XE3en0f8K+j6/yg9XSea9r9eCsZIIpY5xDOY45geOtB1eYHPqPAPw8f+/nNwkluQuMYzIh8qCx4ycr7ejWu0l60YpyAY4UjDn4D6Z5HT5H1Dk8gggZxaF0rqdeV1iYROJOmVQyOV8wrA+RB444/fk+7tIxd2LMxJJJ5JPx5uUUU5ols11NtwiL9xY/0x9n++PcWP8ATH2f75sez+zvaOt7As7j1K/Yj1CJLLJGthFUlAen0SOfg+PM80WjU1PUoqF3Uo6EcwdVsSLyiydJ7sOeR0qX6VLf4QS3B44PXi8DfwVu1duxFxZlG+3nsc9jF28TXXRRM0OGV/3Fj/TH2f749xY/0x9n++XfVNnVKHi5qu8dCuV68UE8RjsESzJLIVAEfHlIoAZ059EH1nPGXaEyUtSvR65o8w0uvXsSxR2w8kglcIVjABDFGI6vPgAg/DnBqM6oKd7ix/pj7P8AfHuLH+mPs/3yTI4z4y52QjfcWP8ATH2f749xY/0x9n++SWMZ2CN9xY/0x9n++PcWP9MfZ/vkljGdg5IqUsCd3Ha9H4jGG4/059Xrz7eGn/Wh/tLnTjJmYOfw0/60P9pceGn/AFof7S50ZMbN0XTNx7v0Pb2ta/BoWn6pqValb1SdA0dCGSVUew6llBWNWLkdS+S+sevGdoEFDU6mYWL7xr0kgpWRyW48hwSPIn1n4PiPqyJ1upcqWzHZmSZfXFLGCI5E9QdAQPI8fCAeQQQCCM/S3bf2Vahtbs10rc+79Krbc1uHVl0zStNGjx0JNQ0R67PFK/Qqd7PXkhZZ3kR5ybkBlk4MXV+f9Xfr0NonjZxFaRo3LtxH1IwcBeeOW6U5PHP5MfvzO3VTdpaa37/6JVmoclXxjGajYe9C5NQuQ3a5USwSLKhZQwDKeRyCCCOR6iOMtCzUrkT3KdiJUBHVDJIFkQn4ACeXHPPmvPkASF54yl9//k+vPkWmHqX68lOKt5clXL37ZarFTcouHUvyh9OOpflD6cqHjH+L68eMf4vrya9nuNGst/Uvyh9OOpflD6cqHjH+L68eMf4vrxr2e40ay39S/KH046l+UPpyoeMf4vrx4x/i+vGvZ7jRrLf1L8ofTjqX5Q+nKh4x/i+vHjH+L68a9nuNGst/Uvyh9OOpflD6cqHjH+L68eMf4vrxr2e40ay39S/KH046l+UPpyoeMf4vrx4x/i+vGvZ7jRrLf1L8ofTjqX5Q+nKh4x/i+vHjH+L68a9nuNGsuqySWjHC9pOIkYR99OqKigliAWIA8yx4+Ek/Ccidb1WN4fculL1wJKZHlVnCzsAQrdJ4HCgt0kqG9NufXwIDxbn4Prz6mxz61+vMlirVCap5vr79/WZoVtyz1xnl3/8Ak+vGate33M9OrseOMYz551DJPb2mQatflq2HkVI6N20ChAPVDWklUeYPkWQA/u59XryMz0gsT1nMlaeSJ2R4yyMVJRlKsvI+AqSCPhBIwCzb/wBq6ftW7QrafNYkW1pel3nMzKSJLOm1LUgHAHkHsOB8PSFBJPJNVzpu6lqOpOkmo37Fpo444UM0rOVjjjWONRyfILGiIB8CooHkBnNgDGMYBJ7X0OTc+5tI21Fbhqvq16vRWeY8RxGWRUDt/lHVyf3DLBDo2zdxaHujUdv6fremzbfpQ6nH4zUIraywtbgqtEwSCIq3NpHEnJA7sr0HrDJTMkdQ3FrmrGwdS1SxYa5N4i27ty9mXknvJW9cr8sx6nJPLN5+ZwCOxjGAMYxgE8dCp09pjcF5rE8uoOYaK1WXuq7q/pmw3B4YqrBYR0sQ4kLBVVZYHPeC9dq17NWtbmihuIsdiNHIWZVYOA4HkwDKpHPwgHPDAGMYwBjGMA//2Q==" alt="User uploaded media 1" class="h-16 w-16 object-cover" data-ag-id="ag-n-640"></div></div><div class="flex flex-wrap gap-2" data-ag-id="ag-n-641"></div><div class="whitespace-pre-wrap text-sm" data-ag-id="ag-n-642" style="word-break: break-word;">Analyze this photo</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-643" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-644">5:23 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r87:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-645"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-646"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-647"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r88:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r88:" data-tooltip-place="top-end" data-ag-id="ag-n-648"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-649"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-650"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="2c8fa38d-c09c-42ea-b4f1-7be02a16c5f1" data-ag-id="ag-n-651"><div class="relative" data-ag-id="ag-n-652"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-653"><span class="text-secondary-foreground" data-ag-id="ag-n-654">Worked for 20s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-655"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-656"></path></svg></button></div><div class="flex flex-col py-1 gap-1.5" data-ag-id="ag-n-657"></div></div><div class="pt-3" data-ag-id="ag-n-658"><div data-ag-id="ag-n-659"><div class="flex flex-col gap-2" data-ag-id="ag-n-660"><div class="flex w-full justify-between items-start gap-1 pl-2 pr-1" data-ag-id="ag-n-661"><div class="text-xs grow opacity-0 group-hover:opacity-60 text-foreground transition-opacity whitespace-nowrap flex items-center h-5" data-ag-id="ag-n-662">5:23 PM</div><div class="flex items-center" data-ag-id="ag-n-663"><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-secondary-foreground hover:text-foreground" data-tooltip-id="copy-:r8h:" aria-label="Copy" data-tooltip-place="top-end" data-ag-id="ag-n-664"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-665"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-666"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="up-:r8h:" aria-label="Good response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-667"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-668"><path d="M709.23-140H288.46V-620L553.85-883.84L587.69-850q6.23,6.23 10.35,16.5t4.12,19.35V-804L559.69-620h268q28.54,0 50.42,21.88T900-547.69v64.61q0,6.23-1.62,13.46t-3.62,13.46L780.15-185.69q-8.62,19.23-28.85,32.46T709.23-140ZM348.46-200H709.23q4.23,0 8.65-2.31t6.73-7.69L840-480v-67.69q0-5.39-3.46-8.85T827.69-560H483.85L534-779.23L348.46-594.46V-200Zm0-394.46V-560q0,0 0,3.46t0,8.85V-480v270q0,5.39 0,7.69t0,2.31V-594.46Zm-60-25.54v60H160v360H288.46v60H100V-620H288.46Z" data-ag-id="ag-n-669"></path></svg></button><button class="inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-secondary-foreground hover:text-foreground hover:bg-secondary h-6 w-6 shrink-0 flex items-center justify-center rounded-md transition-[opacity,transform] duration-100 cursor-pointer opacity-70 hover:opacity-100" data-tooltip-id="down-:r8h:" aria-label="Bad response" aria-pressed="false" data-tooltip-place="top-end" data-ag-id="ag-n-670"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-671"><path d="M250.77-803.84H671.54v480L406.15-60L372.31-93.85q-6.23-6.23-10.35-16.5t-4.12-19.35v-10.15l42.46-184h-268q-28.54,0-50.42-21.88T60-396.15v-64.61q0-6.23 1.62-13.46t3.62-13.46L179.85-758.15q8.62-19.23 28.85-32.46t42.08-13.23Zm360.77,60H250.77q-4.23,0-8.65,2.31t-6.73,7.69L120-463.84v67.69q0,5.39 3.46,8.85t8.85,3.46H476.15L426-164.61L611.54-349.38V-743.84Zm0,394.46v-34.46q0,0 0-3.46t0-8.85v-67.69v-270q0-5.39 0-7.69t0-2.31v394.46Zm60,25.54v-60H800v-360H671.54v-60H860v480H671.54Z" data-ag-id="ag-n-672"></path></svg></button></div></div></div></div></div></div></div><div class="flex items-start" style="min-height: calc(100cqh - 50px);" data-ag-id="ag-n-673"><div class="flex flex-col gap-0.5 group w-full" data-ag-id="ag-n-674"><div role="article" aria-label="User message" class="sticky top-0 z-10 mb-4 bg-background after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-7 after:bg-gradient-to-b after:from-background after:to-transparent after:pointer-events-none" data-message-id="2c8fa38d-c09c-42ea-b4f1-7be02a16c5f1" data-ag-id="ag-n-675"><div class="flex w-full flex-row" data-ag-id="ag-n-676"><div class="flex min-w-0 grow flex-col" data-ag-id="ag-n-677"><div data-testid="user-input-step" class="flex flex-col w-full gap-2 group/user-input-step pt-4" data-ag-id="ag-n-678"><div class="relative p-px rounded-xl bg-card-border" data-ag-id="ag-n-679"><div class="relative flex flex-col gap-0 p-2 rounded-[calc(theme(borderRadius.xl)-1px)] bg-card overflow-hidden" data-ag-id="ag-n-680"><div class="flex flex-row items-end gap-2" data-ag-id="ag-n-681"><div class="flex-1 flex flex-col gap-2" data-ag-id="ag-n-682"><div class="relative" data-ag-id="ag-n-683"><div class="max-h-[10vh] overflow-hidden" data-ag-id="ag-n-684"><div class="flex flex-wrap gap-2" data-ag-id="ag-n-685"></div><div class="whitespace-pre-wrap text-sm" data-ag-id="ag-n-686" style="word-break: break-word;">There are no icon appearances for pending messages besides the trash can</div></div></div></div><div class="absolute bottom-1 right-0.5 flex flex-row items-center p-1 rounded-full opacity-0 pointer-events-none group-hover/user-input-step:opacity-100 group-hover/user-input-step:pointer-events-auto transition-all bg-card user-input-buttons-shadow user-input-buttons-container" data-ag-id="ag-n-687" data-ag-rem="true"><span class="text-xs text-muted-foreground mr-2 self-center" data-ag-id="ag-n-688">5:24 PM</span><button role="button" tabindex="0" aria-label="Copy" data-tooltip-id="copy-user-message-:r8m:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-place="top-end" data-ag-id="ag-n-689"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-690"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-691"></path></svg></button><button data-testid="revert-button" tabindex="0" aria-label="Undo changes up to this point" aria-disabled="false" aria-describedby="undo-tooltip-:r8n:" class="text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1" data-tooltip-id="undo-tooltip-:r8n:" data-tooltip-place="top-end" data-ag-id="ag-n-692"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-693"><path d="M288.08-220v-60H575.15q62.62,0 107.77-41.35t45.15-102.12T682.92-525.39T575.15-566.54H294.31L405.61-455.23l-42.15,42.15L180-596.54L363.46-780l42.15,42.15L294.31-626.54H575.15q87.77,0 150.34,58.58t62.58,144.5T725.5-278.77T575.15-220H288.08Z" data-ag-id="ag-n-694"></path></svg></button></div></div></div></div></div></div></div></div><div role="article" aria-label="Agent response" data-message-id="2c8fa38d-c09c-42ea-b4f1-7be02a16c5f1" data-ag-id="ag-n-695"><div class="relative" data-ag-id="ag-n-696"><button type="button" aria-expanded="true" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color] hidden" data-ag-id="ag-n-697"><span class="text-secondary-foreground" data-ag-id="ag-n-698">Worked for 1m</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-secondary-foreground rotate-90" data-ag-id="ag-n-699"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-700"></path></svg></button><div class="relative" data-ag-id="ag-n-701" style="opacity: 1; transform: translateY(0px); transition: opacity 150ms ease-out, transform 150ms ease-out;"><div class="overflow-y-auto" data-ag-id="ag-n-702"><div data-ag-id="ag-n-703"><div class="flex flex-col gap-0.5" data-ag-id="ag-n-704"><div class="relative" data-ag-id="ag-n-705"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-706"><span class="text-secondary-foreground" data-ag-id="ag-n-707">Explored</span><span data-ag-id="ag-n-708">1 task</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-709"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-710"></path></svg></button></div><div class="flex flex-row" data-ag-id="ag-n-711"><div class="min-w-0 grow" data-ag-id="ag-n-712"><div class="w-full my-0.5" data-ag-id="ag-n-713"><div class="flex items-center" data-ag-id="ag-n-714"><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-715"></div><span class="px-3 text-sm text-secondary-foreground whitespace-nowrap" data-ag-id="ag-n-716">Inspect Test3 DOM finished</span><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-717"></div></div></div></div></div><div class="flex flex-row" data-ag-id="ag-n-718"><div class="min-w-0 grow" data-ag-id="ag-n-719"><div class="flex flex-col gap-0.5" data-ag-id="ag-n-720"><div class="relative" data-ag-id="ag-n-721"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-722"><span class="text-secondary-foreground" data-ag-id="ag-n-723">Thought for 2s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-724"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-725"></path></svg></button></div></div></div></div><div class="relative" data-ag-id="ag-n-726"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-727"><span class="text-secondary-foreground" data-ag-id="ag-n-728">Ran</span><span data-ag-id="ag-n-729">1 command</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-730"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-731"></path></svg></button></div><div class="relative" data-ag-id="ag-n-732"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-733"><span class="text-secondary-foreground" data-ag-id="ag-n-734">Explored</span><span data-ag-id="ag-n-735">1 file</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-736"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-737"></path></svg></button></div><div class="relative" data-ag-id="ag-n-738"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-739"><span class="text-secondary-foreground" data-ag-id="ag-n-740">Ran</span><span data-ag-id="ag-n-741">1 command</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-742"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-743"></path></svg></button></div><div class="relative" data-ag-id="ag-n-744"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-745"><span class="text-secondary-foreground" data-ag-id="ag-n-746">Explored</span><span data-ag-id="ag-n-747">1 task</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-748"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-749"></path></svg></button></div><div class="flex flex-row" data-ag-id="ag-n-750"><div class="min-w-0 grow" data-ag-id="ag-n-751"><div class="w-full my-0.5" data-ag-id="ag-n-752"><div class="flex items-center" data-ag-id="ag-n-753"><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-754"></div><span class="px-3 text-sm text-secondary-foreground whitespace-nowrap" data-ag-id="ag-n-755">Inspect Test3 parent finished</span><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-756"></div></div></div></div></div><div class="flex flex-row" data-ag-id="ag-n-757"><div class="min-w-0 grow" data-ag-id="ag-n-758"><div class="flex flex-col gap-0.5" data-ag-id="ag-n-759"><div class="relative" data-ag-id="ag-n-760"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-761"><span class="text-secondary-foreground" data-ag-id="ag-n-762">Thought for 2s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-763"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-764"></path></svg></button></div></div></div></div><div class="relative" data-ag-id="ag-n-765"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-766"><span class="text-secondary-foreground" data-ag-id="ag-n-767">Ran</span><span data-ag-id="ag-n-768">1 command</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-769"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-770"></path></svg></button></div><div class="relative" data-ag-id="ag-n-771"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-772"><span class="text-secondary-foreground" data-ag-id="ag-n-773">Explored</span><span data-ag-id="ag-n-774">1 task</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-775"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-776"></path></svg></button></div><div class="flex flex-row" data-ag-id="ag-n-777"><div class="min-w-0 grow" data-ag-id="ag-n-778"><div class="w-full my-0.5" data-ag-id="ag-n-779"><div class="flex items-center" data-ag-id="ag-n-780"><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-781"></div><span class="px-3 text-sm text-secondary-foreground whitespace-nowrap" data-ag-id="ag-n-782">Check innerHTML finished</span><div class="flex-grow h-px bg-secondary" data-ag-id="ag-n-783"></div></div></div></div></div><div class="flex flex-row" data-ag-id="ag-n-784"><div class="min-w-0 grow" data-ag-id="ag-n-785"><div class="flex flex-col gap-0.5" data-ag-id="ag-n-786"><div class="relative" data-ag-id="ag-n-787"><button type="button" aria-expanded="false" class="group flex items-center gap-1 w-full text-left text-sm px-2 min-h-8 py-1 rounded-lg tabular-nums select-none text-foreground hover:bg-muted transition-[opacity,background-color]" data-ag-id="ag-n-788"><span class="text-secondary-foreground" data-ag-id="ag-n-789">Thought for 9s</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-790"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-791"></path></svg></button></div></div></div></div><div class="flex flex-row" data-ag-id="ag-n-792"><div class="min-w-0 grow" data-ag-id="ag-n-793"><div class="flex flex-col" data-ag-id="ag-n-794"><div tabindex="0" role="button" class="group flex w-full min-w-0 items-center min-h-8 py-1 px-2 select-none transition-[background-color] cursor-pointer rounded-lg hover:bg-muted" data-ag-id="ag-n-795"><div class="flex min-w-0 items-center gap-x-1 text-sm" data-ag-id="ag-n-796"><div class="truncate" data-ag-id="ag-n-797"><div class="flex flex-row items-center gap-1 overflow-hidden whitespace-nowrap" data-ag-id="ag-n-798"><span class="text-secondary-foreground" data-ag-id="ag-n-799">Run</span><span class="inline-flex" data-ag-id="ag-n-800"><span class="truncate font-mono text-[13px] mt-px ml-px" data-ag-id="ag-n-801">Set-Content -Path capture_pending.cjs -Value "const fs = require('fs'); let interval = setInterval(async () =&gt; { try { const res = await fetch('http://localhost:3000/snapshot'); const data = await res.json(); if (data.html.includes('Test4')) { fs.writeFileSync('test4_snapshot.html', data.html); clearInterval(interval); console.log('Saved test4 snapshot!'); process.exit(0); } } catch(e) {} }, 1000); setTimeout(() =&gt; process.exit(1), 40000);"; node capture_pending.cjs</span></span></div></div><div class="ml-0.5 flex items-center text-sm text-muted-foreground w-content text-muted-foreground" data-ag-id="ag-n-802"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 -960 960 960" fill="currentColor" class="animate-spin text-muted-foreground shrink-0" data-ag-id="ag-n-803"><path d="M332.55-129.9q-69.29-29.9-121.02-81.63T129.9-332.55T100-480.35t29.96-147.5t81.58-120.61t121.04-81.58T480-860q12.75,0 21.37,8.63T510-829.99t-8.62,21.37T480-800q-133,0-226.5,93.5T160-480t93.5,226.5T480-160t226.5-93.5T800-480q0-12.77 8.63-21.38T830.01-510t21.37,8.62T860-480q0,77.99-29.96,147.42T748.46-211.54T627.85-129.96T480.35-100t-147.8-29.9Z" data-ag-id="ag-n-804"></path></svg></div></div><div class="flex items-center shrink-0" data-ag-id="ag-n-805"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="ml-1 h-3.5 w-3.5 shrink-0 transition-all duration-200 text-muted-foreground group-hover:text-secondary-foreground" data-ag-id="ag-n-806"><path d="M517.85-480l-184-184L376-706.15L602.15-480L376-253.85L333.85-296l184-184Z" data-ag-id="ag-n-807"></path></svg></div></div><div class="grid transition-[grid-template-rows,opacity] duration-200" data-ag-id="ag-n-808" style="grid-template-rows: 0fr; opacity: 0; transition-timing-function: ease-in;"><div class="overflow-hidden pl-3" data-ag-id="ag-n-809"><div class="pl-2 py-1 hidden-if-empty" data-ag-id="ag-n-810"><div class="flex flex-col gap-2 mt-0.5" data-ag-id="ag-n-811"><div class="flex flex-col overflow-hidden rounded-lg border shadow-sm group/run-command bg-background mt-0.5" data-ag-id="ag-n-812"><div class="flex grow items-start justify-between px-2 py-1 relative cursor-default" data-ag-id="ag-n-813"><pre class="max-h-[120px] flex-1 overflow-y-auto whitespace-pre-wrap break-all font-mono text-sm" data-ag-id="ag-n-814"><span data-tooltip-id=":r91:" class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sm text-muted-foreground" data-tooltip-place="top-start" data-ag-id="ag-n-815">…\antigravity_phone_chat</span><span class="text-muted-foreground" data-ag-id="ag-n-816"> &gt; </span>Set-Content -Path capture_pending.cjs -Value "const fs = require('fs'); let interval = setInterval(async () =&gt; { try { const res = await fetch('http://localhost:3000/snapshot'); const data = await res.json(); if (data.html.includes('Test4')) { fs.writeFileSync('test4_snapshot.html', data.html); clearInterval(interval); console.log('Saved test4 snapshot!'); process.exit(0); } } catch(e) {} }, 1000); setTimeout(() =&gt; process.exit(1), 40000);"; node capture_pending.cjs</pre><div class="absolute top-[3px] right-[3px] flex items-center pl-6 transition-all duration-150 opacity-0 group-hover/run-command:opacity-100 pointer-events-none group-hover/run-command:pointer-events-auto" data-ag-id="ag-n-817" data-ag-rem="true" style="background: linear-gradient(to right, transparent 0%, var(--background) 30%);"><button type="button" data-tooltip-id=":r92:" class="cursor-pointer items-center justify-center rounded-md p-1 text-secondary-foreground hover:text-foreground pointer-events-auto" data-tooltip-place="top" data-ag-id="ag-n-818"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="h-4 w-4" data-ag-id="ag-n-819"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z" data-ag-id="ag-n-820"></path></svg></button></div></div></div></div></div></div></div></div></div></div></div></div></div></div></div></div></div></div></div><div class="h-px w-full" aria-hidden="true" data-ag-id="ag-n-821"></div><div data-ag-id="ag-n-822" style="height: 48px;"></div></div></div></div><div class="absolute bottom-0 inset-x-4 pointer-events-none" data-ag-id="ag-n-823" style="height: 48px; background: linear-gradient(to top, var(--background), transparent);" data-ag-rem="true"></div></div><div class="relative w-full px-4 mb-2 flex-shrink-0 flex flex-col items-center gap-2" data-ag-id="ag-n-824"><div class="w-full transition-opacity animate-fade-in pt-0" style="max-width: max(30vw, var(--max-conversation-width, 48rem));" data-ag-id="ag-n-825"><div class="flex flex-col w-full gap-2" data-ag-id="ag-n-826"><div class="flex justify-between items-end gap-2 mb-2 px-1" data-ag-id="ag-n-827"></div><div class="relative z-10 flex flex-col gap-1" data-ag-id="ag-n-828"><div id="antigravity.agentSidePanelInputBox" class="relative flex flex-col p-px rounded-2xl bg-card-border" data-ag-id="ag-n-829"><div class="overflow-hidden" data-ag-id="ag-n-830" style="height: 68px;"><div class="flex flex-col px-3 py-1.5 rounded-t-2xl w-full" data-ag-id="ag-n-831"><button class="flex items-center justify-between cursor-pointer h-6 shrink-0 text-secondary-foreground hover:text-foreground" data-ag-id="ag-n-832"><span class="text-sm" data-ag-id="ag-n-833">1 task running</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="shrink-0 transition-transform duration-150 rotate-180" data-ag-id="ag-n-834"><path d="M480-541.85l-184,184L253.85-400L480-626.15L706.15-400L664-357.85l-184-184Z" data-ag-id="ag-n-835"></path></svg></button><div class="transition-[height] duration-500 ease-expo-out overflow-hidden" data-ag-id="ag-n-836" style="height: 32px;"><div class="py-1" data-ag-id="ag-n-837"><div class="flex flex-col gap-0.5 max-h-32 overflow-y-auto" data-ag-id="ag-n-838"><div class="flex items-center gap-1.5 text-secondary-foreground hover:text-foreground h-6 group relative overflow-hidden cursor-pointer shrink-0" data-ag-id="ag-n-839"><button class="flex items-center gap-1.5 flex-1 min-w-0 text-left" data-ag-id="ag-n-840"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="shrink-0 animate-spin opacity-50" data-ag-id="ag-n-841"><path d="M332.55-129.9q-69.29-29.9-121.02-81.63T129.9-332.55T100-480.35t29.96-147.5t81.58-120.61t121.04-81.58T480-860q12.75,0 21.37,8.63T510-829.99t-8.62,21.37T480-800q-133,0-226.5,93.5T160-480t93.5,226.5T480-160t226.5-93.5T800-480q0-12.77 8.63-21.38T830.01-510t21.37,8.62T860-480q0,77.99-29.96,147.42T748.46-211.54T627.85-129.96T480.35-100t-147.8-29.9Z" data-ag-id="ag-n-842"></path></svg><div class="flex items-center gap-1 min-w-0" data-tooltip-id="label-task-8648" data-tooltip-place="top" data-ag-id="ag-n-843"><span class="text-sm truncate font-mono" data-ag-id="ag-n-844">node server.js</span></div></button><div class="absolute top-0 bottom-0 right-0 pl-3 flex items-center justify-end gap-px translate-x-1.5 invisible group-hover:visible" data-ag-id="ag-n-845" style="background: linear-gradient(to right, transparent 0%, var(--card-border) 25%);" data-ag-rem="true"><button data-tooltip-id="stop-task-8648" class="w-6 h-6 flex items-center justify-center rounded-md transition-colors mr-0.5" data-tooltip-place="left" data-ag-id="ag-n-846"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="text-secondary-foreground hover:text-foreground transition-colors" data-ag-id="ag-n-847"><path d="M330-330H630V-630H330v300ZM480.07-100q-78.84,0-148.2-29.92T211.18-211.13T129.93-331.76T100-479.93t29.92-148.2t81.21-120.68t120.63-81.25T479.93-860t148.2,29.92t120.68,81.21t81.25,120.63T860-480.07t-29.92,148.2T748.87-211.18T628.24-129.93T480.07-100ZM480-160q134,0 227-93t93-227T707-707T480-800T253-707T160-480t93,227t227,93Zm0-320Z" data-ag-id="ag-n-848"></path></svg></button></div></div></div></div></div></div></div><div class="relative flex flex-col gap-0 p-1 rounded-[calc(theme(borderRadius.2xl)-1px)] bg-card" data-ag-id="ag-n-849"><div class="absolute bottom-full inset-x-0 z-30 flex flex-col gap-1" data-ag-id="ag-n-850" data-ag-rem="true"><div class="flex flex-col mb-3" data-ag-id="ag-n-851"></div></div><div class="relative w-full" data-ag-id="ag-n-852"><div class="w-full rounded-lg transition-all duration-10" data-ag-id="ag-n-853"><div class="relative w-full" data-ag-id="ag-n-854"><div aria-autocomplete="list" aria-expanded="false" aria-label="Message input" class="max-h-[300px] rounded-md cursor-text overflow-y-auto text-sm leading-6 p-2 outline-none transition-all duration-100 text-sm" contenteditable="true" role="combobox" spellcheck="false" autocorrect="off" autocomplete="off" data-lexical-editor="true" style="user-select: text; white-space: pre-wrap; word-break: break-word;" data-ag-id="ag-n-855"></div><p class="pointer-events-none absolute left-2 right-2 top-2 z-0 select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm text-foreground opacity-60" data-ag-id="ag-n-856" data-ag-rem="true">Ask anything, @ to mention, / for actions</p></div></div></div><div class="flex w-full items-center justify-between gap-1 p-0.5" data-ag-id="ag-n-857"><div class="flex min-w-0 flex-1 items-center gap-px" data-ag-id="ag-n-858"><button aria-label="Add context" data-tooltip-id=":ro:" class="p-1.5 rounded-full text-secondary-foreground hover:bg-secondary cursor-pointer" aria-haspopup="dialog" aria-expanded="false" data-tooltip-place="top" data-ag-id="ag-n-859"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4" data-ag-id="ag-n-860"><path d="M450-450H220v-60H450V-740h60v230H740v60H510v230H450V-450Z" data-ag-id="ag-n-861"></path></svg></button><input type="file" accept=".png,.jpg,.jpeg,.gif,image/png,image/jpeg,image/gif,video/webm,.mp4,video/mp4,.pdf,application/pdf" multiple="" class="hidden" data-ag-id="ag-n-862"><div class="flex items-center gap-1 min-w-0" data-ag-id="ag-n-863"><div class="flex items-center gap-1 min-w-0" data-ag-id="ag-n-864"><div class="no-focus-agent-input" data-ag-id="ag-n-865"><div class="min-w-0" data-ag-id="ag-n-866"><div role="button" aria-haspopup="dialog" aria-expanded="false" data-ag-id="ag-n-867"><button type="button" data-tooltip-id=":rs:" aria-label="Select model, current: Gemini 3.1 Pro (High)" class="flex min-w-0 max-w-full cursor-pointer items-center h-7 gap-1 rounded-lg pr-1 pl-2 text-xs outline-none hover:bg-secondary transition-colors" data-tooltip-place="top" data-ag-id="ag-n-868"><span class="min-w-0 select-none overflow-hidden text-ellipsis whitespace-nowrap text-xs text-secondary-foreground" data-ag-id="ag-n-869">Gemini 3.1 Pro (High)</span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor" class="text-secondary-foreground shrink-0" data-ag-id="ag-n-870"><path d="M480-541.85l-184,184L253.85-400L480-626.15L706.15-400L664-357.85l-184-184Z" data-ag-id="ag-n-871"></path></svg></button></div></div></div></div></div></div><div class="shrink-0 flex items-center gap-1" data-ag-id="ag-n-872"><div class="flex items-center gap-1" data-ag-id="ag-n-873"><div class="flex items-center overflow-hidden transform animate-mic-slide-in transition-all duration-200 ease-out opacity-100 block translate-x-0" style="transition-behavior: allow-discrete;" data-ag-id="ag-n-874"><button type="button" aria-label="Record voice memo" class="flex items-center rounded-full transition-all duration-150 p-1.5 hover:bg-black/10 dark:hover:bg-white/10 cursor-pointer bg-transparent opacity-70 hover:bg-secondary" data-tooltip-id="input-send-button-record-tooltip" data-ag-id="ag-n-875"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" class="w-4 h-4 translate-y-px text-foreground" data-ag-id="ag-n-876"><path d="M409.04-449.04Q380-478.08 380-520V-760q0-41.92 29.04-70.96T480-860t70.96,29.04T580-760v240q0,41.92-29.04,70.96T480-420t-70.96-29.04ZM480-640ZM450-130V-261.85q-99-11.31-164.5-84.92T220-520h60q0,83 58.5,141.5T480-320t141.5-58.5T680-520h60q0,99.61-65.5,173.23T510-261.85V-130H450Zm58.5-361.5Q520-503 520-520V-760q0-17-11.5-28.5T480-800t-28.5,11.5T440-760v240q0,17 11.5,28.5T480-480t28.5-11.5Z" data-ag-id="ag-n-877"></path></svg></button></div><button type="button" aria-label="Cancel (Ctrl+D)" data-tooltip-id="input-send-button-cancel-tooltip" class="bg-secondary hover:opacity-90 w-7 h-7 rounded-full cursor-pointer flex items-center justify-center transition-colors" data-ag-id="ag-n-878"><div class="bg-red-500 w-[0.625rem] h-[0.625rem] rounded-[1px]" data-ag-id="ag-n-879"></div></button></div></div></div></div></div></div></div></div></div></div>

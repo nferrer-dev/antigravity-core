@@ -1,0 +1,1 @@
+fetch('http://localhost:3000/snapshot').then(res => res.json()).then(data => { const html = data.html; const blocks = html.split('user-input-buttons-container'); let revert = 0; let noRevert = 0; blocks.slice(1).forEach(b => { if (b.substring(0, 1500).includes('revert-button')) revert++; else noRevert++; }); console.log('Has Revert:', revert, 'No Revert:', noRevert); })

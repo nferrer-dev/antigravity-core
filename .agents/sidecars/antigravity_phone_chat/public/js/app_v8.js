@@ -721,8 +721,134 @@ async function loadSnapshot() {
             '}';
         styleTag.textContent = darkModeOverrides;
         
-        if (!updateDOMPreservingScroll(chatContent, data.html, isNearBottom, isUserScrollLocked)) {
-            chatContent.innerHTML = data.html;
+        // Inject Edit/Redirect buttons for queued messages BEFORE morphing DOM
+        let modifiedHtml = data.html;
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(modifiedHtml, 'text/html');
+            
+            // Find all user-input-steps
+            const steps = doc.querySelectorAll('[data-testid="user-input-step"]');
+            steps.forEach(step => {
+                // We inject Edit/Redirect on all user-input-steps (queued or sent)
+                // The native phone UI doesn't have them
+                let btnContainer = step.querySelector('.user-input-buttons-container');
+                let targetIsTrash = false;
+                
+                if (!btnContainer) {
+                    const queuedDecorators = step.querySelector('[data-testid="queued-decorators"]');
+                    if (queuedDecorators) {
+                        btnContainer = queuedDecorators;
+                        targetIsTrash = true;
+                    } else {
+                        const buttons = step.querySelectorAll('button');
+                        if (buttons.length > 0) {
+                            const trashBtn = buttons[buttons.length - 1];
+                            btnContainer = trashBtn.parentElement;
+                            targetIsTrash = true;
+                        }
+                    }
+                }
+                
+                if (btnContainer && !btnContainer.querySelector('.ag-queued-edit-btn')) {
+                    const revertBtn = step.querySelector('button[data-testid="revert-button"]');
+                    const agId = revertBtn ? (revertBtn.getAttribute('data-target-ag-id') || revertBtn.getAttribute('data-ag-id')) : step.getAttribute('data-ag-id');
+                    
+                    if (!agId) return; // Skip if we cannot determine the ID
+                    
+                    const editBtn = doc.createElement('button');
+                    editBtn.className = 'action-icon edit-icon ag-queued-edit-btn text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1';
+                    editBtn.style.background = 'none';
+                    editBtn.style.border = 'none';
+                    editBtn.style.cursor = 'pointer';
+                    editBtn.setAttribute('aria-label', 'Edit queued message');
+                    editBtn.setAttribute('data-target-ag-id', agId);
+                    editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+                    
+                    const redirectBtn = doc.createElement('button');
+                    redirectBtn.className = 'action-icon redirect-icon ag-queued-redirect-btn text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1';
+                    redirectBtn.style.background = 'none';
+                    redirectBtn.style.border = 'none';
+                    redirectBtn.style.cursor = 'pointer';
+                    redirectBtn.setAttribute('aria-label', 'Redirect queued message');
+                    redirectBtn.setAttribute('data-target-ag-id', agId);
+                    redirectBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>';
+                    
+                    if (targetIsTrash) {
+                        btnContainer.insertBefore(redirectBtn, btnContainer.lastElementChild);
+                        btnContainer.insertBefore(editBtn, btnContainer.lastElementChild);
+                        
+                        if (btnContainer.classList) {
+                            if (!btnContainer.classList.contains('flex')) {
+                                btnContainer.style.display = 'flex';
+                                btnContainer.style.alignItems = 'center';
+                            }
+                            btnContainer.style.gap = '4px';
+                        }
+                    } else {
+                        btnContainer.insertBefore(redirectBtn, btnContainer.firstChild);
+                        btnContainer.insertBefore(editBtn, btnContainer.firstChild);
+                    }
+                }
+            });
+
+            // Also process queued messages that don't have [data-testid="user-input-step"]
+            // They typically just have a trash icon which might be a button or div
+            const allSvgs = doc.querySelectorAll('svg');
+            allSvgs.forEach(svg => {
+                const html = svg.outerHTML || '';
+                const aria = (svg.closest('button, [role="button"]') || {}).getAttribute?.('aria-label') || '';
+                
+                if (html.includes('M3 6h18') || html.includes('lucide-trash') || aria.toLowerCase().includes('remove from queue') || aria.toLowerCase().includes('delete')) {
+                    const btn = svg.closest('button, [role="button"], .cursor-pointer') || svg.parentElement;
+                    if (!btn) return;
+                    if (btn.closest('[data-testid="user-input-step"]')) return;
+                    
+                    let btnContainer = btn.parentElement;
+                    if (!btnContainer) return;
+                    if (btnContainer.querySelector('.ag-queued-edit-btn')) return;
+                    
+                    const agId = btn.getAttribute('data-target-ag-id') || btn.getAttribute('data-ag-id') || svg.getAttribute('data-ag-id');
+                    if (!agId) return;
+
+                    const editBtn = doc.createElement('button');
+                    editBtn.className = 'action-icon edit-icon ag-queued-edit-btn text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1';
+                    editBtn.style.background = 'none';
+                    editBtn.style.border = 'none';
+                    editBtn.style.cursor = 'pointer';
+                    editBtn.setAttribute('aria-label', 'Edit queued message');
+                    editBtn.setAttribute('data-target-ag-id', agId);
+                    editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+                    
+                    const redirectBtn = doc.createElement('button');
+                    redirectBtn.className = 'action-icon redirect-icon ag-queued-redirect-btn text-muted-foreground hover:text-secondary-foreground transition-opacity pointer-events-auto p-1';
+                    redirectBtn.style.background = 'none';
+                    redirectBtn.style.border = 'none';
+                    redirectBtn.style.cursor = 'pointer';
+                    redirectBtn.setAttribute('aria-label', 'Redirect queued message');
+                    redirectBtn.setAttribute('data-target-ag-id', agId);
+                    redirectBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>';
+                    
+                    btnContainer.insertBefore(redirectBtn, btn);
+                    btnContainer.insertBefore(editBtn, btn);
+                    
+                    if (btnContainer.classList) {
+                        if (!btnContainer.classList.contains('flex')) {
+                            btnContainer.style.display = 'flex';
+                            btnContainer.style.alignItems = 'center';
+                        }
+                        btnContainer.style.gap = '8px';
+                    }
+                }
+            });
+
+            modifiedHtml = doc.body.innerHTML;
+        } catch (e) {
+            console.error("Failed to inject queued message buttons:", e);
+        }
+
+        if (!updateDOMPreservingScroll(chatContent, modifiedHtml, isNearBottom, isUserScrollLocked)) {
+            chatContent.innerHTML = modifiedHtml;
         }
 
         // Re-apply modal-submit-lock if a question option was clicked
@@ -773,11 +899,6 @@ async function loadSnapshot() {
 
         // Add mobile copy buttons to all code blocks
         addMobileCopyButtons();
-        
-        // Inject Edit/Redirect buttons for queued messages
-        if (typeof injectQueuedMessageButtons === 'function') {
-            injectQueuedMessageButtons();
-        }
 
         // Setup resize observer for dynamic content loading (images/fonts)
         setupResizeObserver();
@@ -2374,6 +2495,40 @@ chatContainer.addEventListener('click', async (e) => {
     }
 
     // --- Universal Click Proxy ---
+    // Intercept injected queued message buttons
+    const editBtn = e.target.closest('.ag-queued-edit-btn');
+    if (editBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const agId = editBtn.getAttribute('data-target-ag-id') || editBtn.getAttribute('data-ag-id');
+        try {
+            await fetchWithAuth('/api/orchestrate/replace_input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetAgId: agId, prefix: '' })
+            });
+            setTimeout(loadSnapshot, 500);
+        } catch (err) { console.error(err); }
+        return;
+    }
+    
+    const redirectBtn = e.target.closest('.ag-queued-redirect-btn');
+    if (redirectBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const agId = redirectBtn.getAttribute('data-target-ag-id') || redirectBtn.getAttribute('data-ag-id');
+        try {
+            await fetchWithAuth('/api/orchestrate/replace_input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetAgId: agId, prefix: '/redirect ' })
+            });
+            setTimeout(loadSnapshot, 500);
+        } catch (err) { console.error(err); }
+        return;
+    }
+
+    // --- Native Mobile Copy Intercept (Bypass Backend) ---
     // Instead of only looking for <button>, we find the nearest interactive element 
     // or just pass the exact element tapped, so the desktop can trigger it regardless of HTML tag.
     if (e.target.closest('.mobile-copy-btn')) return;
@@ -3035,69 +3190,5 @@ function initializeVoiceInput() {
     });
 }
 initializeVoiceInput();
-
-// --- Queued Messages Proxy Logic ---
-function injectQueuedMessageButtons() {
-    const queuedStatuses = document.querySelectorAll('.status-message.queued');
-    queuedStatuses.forEach(statusEl => {
-        if (statusEl.querySelector('.ag-queued-edit-btn')) return;
-
-        const messageEl = statusEl.closest('.message') || statusEl.closest('[role="article"]');
-        if (!messageEl) return;
-        
-        const revertBtn = messageEl.querySelector('button[data-testid="revert-button"]');
-        if (!revertBtn) return;
-        
-        const agId = revertBtn.getAttribute('data-ag-id');
-        if (!agId) return;
-
-        const actionContainer = document.createElement('div');
-        actionContainer.style.display = 'inline-flex';
-        actionContainer.style.alignItems = 'center';
-        actionContainer.style.gap = '8px';
-        actionContainer.style.marginLeft = '12px';
-
-        const editBtn = document.createElement('button');
-        editBtn.className = 'action-icon edit-icon ag-queued-edit-btn';
-        editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
-        editBtn.style.background = 'none';
-        editBtn.style.border = 'none';
-        editBtn.style.color = 'var(--text-muted)';
-        editBtn.style.cursor = 'pointer';
-        editBtn.style.padding = '4px';
-        editBtn.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            fetchWithAuth('/api/orchestrate/replace_input', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetAgId: agId, prefix: '' })
-            });
-        };
-
-        const redirectBtn = document.createElement('button');
-        redirectBtn.className = 'action-icon redirect-icon ag-queued-redirect-btn';
-        redirectBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>';
-        redirectBtn.style.background = 'none';
-        redirectBtn.style.border = 'none';
-        redirectBtn.style.color = 'var(--text-muted)';
-        redirectBtn.style.cursor = 'pointer';
-        redirectBtn.style.padding = '4px';
-        redirectBtn.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            fetchWithAuth('/api/orchestrate/replace_input', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetAgId: agId, prefix: '/redirect ' })
-            });
-        };
-
-        actionContainer.appendChild(editBtn);
-        actionContainer.appendChild(redirectBtn);
-        statusEl.appendChild(actionContainer);
-    });
-}
-window.injectQueuedMessageButtons = injectQueuedMessageButtons;
 
 

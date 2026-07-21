@@ -73,28 +73,41 @@ export async function handleReplaceInputRoute(cdp, req, res) {
 
                 // 1. Locate parent article
                 const article = targetNode.closest('[role="article"]');
-                if (!article) return { success: false, error: "Article not found" };
-
-                // 2. Extract raw Markdown text from React Fiber
-                const fiberKey = Object.keys(article).find(k => k.startsWith('__reactFiber$'));
-                if (!fiberKey) return { success: false, error: "Fiber key not found" };
-
-                let fiber = article[fiberKey];
                 let extractedText = null;
-                let depth = 0;
-                
-                while (fiber && depth < 20) {
-                    if (fiber.memoizedProps && fiber.memoizedProps.message && typeof fiber.memoizedProps.message.text === 'string') {
-                        extractedText = fiber.memoizedProps.message.text;
-                        break;
-                    }
-                    fiber = fiber.return;
-                    depth++;
-                }
 
-                if (!extractedText) {
-                    const mdContainer = article.querySelector('.markdown-body, [class*="markdown"]');
-                    extractedText = mdContainer ? (mdContainer.innerText || mdContainer.textContent) : article.textContent;
+                if (!article) {
+                    // Check if it is a queued message (targetNode is usually the trash button)
+                    let queuedContainer = targetNode.closest('.flex.items-center, .relative.w-full');
+                    if (!queuedContainer) queuedContainer = targetNode.parentElement;
+                    if (queuedContainer) {
+                        extractedText = Array.from(queuedContainer.childNodes)
+                            .filter(n => n.nodeType === Node.TEXT_NODE || (n.nodeType === Node.ELEMENT_NODE && n.tagName !== 'BUTTON'))
+                            .map(n => n.textContent)
+                            .join('')
+                            .trim();
+                    }
+                    if (!extractedText) return { success: false, error: "Article/Queued message not found" };
+                } else {
+                    // 2. Extract raw Markdown text from React Fiber
+                    const fiberKey = Object.keys(article).find(k => k.startsWith('__reactFiber$'));
+                    if (!fiberKey) return { success: false, error: "Fiber key not found" };
+
+                    let fiber = article[fiberKey];
+                    let depth = 0;
+                    
+                    while (fiber && depth < 20) {
+                        if (fiber.memoizedProps && fiber.memoizedProps.message && typeof fiber.memoizedProps.message.text === 'string') {
+                            extractedText = fiber.memoizedProps.message.text;
+                            break;
+                        }
+                        fiber = fiber.return;
+                        depth++;
+                    }
+
+                    if (!extractedText) {
+                        const mdContainer = article.querySelector('.markdown-body, [class*="markdown"]');
+                        extractedText = mdContainer ? (mdContainer.innerText || mdContainer.textContent) : article.textContent;
+                    }
                 }
 
                 // 3. Locate main input field
@@ -2259,11 +2272,13 @@ const wss = new WebSocketServer({ server });
     });
 
 
-    // Get current snapshot
+    let hasDumped = false;
+        // Get current snapshot
     app.get('/snapshot', (req, res) => {
         if (!lastSnapshot) {
             return res.status(503).json({ error: 'No snapshot available yet' });
         }
+        
         console.log(`[GET /snapshot] Serving snapshot. isGenerating: ${lastSnapshot.isGenerating}`);
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.json(lastSnapshot);
@@ -2571,6 +2586,22 @@ const wss = new WebSocketServer({ server });
 
         // Always return 200 - the message usually goes through even if CDP reports issues
         // The client will refresh and see if the message appeared
+        
+        if (result.method === 'cdp_enter') {
+            console.log("Triggering explicit snapshot dump because we just queued a message!");
+            setTimeout(async () => {
+                const snap = await captureSnapshot(cdpConnection);
+                if (snap && snap.html) {
+                    try {
+                        fs.writeFileSync('pending_dump.html', snap.html);
+                        console.log("Dumped post-enter snapshot to pending_dump.html");
+                    } catch(e) { console.error('Error writing dump', e); }
+                } else {
+                    console.log("Failed to take snapshot for dump!");
+                }
+            }, 500);
+        }
+
         res.json({
             success: result.ok !== false,
             method: result.method || 'attempted',

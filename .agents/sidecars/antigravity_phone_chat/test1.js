@@ -1,0 +1,1 @@
+fetch('http://localhost:3000/snapshot').then(res => res.json()).then(data => { console.log('Test1 count:', data.html.split('Test1').length - 1); console.log('Test2 count:', data.html.split('Test2').length - 1); })

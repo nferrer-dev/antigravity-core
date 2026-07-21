@@ -1,0 +1,1 @@
+fetch('http://localhost:3000/snapshot').then(res => res.json()).then(data => { const html = data.html; console.log('user-input-buttons-container count:', html.split('user-input-buttons-container').length - 1); })
