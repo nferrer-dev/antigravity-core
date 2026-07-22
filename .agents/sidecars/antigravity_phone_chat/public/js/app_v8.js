@@ -283,27 +283,33 @@ function updateInputButtons() {
     
     const hasInput = messageInput.value.trim().length > 0 || (window.stagedAttachments && window.stagedAttachments.length > 0);
     
-    // RHS: Toggle between Voice and Send
+    // RHS: Toggle between Voice, Send, and Stop
     if (isGenerating && hasInput) {
         sendBtn.innerHTML = SVG_SEND_QUEUE;
         sendBtn.classList.add('visible');
+        stopBtn.classList.remove('visible');
+        if (voiceBtn) voiceBtn.style.display = 'none';
+    } else if (isGenerating && !hasInput) {
+        sendBtn.classList.remove('visible');
+        stopBtn.classList.add('visible');
         if (voiceBtn) voiceBtn.style.display = 'none';
     } else if (hasInput) {
         sendBtn.innerHTML = SVG_SEND_STANDARD;
         sendBtn.classList.add('visible');
+        stopBtn.classList.remove('visible');
         if (voiceBtn) voiceBtn.style.display = 'none';
     } else {
         sendBtn.classList.remove('visible');
+        stopBtn.classList.remove('visible');
         if (voiceBtn) voiceBtn.style.display = 'flex';
     }
 
-    // LHS: Toggle between Attach and Stop
+    // LHS: Attach wrapper remains visible
     const attachWrapper = document.querySelector('.attach-wrapper');
+    if (attachWrapper) attachWrapper.style.display = 'flex';
+
     if (isGenerating) {
         if (wrapper) wrapper.classList.add('generating');
-        if (attachWrapper) attachWrapper.style.display = 'none';
-        stopBtn.classList.add('visible');
-        
         // Start "Working..." animation
         if (!generationPlaceholderInterval) {
             let dotCount = 1;
@@ -321,9 +327,6 @@ function updateInputButtons() {
         }
     } else {
         if (wrapper) wrapper.classList.remove('generating');
-        stopBtn.classList.remove('visible');
-        const attachWrapper = document.querySelector('.attach-wrapper');
-        if (attachWrapper) attachWrapper.style.display = 'flex';
         
         // Stop animation and reset placeholder
         if (generationPlaceholderInterval) {
