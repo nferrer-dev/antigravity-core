@@ -264,6 +264,11 @@ function connectWebSocket() {
         if (data.type === 'snapshot_update' && autoRefreshEnabled && !userIsScrolling) {
             loadSnapshot();
         }
+        if (data.type === 'cdp_connected') {
+            checkChatStatus();
+            fetchAppState();
+            loadSnapshot();
+        }
     };
 
     ws.onclose = () => {

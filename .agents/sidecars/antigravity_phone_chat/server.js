@@ -1719,10 +1719,10 @@ async function getAppState(cdp) {
                 // The structure is typically: <button>1 task running</button> <div> ... <span>task name</span> ... </div>
                 const btn = taskEl.closest('button');
                 if (btn && btn.nextElementSibling) {
-                    const taskItems = btn.nextElementSibling.querySelectorAll('span.font-mono');
+                    const taskItems = btn.nextElementSibling.querySelectorAll('span.font-mono, span.truncate');
                     taskItems.forEach(item => {
                         const t = item.innerText.trim();
-                        if (t) runningTasksList.push(t);
+                        if (t && !runningTasksList.includes(t)) runningTasksList.push(t);
                     });
                 }
             } catch(e) {}
@@ -1816,8 +1816,21 @@ async function startPolling(wss) {
             try {
                 await initCDP();
                 if (cdpConnection) {
-                    console.log('✅ CDP Connection established from polling loop');
+                    console.log('⚡ CDP Connection established from polling loop');
                     isConnecting = false;
+                    
+                    // Immediately capture the first snapshot to ensure state is fresh
+                    const snapshot = await captureSnapshot(cdpConnection);
+                    if (snapshot && !snapshot.error && snapshot.html) {
+                        lastSnapshotHash = crypto.createHash('md5').update(snapshot.html).digest('hex');
+                    }
+                    
+                    // Broadcast CDP connected so clients know to immediately refresh their state
+                    wss.clients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(JSON.stringify({ type: 'cdp_connected' }));
+                        }
+                    });
                 }
             } catch (err) {
                 // Not found yet, just wait for next cycle
@@ -2896,14 +2909,14 @@ async function main() {
             if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
             
             const KILL_EXP = `(async () => {
-                const spans = Array.from(document.querySelectorAll('span.font-mono'));
+                const spans = Array.from(document.querySelectorAll('span.font-mono, span.truncate'));
                 const span = spans.find(el => el.innerText.trim() === ${JSON.stringify(taskName)});
                 if (!span) return { success: false, error: 'Task not found' };
                 
                 const container = span.closest('.group');
                 if (!container) return { success: false, error: 'Task container not found' };
                 
-                const stopBtn = container.querySelector('button[data-tooltip-id^="stop-task"]');
+                const stopBtn = container.querySelector('button[data-tooltip-id^="stop-task"], button[data-tooltip-id^="stop-subagent"]');
                 if (!stopBtn) return { success: false, error: 'Stop button not found' };
                 
                 stopBtn.click();
