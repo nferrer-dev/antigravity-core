@@ -84,6 +84,8 @@ let AUTH_TOKEN = 'ag_default_token';
 let cdpConnection = null;
 let lastSnapshot = null;
 let lastSnapshotHash = null;
+let debounceIsGenerating = false;
+let debounceIsGeneratingTimeout = null;
 
 // Kill any existing process on the server port (prevents EADDRINUSE)
 function killPortProcess(port) {
@@ -1883,6 +1885,23 @@ async function startPolling(wss) {
         try {
             const snapshot = await captureSnapshot(cdpConnection);
             if (snapshot && !snapshot.error) {
+                // Apply debounce logic to smooth over brief pauses (e.g. tool execution)
+                if (snapshot.isGenerating) {
+                    debounceIsGenerating = true;
+                    if (debounceIsGeneratingTimeout) {
+                        clearTimeout(debounceIsGeneratingTimeout);
+                        debounceIsGeneratingTimeout = null;
+                    }
+                } else if (debounceIsGenerating && !debounceIsGeneratingTimeout) {
+                    debounceIsGeneratingTimeout = setTimeout(() => {
+                        debounceIsGenerating = false;
+                        debounceIsGeneratingTimeout = null;
+                    }, 10000); // 10 seconds of debounce before we declare generation officially complete
+                }
+
+                // Override the snapshot state with the debounced state
+                snapshot.isGenerating = debounceIsGenerating;
+
                 if (snapshot.isGenerating) {
                     currentInterval = 150; // Fast stream mode (~7 FPS)
                 }
