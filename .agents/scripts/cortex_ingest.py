@@ -67,7 +67,7 @@ def ingest_directory(base_dir):
                     "--type", "reference",
                     "--namespace", namespace,
                     "--importance", "1.0",
-                    "--category", "textbook"
+                    "--category", "foundational"
                 ]
                 try:
                     env = os.environ.copy()
