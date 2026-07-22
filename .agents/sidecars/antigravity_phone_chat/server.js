@@ -631,6 +631,14 @@ async function captureSnapshot(cdp) {
                         return true;
                     }
                 }
+                // Check for background tool execution spinners
+                const spinners = document.querySelectorAll('.animate-spin');
+                for (let el of spinners) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        return true;
+                    }
+                }
                 return false;
             })(),
             stats: {
@@ -1896,7 +1904,7 @@ async function startPolling(wss) {
                     debounceIsGeneratingTimeout = setTimeout(() => {
                         debounceIsGenerating = false;
                         debounceIsGeneratingTimeout = null;
-                    }, 10000); // 10 seconds of debounce before we declare generation officially complete
+                    }, 2000); // 2 seconds of debounce to smooth over DOM render gaps
                 }
 
                 // Override the snapshot state with the debounced state
