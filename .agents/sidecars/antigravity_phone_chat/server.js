@@ -1706,7 +1706,7 @@ async function getAppState(cdp) {
 
         // 3. Get Running Tasks
         // Strategy: Look for an element containing text like "1 task running" or "N tasks running"
-        const taskRegex = /^\\d+ tasks? running$/i;
+        const taskRegex = /^\\d+ .*running$/i;
         const taskEl = textNodes2.find(el => {
             return taskRegex.test(el.innerText.trim());
         });
