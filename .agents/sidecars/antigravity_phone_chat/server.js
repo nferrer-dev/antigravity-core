@@ -1363,6 +1363,9 @@ async function getChatHistory(cdp) {
                     let pillWorkspace = 'Global';
                     let isPinned = false;
                     
+                    const parentA = el.closest('a');
+                    const isActive = parentA ? parentA.className.includes('bg-accent') : false;
+                    
                     if (currentSection.toLowerCase().includes('pinned')) {
                         isPinned = true;
                     } else if (currentSection.toLowerCase().includes('project')) {
@@ -1375,8 +1378,8 @@ async function getChatHistory(cdp) {
                         pillWorkspace = parts[parts.length - 1];
                     }
                     
-                    logLines.push({ originalText: el.textContent, parsedTitle: text, section: currentSection, group: currentGroup, workspace: pillWorkspace, isPinned, id: testId });
-                    chats.push({ title: text, workspace: pillWorkspace, date: 'Recent', isPinned, id: testId });
+                    logLines.push({ originalText: el.textContent, parsedTitle: text, section: currentSection, group: currentGroup, workspace: pillWorkspace, isPinned, id: testId, isActive });
+                    chats.push({ title: text, workspace: pillWorkspace, date: 'Recent', isPinned, id: testId, isActive });
                     if (chats.length >= 200) break;
                 }
             }

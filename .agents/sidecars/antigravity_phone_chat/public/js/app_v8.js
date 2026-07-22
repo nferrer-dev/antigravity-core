@@ -1822,20 +1822,25 @@ function renderHistoryData(chats) {
         const defaultIcon = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                         </svg>`;
-        const style = isHidden ? 'display: none;' : '';
+        let style = isHidden ? 'display: none;' : '';
+        let extraClass = '';
+        if (chat.isActive) {
+            style += ' opacity: 0.5; cursor: default;';
+            extraClass = ' active-chat';
+        }
         return `
-            <div class="history-card" data-title="${safeTitle}" style="${style}">
+            <div class="history-card${extraClass}" data-title="${safeTitle}" style="${style}" ${chat.isActive ? 'data-active="true"' : ''}>
                 <div class="history-card-icon">
                     ${customIcon || defaultIcon}
                 </div>
                 <div class="history-card-content">
                     <span class="history-card-title">${escapeHtml(chat.title)}</span>
                 </div>
-                <div class="history-card-arrow">
+                ${chat.isActive ? '' : `<div class="history-card-arrow">
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="9 18 15 12 9 6"></polyline>
                     </svg>
-                </div>
+                </div>`}
             </div>
         `;
     };
@@ -2937,6 +2942,8 @@ if (historyList) {
             hideChatHistory();
             startNewChat();
         } else if (card) {
+            if (card.getAttribute('data-active') === 'true') return; // Ignore clicks on the active chat
+            
             const title = card.getAttribute('data-title');
             
             // Debug visual feedback
