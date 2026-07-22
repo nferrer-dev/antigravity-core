@@ -560,6 +560,8 @@ textarea::-webkit-resizer {
 
 #stopBtn {
     color: var(--error);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 #stopBtn svg {

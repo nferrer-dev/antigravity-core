@@ -283,25 +283,21 @@ function updateInputButtons() {
     
     const hasInput = messageInput.value.trim().length > 0 || (window.stagedAttachments && window.stagedAttachments.length > 0);
     
-    // RHS: Toggle between Voice, Send, and Stop
+    // RHS: Toggle between Send and Stop
     if (isGenerating && hasInput) {
         sendBtn.innerHTML = SVG_SEND_QUEUE;
         sendBtn.classList.add('visible');
         stopBtn.classList.remove('visible');
-        if (voiceBtn) voiceBtn.style.display = 'none';
     } else if (isGenerating && !hasInput) {
         sendBtn.classList.remove('visible');
         stopBtn.classList.add('visible');
-        if (voiceBtn) voiceBtn.style.display = 'none';
     } else if (hasInput) {
         sendBtn.innerHTML = SVG_SEND_STANDARD;
         sendBtn.classList.add('visible');
         stopBtn.classList.remove('visible');
-        if (voiceBtn) voiceBtn.style.display = 'none';
     } else {
         sendBtn.classList.remove('visible');
         stopBtn.classList.remove('visible');
-        if (voiceBtn) voiceBtn.style.display = 'flex';
     }
 
     // LHS: Attach wrapper remains visible
