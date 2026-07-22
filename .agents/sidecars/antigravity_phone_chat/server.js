@@ -1364,7 +1364,16 @@ async function getChatHistory(cdp) {
                     let isPinned = false;
                     
                     const parentA = el.closest('a');
-                    const isActive = parentA ? parentA.className.includes('bg-accent') : false;
+                    let isActive = false;
+                    if (parentA) {
+                        try {
+                            isActive = parentA.classList.contains('bg-accent') || 
+                                       parentA.getAttribute('data-active') === 'true' ||
+                                       parentA.getAttribute('aria-current') === 'page';
+                        } catch(e) {
+                            console.error(e);
+                        }
+                    }
                     
                     if (currentSection.toLowerCase().includes('pinned')) {
                         isPinned = true;
