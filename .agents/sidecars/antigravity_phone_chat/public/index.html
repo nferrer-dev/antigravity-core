@@ -158,6 +158,17 @@
             </div>
         </div>
     </div>
+    
+    <div class="modal-overlay" id="workspaceModalOverlay">
+        <div class="modal-panel" id="workspaceModalPanel">
+            <div class="modal-title">Select Workspace</div>
+            <div id="workspaceModalList"></div>
+            <div style="margin-top:20px; text-align:center;">
+                <button onclick="document.getElementById('workspaceModalOverlay').classList.remove('show'); document.getElementById('newChatBtn').style.opacity = '1'; document.getElementById('newChatBtn').style.pointerEvents = 'auto';"
+                    style="background:transparent; border:none; color:var(--text-muted); padding:10px;">Cancel</button>
+            </div>
+        </div>
+    </div>
 
     <!-- History Layer (Full Screen) -->
     <div class="history-layer" id="historyLayer">

@@ -1621,13 +1621,68 @@ stopBtn.addEventListener('click', async () => {
     setTimeout(() => stopBtn.style.opacity = '1', 500);
 });
 
-// --- New Chat Logic ---
 async function startNewChat() {
     newChatBtn.style.opacity = '0.5';
     newChatBtn.style.pointerEvents = 'none';
 
     try {
-        const res = await fetchWithAuth('/new-chat', { method: 'POST' });
+        const historyRes = await fetchWithAuth('/chat-history');
+        const historyData = await historyRes.json();
+        
+        const workspaces = new Set();
+        if (historyData && historyData.chats) {
+            historyData.chats.forEach(c => {
+                if (c.workspace) workspaces.add(c.workspace);
+            });
+        }
+        
+        if (workspaces.size === 0) {
+            doStartNewChat();
+            return;
+        }
+        
+        const list = document.getElementById('workspaceModalList');
+        list.innerHTML = '';
+        
+        // Add unscoped option at the top
+        const globalItem = document.createElement('div');
+        globalItem.className = 'modal-option';
+        globalItem.textContent = 'Global (Unscoped)';
+        globalItem.onclick = () => {
+            document.getElementById('workspaceModalOverlay').classList.remove('show');
+            doStartNewChat(null);
+        };
+        list.appendChild(globalItem);
+        
+        Array.from(workspaces).forEach(ws => {
+            const item = document.createElement('div');
+            item.className = 'modal-option';
+            item.textContent = ws;
+            item.onclick = () => {
+                document.getElementById('workspaceModalOverlay').classList.remove('show');
+                doStartNewChat(ws);
+            };
+            list.appendChild(item);
+        });
+        
+        document.getElementById('workspaceModalOverlay').classList.add('show');
+    } catch (e) {
+        console.error('Error fetching chat history for workspaces:', e);
+        doStartNewChat(); // fallback
+    }
+}
+
+async function doStartNewChat(workspace = null) {
+    newChatBtn.style.opacity = '0.5';
+    newChatBtn.style.pointerEvents = 'none';
+
+    try {
+        const body = workspace ? JSON.stringify({ workspace }) : '{}';
+        const res = await fetchWithAuth('/new-chat', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+        });
         const data = await res.json();
 
         if (data.success) {
@@ -1635,6 +1690,10 @@ async function startNewChat() {
             setTimeout(loadSnapshot, 500);
             setTimeout(loadSnapshot, 1000);
             setTimeout(checkChatStatus, 1500);
+            
+            // If the history layer was open, let's keep it open or close it? 
+            // Better to close it so user sees the new chat.
+            hideChatHistory();
         } else {
             console.error('Failed to start new chat:', data.error);
         }
@@ -1647,7 +1706,6 @@ async function startNewChat() {
         newChatBtn.style.pointerEvents = 'auto';
     }, 500);
 }
-
 newChatBtn.addEventListener('click', startNewChat);
 
 // --- Chat History Logic ---

@@ -1230,14 +1230,31 @@ async function setModel(cdp, modelName) {
 }
 
 // Start New Chat - Click the + button at the TOP of the chat window (NOT the context/media + button)
-async function startNewChat(cdp) {
+async function startNewChat(cdp, workspace = null) {
     const EXP = `(async () => {
         try {
-            // Priority 1: Exact selector from user (data-tooltip-id="new-conversation-tooltip")
-            const exactBtn = document.querySelector('[data-tooltip-id="new-conversation-tooltip"]');
+            if (${JSON.stringify(workspace)}) {
+                const ws = ${JSON.stringify(workspace)};
+                const btns = Array.from(document.querySelectorAll('[aria-label="New Conversation in Project"]'));
+                const foundBtn = btns.find(btn => {
+                    const group = btn.closest('.group\\\\/section') || btn.closest('div');
+                    if (group && group.firstElementChild) {
+                        return group.firstElementChild.textContent.includes(ws);
+                    }
+                    return false;
+                });
+                
+                if (foundBtn) {
+                    foundBtn.click();
+                    return { success: true, method: 'workspace-specific' };
+                }
+            }
+
+            // Unscoped or fallback
+            const exactBtn = document.querySelector('[aria-label="New Conversation"]');
             if (exactBtn) {
                 exactBtn.click();
-                return { success: true, method: 'data-tooltip-id' };
+                return { success: true, method: 'aria_label_new' };
             }
 
             // Fallback: Use previous heuristics
@@ -2909,9 +2926,23 @@ async function main() {
             if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
             
             const KILL_EXP = `(async () => {
-                const spans = Array.from(document.querySelectorAll('span.font-mono, span.truncate'));
+                const taskRegex = /^\\d+ .*running$/i;
+                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                let taskEl = null;
+                while (walker.nextNode()) {
+                    if (taskRegex.test(walker.currentNode.nodeValue.trim())) {
+                        taskEl = walker.currentNode.parentElement;
+                        break;
+                    }
+                }
+                if (!taskEl) return { success: false, error: 'Task indicator not found' };
+                
+                const btn = taskEl.closest('button');
+                if (!btn || !btn.nextElementSibling) return { success: false, error: 'Task dropdown not found' };
+                
+                const spans = Array.from(btn.nextElementSibling.querySelectorAll('span.font-mono, span.truncate'));
                 const span = spans.find(el => el.innerText.trim() === ${JSON.stringify(taskName)});
-                if (!span) return { success: false, error: 'Task not found' };
+                if (!span) return { success: false, error: 'Task not found in dropdown' };
                 
                 const container = span.closest('.group');
                 if (!container) return { success: false, error: 'Task container not found' };
@@ -2958,9 +2989,25 @@ async function main() {
         });
 
         // Start New Chat
+        app.get('/dump-dom', async (req, res) => {
+    try {
+        const result = await cdpConnection.call('Runtime.evaluate', {
+            expression: 'document.body.innerHTML',
+            returnByValue: true
+        });
+        require('fs').writeFileSync('dom_dump.html', result.result.value);
+        res.send('OK');
+    } catch (e) {
+        res.status(500).send(e.toString());
+    }
+});
+
         app.post('/new-chat', async (req, res) => {
             if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
-            const result = await startNewChat(cdpConnection);
+            
+            const { workspace } = req.body || {};
+            
+            const result = await startNewChat(cdpConnection, workspace);
             res.json(result);
         });
 
