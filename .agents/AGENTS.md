@@ -7,7 +7,7 @@ You must integrate the `harness-nexus` team into your default workflow. To preve
    - **Triviality Exemption**: If a change is non-functional (typos, formatting) or highly isolated, you MUST bypass the consensus loop entirely. *Anti-Loophole*: Modifying execution paths (e.g., shell scripts, pipeline mocks) or altering global state boundaries (e.g., gitignore mutations) is explicitly defined as functional and is strictly forbidden from using this exemption, regardless of how small the boilerplate text update is.
    - **Targeted Review**: When modifying a plan or code, explicitly instruct the subagents to restrict their review strictly to their assigned domain.
 
-2. **Design-Validate Loop**: When you have finalized a draft of an implementation plan, design document, or architecture artifact, you MUST automatically invoke the impacted `harness-nexus` design-validate subagents (e.g., Idea Skeptic, System Architect, Requirements Engineer, Scope Reviewer).
+2. **Design-Validate Loop**: When you have finalized a draft of an implementation plan, design document, or architecture artifact, you MUST automatically invoke the impacted `harness-nexus` design-validate subagents (e.g., Idea Skeptic, System Architect, Requirements Engineer, Scope Reviewer). Instruct the System Architect and Idea Skeptic to proactively consult the `cortex-librarian` skill using `--workflow=validate-design` for architectural validation.
    - **Explicit Signalling**: Instruct subagents to conclude their review with an explicit `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Ignore intermediate chatter.
    - **Comprehensive Feedback**: You MUST NOT exit the loop or cancel pending subagents early. Wait for ALL invoked subagents to return a verdict to gather comprehensive feedback in parallel.
    - **Asynchronous Deadlines**: You MUST set an absolute timeout (e.g., a 3-minute `schedule` timer). If a subagent times out, you lack actionable feedback. You MUST halt the loop and escalate to the USER.
@@ -23,7 +23,7 @@ You must integrate the `harness-nexus` team into your default workflow. To preve
 
 4. **Iterative-Implement Loop**: Whenever you execute or finalize code changes, you MUST automatically invoke the `harness-nexus` implementation committee.
    - **Bounded Pre-Flight Gate**: You MUST actively search for and run standard linters or unit tests on the modified files exactly ONCE. Do not enter an unmanaged "test-and-fix" loop. Inject the test output directly into the prompt for the subagents.
-   - **Context-Dependent Roster**: You must explicitly define and conditionally invoke subagents based on the code's domain: `Language-Specific Style Expert` (Always invoked for code), `Security Auditor` (Only for auth/crypto/inputs/network), `Performance Profiler` (Only for data-pipelines/loops), and `Markdown Style Expert` (Only for documentation/Markdown files). Pass them the explicit code diffs and absolute file paths.
+   - **Context-Dependent Roster**: You must explicitly define and conditionally invoke subagents based on the code's domain: `Language-Specific Style Expert` (Always invoked for code), `Security Auditor` (Only for auth/crypto/inputs/network), `Performance Profiler` (Only for data-pipelines/loops), and `Markdown Style Expert` (Only for documentation/Markdown files). Pass them the explicit code diffs and absolute file paths. Instruct the `Language-Specific Style Expert` and `Security Auditor` to query the `cortex-librarian` skill using `--workflow=iterative-implement` to pull syntax rules, style limits, and edge-cases.
        - **SkillOpt Style Integration (Lazy Evaluation)**: When invoking the `Language-Specific Style Expert`, you MUST explicitly instruct it to read the relevant style skill (e.g., `.agents/skills/style-python`, `style-go`, `style-js`, `style-cpp`, `style-java`, `style-rust`) based on the file extension. You must ALSO instruct the Style Expert that it MUST proactively read the corresponding `[skillname]-edge-cases.md` file (if it exists) as part of its standard evaluation rubric to ensure subjective edge cases are caught. Standard code-generating agents are strictly forbidden from reading the `-edge-cases.md` files unless they encounter a failure or ambiguity.
    - **Inherited State Machine**: The core orchestration rules (Triviality Exemptions, 3-minute Absolute Timeouts, Explicit `[VERDICT]` Signalling, Full-Committee Resubmissions, 5-round Cap, and Dynamic Stagnation Detection) strictly apply.
    - **Context-Aware Diff Resubmissions**: To conserve tokens, any resubmission must contain ONLY the newly generated code delta/diff. However, you MUST instruct subagents that they retain the mandate to use `view_file` to verify the localized fix within the broader file context.
@@ -38,7 +38,7 @@ You must integrate the `harness-nexus` team into your default workflow. To preve
 
 You must automatically invoke the `technical-debate` skill as part of your default workflow without requiring explicit prompting under the following conditions:
 
-1. **Stage 1 Idea Vetting**: When a user asks a complex technical question, proposes a significant design decision, or asks if a specific change correctly accomplishes a goal, you MUST run the `technical-debate` skill to rigorously vet the proposition BEFORE creating an implementation plan. 
+1. **Stage 1 Idea Vetting**: When a user asks a complex technical question, proposes a significant design decision, or asks if a specific change correctly accomplishes a goal, you MUST run the `technical-debate` skill to rigorously vet the proposition BEFORE creating an implementation plan. Instruct the debate adjudicators (Proponent/Critic) to consult the `cortex-librarian` skill using `--workflow=technical-debate` to supply hard evidence. 
 2. **Pipeline Integration**: The `technical-debate` workflow runs upstream of the `validate-design` loop. You are NOT allowed to proceed with writing an `implementation_plan.md` (which triggers the `validate-design` consensus loop) until the `technical-debate` workflow completes and the parent agent (acting as the Hostile Adjudicator) delivers a `PROCEED` verdict.
 3. **Major Configuration Changes**: When a user proposes a major configuration change (e.g., swapping databases, altering deployment environments, changing core dependencies), you MUST automatically run the `technical-debate` skill to audit downstream/upstream risks.
 4. **Triviality Exemption**: If a requested change is purely cosmetic, trivial (e.g., fixing typos), or non-functional, you may bypass the debate and log a 'Triviality Exemption'. *Anti-Loophole*: You are strictly forbidden from applying this exemption to changes that alter execution paths or global state boundaries (e.g., shell scripts, CI mocks, gitignore files).
@@ -57,7 +57,7 @@ To prevent catastrophic hallucinations and wild goose chases, all agents and sub
    - What you **DO** know with certainty.
    - What you **DO NOT** know.
    - What is **BLOCKING** you from determining the facts (e.g., missing data, lack of file access, missing context).
-   - **Crucial Architecture Constraint**: If you are a subagent, you MUST communicate this structured blocked state back to your caller/parent via the \send_message\ tool. Simply outputting text and halting will cause a system deadlock. Top-level agents should output the blocked state directly to the user.
+   - **Crucial Architecture Constraint**: If you are a subagent, you MUST communicate this structured blocked state back to your caller/parent via the `send_message` tool. Simply outputting text and halting will cause a system deadlock. Top-level agents should output the blocked state directly to the user.
 
 ---
 # Agentic Test-Driven Development (TDD) Protocol
@@ -180,9 +180,9 @@ To solve the "Black Box of Observability" and allow human operators to rapidly r
 
 To prevent systemic framework subversion, memory leaks, and context pollution, all agents MUST strictly adhere to the Asynchronous Patience Protocol when utilizing the schedule background timer:
 
-1. **Mandatory Waiting**: You are STRICTLY FORBIDDEN from manually killing an asynchronous timeout timer (e.g., using manage_task kill) *before* the awaited subagents or background processes reply. Do not assume or hallucinate a system failure simply because a response takes time.
-2. **Mandatory Cleanup**: To prevent memory leaks and out-of-context message injection, you MUST use manage_task kill to clean up the active timer immediately *after* the subagents successfully reply.
-3. **Evidence-Based Error Reporting**: You cannot assert that a tool, subagent, or system component failed without explicitly outputting the precise status: ERROR trace returned by the API.
+1. **Mandatory Waiting**: You are STRICTLY FORBIDDEN from manually killing an asynchronous timeout timer (e.g., using `manage_task kill`) *before* the awaited subagents or background processes reply. Do not assume or hallucinate a system failure simply because a response takes time.
+2. **Mandatory Cleanup**: To prevent memory leaks and out-of-context message injection, you MUST use `manage_task kill` to clean up the active timer immediately *after* the subagents successfully reply.
+3. **Evidence-Based Error Reporting**: You cannot assert that a tool, subagent, or system component failed without explicitly outputting the precise `status: ERROR` trace returned by the API.
 
 ---
 # Strict Design-Validate Consensus Enforcement
