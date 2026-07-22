@@ -1154,9 +1154,6 @@ async function sendMessage(lockedElement = null) {
         }
 
         // Always reload snapshot to check if message appeared
-        setTimeout(loadSnapshot, 300);
-        setTimeout(loadSnapshot, 800);
-        setTimeout(checkChatStatus, 1000);
 
         // Don't revert the input - if user sees the message in chat, it was sent
         // Only log errors for debugging, don't show alert popups
@@ -1171,7 +1168,6 @@ async function sendMessage(lockedElement = null) {
             lockedElement.classList.remove('modal-submit-lock');
             lockedOptionNumber = null;
         }
-        setTimeout(loadSnapshot, 500);
     } finally {
         sendBtn.disabled = false;
         sendBtn.style.opacity = '1';
@@ -1691,9 +1687,6 @@ async function doStartNewChat(workspace = null) {
 
         if (data.success) {
             // Reload snapshot to show new empty chat
-            setTimeout(loadSnapshot, 500);
-            setTimeout(loadSnapshot, 1000);
-            setTimeout(checkChatStatus, 1500);
             
             // If the history layer was open, let's keep it open or close it? 
             // Better to close it so user sees the new chat.
@@ -2021,11 +2014,9 @@ async function selectChat(title) {
             }, 500);
         } else {
             console.error('Failed to select chat:', data.error);
-            setTimeout(loadSnapshot, 500);
         }
     } catch (e) {
         console.error('Select chat error:', e);
-        setTimeout(loadSnapshot, 500);
     }
 }
 
@@ -2249,9 +2240,6 @@ document.addEventListener('change', (e) => {
             })
         }).then(() => {
             // Rapidly poll snapshot to reflect conditional UI updates (e.g. enabling a submit button) instantly
-            setTimeout(loadSnapshot, 100);
-            setTimeout(loadSnapshot, 300);
-            setTimeout(loadSnapshot, 600);
         }).catch(err => console.error('Failed to sync input state:', err));
     }
 });
@@ -2422,7 +2410,6 @@ chatContainer.addEventListener('click', async (e) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ targetAgId: agId, prefix: '/redirect ' })
             });
-            setTimeout(loadSnapshot, 500);
         } catch (err) { console.error(err); }
         return;
     }
@@ -2591,9 +2578,6 @@ chatContainer.addEventListener('click', async (e) => {
 
             // Reload snapshot multiple times to catch the UI change
             // Desktop animation takes time, so we poll a few times
-            setTimeout(loadSnapshot, 400);   // Quick check
-            setTimeout(loadSnapshot, 800);   // After animation starts
-            setTimeout(loadSnapshot, 1500);  // After animation completes
         } catch (e) {
             console.error('Remote click failed:', e);
         }
@@ -2774,9 +2758,6 @@ chatContainer.addEventListener('click', async (e) => {
                     chatContent.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Clearing history...</p></div>';
                 }
                 // Rapidly poll snapshot to reflect the click instantly and reduce input delay
-                setTimeout(loadSnapshot, 100);
-                setTimeout(loadSnapshot, 300);
-                setTimeout(loadSnapshot, 600);
             }).catch(err => {
                 console.error('Failed to remote click:', err);
             }).finally(() => {
@@ -2879,7 +2860,6 @@ chatContainer.addEventListener('click', async (e) => {
                     })
                 });
                 
-                setTimeout(loadSnapshot, 1000);
             } catch (err) {
                 console.error('Remote click failed:', err);
             }
@@ -3013,11 +2993,9 @@ updateInputButtons();
 connectWebSocket();
 // Sync state initially and every 2 seconds to keep phone in sync with desktop changes
 fetchAppState();
-setInterval(fetchAppState, 2000);
 
 // Check chat status initially and periodically
 checkChatStatus();
-setInterval(checkChatStatus, 10000); // Check every 10 seconds
 
 // --- Initialize Native File Upload ---
 function initializeFileUpload() {
@@ -3065,7 +3043,6 @@ function initializeFileUpload() {
                 window.stagedAttachments.push(...data.filenames);
                 renderStagedAttachments();
             }
-            setTimeout(loadSnapshot, 1000);
         } catch (err) {
             console.error('File upload failed:', err);
             alert('Upload failed: ' + err.message);

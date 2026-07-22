@@ -271,6 +271,10 @@ async function connectCDP(url) {
 
 // Capture chat snapshot
 async function captureSnapshot(cdp) {
+    for (const ctx of cdp.contexts) {
+        try { await cdp.call('Runtime.evaluate', { expression: 'window.__AGY_PAUSE_OBSERVER = true;' }); } catch(e) {}
+    }
+
     const CAPTURE_SCRIPT = `(async () => {
         const cascade = document.querySelector('[data-testid="conversation-view"]');
         if (!cascade) {
@@ -1850,117 +1854,107 @@ async function initCDP() {
 async function startPolling(wss) {
     let lastErrorLog = 0;
     let isConnecting = false;
+    let syncInProgress = false;
 
-    const poll = async () => {
-        let currentInterval = 1000; // Default idle interval
-
-        if (!cdpConnection || (cdpConnection.ws && cdpConnection.ws.readyState !== WebSocket.OPEN)) {
-            if (!isConnecting) {
-                console.log('🔍 Looking for Antigravity CDP connection...');
-                isConnecting = true;
-            }
-            if (cdpConnection) {
-                // Was connected, now lost
-                console.log('🔄 CDP connection lost. Attempting to reconnect...');
-                cdpConnection = null;
-            }
-            try {
-                await initCDP();
+    const performSync = async () => {
+        if (syncInProgress) return;
+        syncInProgress = true;
+        try {
+            if (!cdpConnection || (cdpConnection.ws && cdpConnection.ws.readyState !== WebSocket.OPEN)) {
+                if (!isConnecting) {
+                    console.log('🔍 Looking for Antigravity CDP connection...');
+                    isConnecting = true;
+                }
                 if (cdpConnection) {
-                    console.log('⚡ CDP Connection established from polling loop');
-                    isConnecting = false;
-                    
-                    // Immediately capture the first snapshot to ensure state is fresh
-                    const snapshot = await captureSnapshot(cdpConnection);
-                    if (snapshot && !snapshot.error && snapshot.html) {
-                        lastSnapshotHash = crypto.createHash('md5').update(snapshot.html).digest('hex');
-                    }
-                    
-                    // Broadcast CDP connected so clients know to immediately refresh their state
-                    wss.clients.forEach(client => {
-                        if (client.readyState === WebSocket.OPEN) {
-                            client.send(JSON.stringify({ type: 'cdp_connected' }));
+                    console.log('🔄 CDP connection lost. Attempting to reconnect...');
+                    cdpConnection = null;
+                }
+                try {
+                    await initCDP();
+                    if (cdpConnection) {
+                        console.log('⚡ CDP Connection established from polling loop');
+                        isConnecting = false;
+                        
+                        cdpConnection.ws.on('close', () => {
+                            if (cdpConnection) cdpConnection = null;
+                            if (global.onSyncTrigger) global.onSyncTrigger();
+                        });
+
+                        const snapshot = await captureSnapshot(cdpConnection);
+                        if (snapshot && !snapshot.error && snapshot.html) {
+                            lastSnapshotHash = hashString(snapshot.html);
                         }
-                    });
+                        
+                        wss.clients.forEach(client => {
+                            if (client.readyState === WebSocket.OPEN) {
+                                client.send(JSON.stringify({ type: 'cdp_connected' }));
+                            }
+                        });
+                    }
+                } catch (err) { }
+                syncInProgress = false;
+                if (!cdpConnection) {
+                    setTimeout(performSync, 2000);
+                }
+                }
+                return;
+            }
+
+            try {
+                const snapshot = await captureSnapshot(cdpConnection);
+                if (snapshot && !snapshot.error) {
+                    if (snapshot.isGenerating) {
+                        debounceIsGenerating = true;
+                        if (debounceIsGeneratingTimeout) {
+                            clearTimeout(debounceIsGeneratingTimeout);
+                            debounceIsGeneratingTimeout = null;
+                        }
+                    } else if (debounceIsGenerating && !debounceIsGeneratingTimeout) {
+                        debounceIsGeneratingTimeout = setTimeout(() => {
+                            debounceIsGenerating = false;
+                            debounceIsGeneratingTimeout = null;
+                        }, 2000);
+                    }
+
+                    snapshot.isGenerating = debounceIsGenerating;
+                    const hash = hashString(snapshot.html);
+
+                    if (hash !== lastSnapshotHash || (lastSnapshot && snapshot.isGenerating !== lastSnapshot.isGenerating)) {
+                        handleSnapshotUpdate(lastSnapshot, snapshot);
+                        lastSnapshot = snapshot;
+                        lastSnapshotHash = hash;
+                        try { fs.writeFileSync(join(__dirname, 'latest_snapshot.html'), snapshot.html, 'utf8'); } catch(e){}
+
+                        wss.clients.forEach(client => {
+                            if (client.readyState === WebSocket.OPEN) {
+                                client.send(JSON.stringify({
+                                    type: 'snapshot_update',
+                                    timestamp: new Date().toISOString()
+                                }));
+                            }
+                        });
+
+                        if (Math.random() < 0.1) console.log(`📸 Snapshot updated(hash: ${hash})`);
+                    }
+                } else {
+                    const now = Date.now();
+                    if (!lastErrorLog || now - lastErrorLog > 10000) {
+                        const errorMsg = snapshot?.error || 'No valid snapshot captured';
+                        console.warn(`⚠️  Snapshot capture issue: ${errorMsg} `);
+                        lastErrorLog = now;
+                    }
                 }
             } catch (err) {
-                // Not found yet, just wait for next cycle
+                console.error('Poll error:', err.message);
             }
-            setTimeout(poll, 2000); // Try again in 2 seconds if not found
-            return;
+            syncInProgress = false;
+        } catch (e) {
+            syncInProgress = false;
         }
-
-        try {
-            const snapshot = await captureSnapshot(cdpConnection);
-            if (snapshot && !snapshot.error) {
-                // Apply debounce logic to smooth over brief pauses (e.g. tool execution)
-                if (snapshot.isGenerating) {
-                    debounceIsGenerating = true;
-                    if (debounceIsGeneratingTimeout) {
-                        clearTimeout(debounceIsGeneratingTimeout);
-                        debounceIsGeneratingTimeout = null;
-                    }
-                } else if (debounceIsGenerating && !debounceIsGeneratingTimeout) {
-                    debounceIsGeneratingTimeout = setTimeout(() => {
-                        debounceIsGenerating = false;
-                        debounceIsGeneratingTimeout = null;
-                    }, 2000); // 2 seconds of debounce to smooth over DOM render gaps
-                }
-
-                // Override the snapshot state with the debounced state
-                snapshot.isGenerating = debounceIsGenerating;
-
-                if (snapshot.isGenerating) {
-                    currentInterval = 150; // Fast stream mode (~7 FPS)
-                }
-
-                const hash = hashString(snapshot.html);
-
-                // Only update if content changed or generation state changed
-                if (hash !== lastSnapshotHash || (lastSnapshot && snapshot.isGenerating !== lastSnapshot.isGenerating)) {
-                    handleSnapshotUpdate(lastSnapshot, snapshot);
-                    lastSnapshot = snapshot;
-                    lastSnapshotHash = hash;
-                    try { fs.writeFileSync(join(__dirname, 'latest_snapshot.html'), snapshot.html, 'utf8'); } catch(e){}
-
-                    // Broadcast to all connected clients
-                    wss.clients.forEach(client => {
-                        if (client.readyState === WebSocket.OPEN) {
-                            client.send(JSON.stringify({
-                                type: 'snapshot_update',
-                                timestamp: new Date().toISOString()
-                            }));
-                        }
-                    });
-
-                    // Don't log every 150ms to prevent spam
-                    if (currentInterval !== 150 || Math.random() < 0.1) {
-                        console.log(`📸 Snapshot updated(hash: ${hash})`);
-                    }
-                }
-            } else {
-                // Snapshot is null or has error
-                const now = Date.now();
-                if (!lastErrorLog || now - lastErrorLog > 10000) {
-                    const errorMsg = snapshot?.error || 'No valid snapshot captured (check contexts)';
-                    console.warn(`⚠️  Snapshot capture issue: ${errorMsg} `);
-                    if (errorMsg.includes('container not found')) {
-                        console.log('   (Tip: Ensure an active chat is open in Antigravity)');
-                    }
-                    if (cdpConnection.contexts.length === 0) {
-                        console.log('   (Tip: No active execution contexts found. Try interacting with the Antigravity window)');
-                    }
-                    lastErrorLog = now;
-                }
-            }
-        } catch (err) {
-            console.error('Poll error:', err.message);
-        }
-
-        setTimeout(poll, currentInterval);
     };
 
-    poll();
+    global.onSyncTrigger = performSync;
+    performSync(); // Initial trigger
 }
 
 // Create Express app
