@@ -276,7 +276,7 @@ async function captureSnapshot(cdp) {
             const hasInput = document.querySelector('[aria-label="Message input"]');
             if (hasInput) {
                 return {
-                    html: '<div class="w-full flex h-full min-h-0 flex-col items-center justify-center relative overflow-y-auto" data-testid="conversation-view"><div class="text-muted-foreground opacity-50 mt-10">New Conversation</div></div>',
+                    html: '<div class="w-full flex h-full min-h-0 flex-col items-center justify-center relative overflow-y-auto" data-testid="conversation-view"></div>',
                     css: '',
                     isGenerating: false,
                     stats: { nodes: 1, htmlSize: 100, cssSize: 0 }
