@@ -1,6 +1,8 @@
 import os
 import sys
 import subprocess
+import requests
+import textwrap
 from pathlib import Path
 import fitz  # PyMuPDF
 
@@ -24,10 +26,10 @@ def extract_text(file_path):
 
 def ingest_directory(base_dir):
     base_path = Path(base_dir)
-    save_py_path = Path.home() / ".cortex" / "save.py"
-    
-    if not save_py_path.exists():
-        print(f"Error: save.py not found at {save_py_path}")
+    try:
+        requests.get("http://localhost:8585/docs", timeout=2)
+    except Exception:
+        print("Error: Cortex HTTP API not running on http://localhost:8585")
         return
 
     for root, dirs, files in os.walk(base_path):
@@ -47,10 +49,12 @@ def ingest_directory(base_dir):
             chunks = []
             current = ""
             for p in paragraphs:
-                if len(current) + len(p) > 1000 and len(current) > 0:
-                    chunks.append(current.strip())
-                    current = ""
-                current += p + "\n\n"
+                parts = textwrap.wrap(p, 1000) if len(p) > 1000 else [p]
+                for part in parts:
+                    if len(current) + len(part) > 1000 and len(current) > 0:
+                        chunks.append(current.strip())
+                        current = ""
+                    current += part + "\n\n"
             if current.strip():
                 chunks.append(current.strip())
                 
@@ -62,20 +66,22 @@ def ingest_directory(base_dir):
                 # Sanitize surrogates to prevent sqlite3 UnicodeEncodeError
                 chunk = chunk.encode('utf-8', errors='replace').decode('utf-8')
                 
-                cmd = [
-                    sys.executable, str(save_py_path),
-                    "--type", "reference",
-                    "--namespace", namespace,
-                    "--importance", "1.0",
-                    "--category", "foundational"
-                ]
                 try:
-                    env = os.environ.copy()
-                    env['PYTHONUTF8'] = '1'
-                    subprocess.run(cmd, input=chunk.encode('utf-8'), env=env, check=True, capture_output=True)
+                    resp = requests.post(
+                        "http://localhost:8585/memory/store",
+                        json={
+                            "content": chunk,
+                            "type": "reference",
+                            "source": "cortex_ingest",
+                            "category": "foundational",
+                            "importance": 1.0,
+                        },
+                        timeout=10
+                    )
+                    resp.raise_for_status()
                     success += 1
-                except subprocess.CalledProcessError as e:
-                    print(f"Failed to save chunk: {e.stderr.decode('utf-8', errors='ignore')}")
+                except Exception as e:
+                    print(f"Failed to save chunk: {e}")
             
             print(f"  -> Successfully saved {success}/{len(chunks)} chunks")
 

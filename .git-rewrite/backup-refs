@@ -1,0 +1,8 @@
+46df2f407d568452049d5c300cccd638b53f0944 commit	refs/heads/feat/deterministic-consensus
+af52c8a70ef54daf0b0ae2d84452d3fb520007fd commit	refs/heads/feat/native-workspace-config
+23607e52ba222548dfd7d8a9eff533bc2e7b48fc commit	refs/heads/feat/skillopt-style-guides
+5c6be9aff76a68181376ff240db53e4287ec5781 commit	refs/heads/master
+7b104e577c3e0a04bfe1d39628ab5a47c3b1f7fb commit	refs/heads/subagent-Implementation-Subagent-self-5716aba6
+1fc6d0848a1029dceb47d3580e2d85782f1dc5ac commit	refs/heads/subagent-Iterative-Implementer-self-c7abe794
+72eb029f45b8b6a2739858be65a130939b08f897 commit	refs/remotes/origin/master
+b3c54165efd085b3ac6ee2d46fd21e67e30db039 commit	refs/stash
