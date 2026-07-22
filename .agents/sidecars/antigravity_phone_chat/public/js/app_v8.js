@@ -2925,7 +2925,12 @@ if (taskIndicator) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ taskName: selectedTask })
                     });
-                    setTimeout(() => optionDiv.remove(), 500);
+                    setTimeout(() => {
+                        optionDiv.remove();
+                        if (document.querySelectorAll('#modal-list .modal-option').length === 0) {
+                            closeModal();
+                        }
+                    }, 500);
                 } catch (e) {
                     console.error('Failed to kill task:', e);
                 }
