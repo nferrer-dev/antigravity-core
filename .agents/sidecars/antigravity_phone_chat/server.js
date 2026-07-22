@@ -64,7 +64,7 @@ export function handleSnapshotUpdate(lastSnapshot, currentSnapshot, subscription
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const PORTS = [9000, 9001, 9002, 9003, 63798];
+const PORTS = [7800, 9000, 9001, 9002, 9003, 63798];
 const POLL_INTERVAL = 1000; // 1 second
 const SERVER_PORT = process.env.PORT || 3000;
 const APP_PASSWORD = process.env.APP_PASSWORD || 'antigravity';
@@ -1295,6 +1295,8 @@ async function startNewChat(cdp) {
     }
     return { error: 'Context failed' };
 }
+let globalHistoryCache = [];
+
 // Get Chat History - Scrape directly from sidebar convo pills
 async function getChatHistory(cdp) {
     const EXP = `(async () => {
@@ -1311,18 +1313,32 @@ async function getChatHistory(cdp) {
             for (const el of elements) {
                 if (el.tagName === 'H2') {
                     currentSection = el.textContent?.trim() || '';
+                    currentGroup = ''; // Reset group on new H2 section
                 } else if (el.tagName === 'DIV') {
                     currentGroup = el.textContent?.trim() || '';
                 } else if (el.tagName === 'SPAN') {
                     pillsCount++;
                     let text = el.textContent?.trim() || '';
                     if (text.length < 3) continue;
-                    if (seenTitles.has(text)) continue;
-                    seenTitles.add(text);
                     
-                    let pillWorkspace = currentGroup;
-                    if (currentSection.toLowerCase() === 'conversations') {
-                        pillWorkspace = 'Global';
+                    const testId = el.getAttribute('data-testid') || text;
+                    if (seenTitles.has(testId)) continue;
+                    
+                    if (text === 'New Chat' || 
+                        /(You are the|Review the|Please review|Please query|Your objective|Created At:|Call the MCP|I have drafted|Just reply|Review the plan|Review the implementation|You are a JS Style|Review the modifications)/i.test(text) ||
+                        text.length < 5) {
+                        continue;
+                    }
+                    
+                    seenTitles.add(testId);
+                    
+                    let pillWorkspace = 'Global';
+                    let isPinned = false;
+                    
+                    if (currentSection.toLowerCase().includes('pinned')) {
+                        isPinned = true;
+                    } else if (currentSection.toLowerCase().includes('project')) {
+                        pillWorkspace = currentGroup || 'Unknown Project';
                     }
                     
                     // Extract just the project folder name if it's an absolute path
@@ -1331,9 +1347,9 @@ async function getChatHistory(cdp) {
                         pillWorkspace = parts[parts.length - 1];
                     }
                     
-                    logLines.push({ originalText: el.textContent, parsedTitle: text, section: currentSection, group: currentGroup, workspace: pillWorkspace });
-                    chats.push({ title: text, workspace: pillWorkspace, date: 'Recent' });
-                    if (chats.length >= 50) break;
+                    logLines.push({ originalText: el.textContent, parsedTitle: text, section: currentSection, group: currentGroup, workspace: pillWorkspace, isPinned, id: testId });
+                    chats.push({ title: text, workspace: pillWorkspace, date: 'Recent', isPinned, id: testId });
+                    if (chats.length >= 200) break;
                 }
             }
             
@@ -1361,16 +1377,69 @@ async function getChatHistory(cdp) {
                 awaitPromise: true,
                 /* contextId: ctx.id */
             });
-            if (res.result?.value) return res.result.value;
+            if (res.result?.value?.success) {
+                const scrapedChats = res.result.value.chats || [];
+                const merged = [...scrapedChats];
+                
+
+                
+                globalHistoryCache.forEach(cached => {
+                    if (!merged.find(m => m.id === cached.id)) {
+                        merged.push(cached);
+                    }
+                });
+                
+                merged.sort((a, b) => {
+                    if (a.date === 'Recent' && b.date !== 'Recent') return -1;
+                    if (b.date === 'Recent' && a.date !== 'Recent') return 1;
+                    if (a.date === 'Older' && b.date !== 'Older') return 1;
+                    if (b.date === 'Older' && a.date !== 'Older') return -1;
+                    
+                    const timeA = new Date(a.date).getTime() || 0;
+                    const timeB = new Date(b.date).getTime() || 0;
+                    return timeB - timeA;
+                });
+                
+                globalHistoryCache = merged;
+                return { success: true, chats: globalHistoryCache, debug: res.result.value.debug };
+            }
             // If result.value is null/undefined but no error thrown, check exceptionDetails
-            if (res.exceptionDetails) {
-                lastError = res.exceptionDetails.exception?.description || res.exceptionDetails.text;
+            if (res.result?.exceptionDetails) {
+                lastError = res.result.exceptionDetails.exception?.description || 'Unknown CDP exception';
             }
         } catch (e) {
-            lastError = e.message;
+            lastError = e.toString();
         }
     }
-    return { error: 'Context failed: ' + (lastError || 'No contexts available'), chats: [] };
+    return { error: lastError || 'Context failed', chats: globalHistoryCache };
+}
+
+async function loadMoreHistory(cdp) {
+    const EXP = `(async () => {
+        try {
+            const scroller = document.querySelector('.overflow-y-auto') || document.querySelector('[data-testid="conversation-history-list"]');
+            if (!scroller) return { error: 'No scroller found' };
+            
+            scroller.scrollTop += scroller.clientHeight * 0.8;
+            return { success: true };
+        } catch(e) {
+            return { error: e.toString() };
+        }
+    })()`;
+    
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression: EXP,
+                returnByValue: true,
+                awaitPromise: true,
+            });
+            if (res.result?.value?.success) return res.result.value;
+        } catch (e) {
+            console.error('Failed to run loadMoreHistory evaluation in context:', e);
+        }
+    }
+    return { error: 'Failed to scroll history' };
 }
 
 async function selectChat(cdp, chatTitle) {
@@ -2886,7 +2955,26 @@ async function main() {
         app.get('/chat-history', async (req, res) => {
             if (!cdpConnection) return res.json({ error: 'CDP disconnected', chats: [] });
             const result = await getChatHistory(cdpConnection);
+            if (result && result.chats) {
+                const filterRegex = /(You are the|Review the|Please review|Please query|Your objective|Created At:|Call the MCP|I have drafted|Just reply|Review the plan|Review the implementation|You are a JS Style|Review the modifications|The user has proposed|Debate Proposition|You are participating|You operate in a strict|You are tasked with|You are responsible|# Technical Debate|This is the Iterative-Implement|Please perform a diff|The user has raised a|The Design-Validate|New Chat)/i;
+                result.chats = result.chats.filter(c => !filterRegex.test(c.title));
+            }
             res.json(result);
+        });
+
+        // Debug route
+        app.get('/debug-brain', (req, res) => {
+            try {
+                const fs = require('fs');
+                const path = require('path');
+                const os = require('os');
+                const brainDir = path.join(os.homedir(), '.gemini', 'antigravity', 'brain');
+                if (!fs.existsSync(brainDir)) return res.json({ error: 'brainDir does not exist', path: brainDir });
+                const folders = fs.readdirSync(brainDir).filter(f => f.length === 36);
+                res.json({ success: true, count: folders.length, path: brainDir });
+            } catch(e) {
+                res.json({ error: e.message });
+            }
         });
 
         // Select a Chat
@@ -2903,6 +2991,28 @@ async function main() {
             if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
             const result = await closeHistory(cdpConnection);
             res.json(result);
+        });
+
+        app.post('/api/history/load-more', async (req, res) => {
+            try {
+                if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
+                await loadMoreHistory(cdpConnection);
+                // wait for react to render new items in the DOM
+                await new Promise(r => setTimeout(r, 400));
+                const historyResult = await getChatHistory(cdpConnection);
+                if (historyResult.success) {
+                    if (historyResult.chats) {
+                        const filterRegex = /(You are the|Review the|Please review|Please query|Your objective|Created At:|Call the MCP|I have drafted|Just reply|Review the plan|Review the implementation|You are a JS Style|Review the modifications|The user has proposed|Debate Proposition|You are participating|You operate in a strict|You are tasked with|You are responsible|# Technical Debate|This is the Iterative-Implement|Please perform a diff|The user has raised a|The Design-Validate|New Chat)/i;
+                        historyResult.chats = historyResult.chats.filter(c => !filterRegex.test(c.title));
+                    }
+                    if (lastSnapshot) lastSnapshot.history = historyResult; 
+                    res.json(historyResult);
+                } else {
+                    res.status(500).json({ error: 'Failed to fetch history after scroll' });
+                }
+            } catch (e) {
+                res.status(500).json({ error: e.toString() });
+            }
         });
 
         // Check if Chat is Open

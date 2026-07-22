@@ -1688,86 +1688,229 @@ async function showChatHistory() {
             return;
         }
 
-        const chats = data.chats || [];
-        if (chats.length === 0) {
-            historyList.innerHTML = `
-                <div class="history-state-container">
-                    <div class="history-state-icon">📝</div>
-                    <div class="history-state-title">No recent chats found</div>
-                    <div class="history-state-desc">Start a new conversation to see them here.</div>
-                    <button class="history-new-btn mt-4">
-                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        Start New Conversation
-                    </button>
-                </div>
-            `;
-            return;
-        }
-
-        // Render chats
-        let html = `
-            <div class="history-action-container">
-                <button class="history-new-btn">
-                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    New Conversation
-                </button>
-            </div>
-            <div class="history-list-group">
-        `;
-
-        // Group chats by workspace
-        const groupedChats = {};
-        chats.forEach(chat => {
-            const ws = chat.workspace || 'Global';
-            if (!groupedChats[ws]) groupedChats[ws] = [];
-            groupedChats[ws].push(chat);
-        });
-
-        Object.keys(groupedChats).forEach(ws => {
-            html += `<div class="history-group-header">${escapeHtml(ws)}</div>`;
-            groupedChats[ws].forEach(chat => {
-                const safeTitle = chat.title.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                html += `
-                    <div class="history-card" data-title="${safeTitle}">
-                        <div class="history-card-icon">
-                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                            </svg>
-                        </div>
-                        <div class="history-card-content">
-                            <span class="history-card-title">${escapeHtml(chat.title)}</span>
-                        </div>
-                        <div class="history-card-arrow">
-                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="9 18 15 12 9 6"></polyline>
-                            </svg>
-                        </div>
-                    </div>
-                `;
-            });
-        });
-
-        html += `</div>`;
-
-        historyList.innerHTML = html;
-
+        renderHistoryData(data.chats || []);
     } catch (e) {
         historyList.innerHTML = `
             <div class="history-state-container">
                 <div class="history-state-icon">🔌</div>
                 <div class="history-state-title">Connection Error</div>
                 <div class="history-state-desc">Failed to reach the server.</div>
+                <button class="history-new-btn mt-4">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Start New Conversation
+                </button>
             </div>
         `;
+        console.error('Error fetching chat history:', e);
     }
 }
 
+function renderHistoryData(chats) {
+    if (chats.length === 0) {
+        historyList.innerHTML = `
+            <div class="history-state-container">
+                <div class="history-state-icon">📝</div>
+                <div class="history-state-title">No recent chats found</div>
+                <div class="history-state-desc">Start a new conversation to see them here.</div>
+                <button class="history-new-btn mt-4">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Start New Conversation
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div class="history-action-container">
+            <button class="history-new-btn">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                New Conversation
+            </button>
+        </div>
+        <div class="history-list-group">
+    `;
+
+    const pinnedChats = [];
+    const projectChats = {};
+    const globalChats = [];
+
+    chats.forEach(chat => {
+        if (chat.isPinned) {
+            pinnedChats.push(chat);
+        } else if (!chat.workspace || chat.workspace === 'Global') {
+            globalChats.push(chat);
+        } else {
+            if (!projectChats[chat.workspace]) projectChats[chat.workspace] = [];
+            projectChats[chat.workspace].push(chat);
+        }
+    });
+
+    const renderCard = (chat, customIcon = null, isHidden = false) => {
+        const safeTitle = chat.title.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const defaultIcon = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>`;
+        const style = isHidden ? 'display: none;' : '';
+        return `
+            <div class="history-card" data-title="${safeTitle}" style="${style}">
+                <div class="history-card-icon">
+                    ${customIcon || defaultIcon}
+                </div>
+                <div class="history-card-content">
+                    <span class="history-card-title">${escapeHtml(chat.title)}</span>
+                </div>
+                <div class="history-card-arrow">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </div>
+            </div>
+        `;
+    };
+
+    const renderCollapsibleHeader = (title, id, isClosed = false, extraStyle = '') => {
+        const transform = isClosed ? 'transform: rotate(-90deg);' : '';
+        return `
+            <div class="history-group-header collapsible-header" data-target="${id}" style="${extraStyle}">
+                <span class="toggle-icon" style="${transform}">▼</span>
+                ${title}
+            </div>
+        `;
+    };
+
+    if (pinnedChats.length > 0) {
+        html += renderCollapsibleHeader('Pinned Conversations', 'pinned-group', true);
+        html += `<div id="pinned-group" class="collapsible-content" style="display: none;">`;
+        const starIcon = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="var(--accent)" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                         </svg>`;
+        pinnedChats.forEach(chat => { html += renderCard(chat, starIcon); });
+        html += `</div>`;
+    }
+
+    const projectKeys = Object.keys(projectChats);
+    if (projectKeys.length > 0) {
+        html += renderCollapsibleHeader('Projects', 'projects-group');
+        html += `<div id="projects-group" class="collapsible-content">`;
+        projectKeys.forEach((ws, idx) => {
+            const subId = `project-sub-${idx}`;
+            html += renderCollapsibleHeader(escapeHtml(ws), subId, true, 'margin-left: 16px;');
+            html += `<div id="${subId}" class="collapsible-content project-sub-group" style="display: none;">`;
+            projectChats[ws].forEach(chat => { html += renderCard(chat); });
+            html += `</div>`;
+        });
+        html += `</div>`;
+    }
+
+    if (globalChats.length > 0) {
+        html += renderCollapsibleHeader('Conversations (Non-Project)', 'global-group', false, 'margin-left: 16px;');
+        html += `<div id="global-group" class="collapsible-content project-sub-group">`;
+        const firstSix = globalChats.slice(0, 6);
+        const rest = globalChats.slice(6);
+        firstSix.forEach(chat => { html += renderCard(chat); });
+        
+        if (rest.length > 0) {
+            html += `<div id="global-group-rest" class="collapsible-content" style="display: none;">`;
+            rest.forEach(chat => { html += renderCard(chat, null, false); });
+            html += `</div>`;
+            html += `<div class="pagination-controls" id="global-pagination-controls" style="display: flex; gap: 8px; margin-top: 4px;">`;
+            html += `<div class="history-show-more-btn" data-target="global-group-rest" style="flex: 1; color: var(--accent); cursor: pointer; padding: 8px 12px; font-size: 13px; text-align: center; border-radius: 6px; background: rgba(255,255,255,0.03); user-select: none;">Show More</div>`;
+            html += `<div class="history-show-less-btn" data-target="global-group-rest" style="flex: 1; color: var(--accent); cursor: pointer; padding: 8px 12px; font-size: 13px; text-align: center; border-radius: 6px; background: rgba(255,255,255,0.03); user-select: none; display: none;">Show Less</div>`;
+            html += `</div>`;
+        }
+        html += `</div>`;
+    }
+
+    html += `</div>`; // Close history-list-group
+
+    const oldScroll = historyList.scrollTop;
+    
+    // Preserve open states
+    const openStates = {};
+    const existingContents = historyList.querySelectorAll('.collapsible-content');
+    existingContents.forEach(el => {
+        openStates[el.id] = el.style.display !== 'none';
+    });
+    
+    historyList.innerHTML = html;
+    historyList.scrollTop = oldScroll;
+    
+    // Restore open states
+    const newContents = historyList.querySelectorAll('.collapsible-content');
+    newContents.forEach(el => {
+        if (openStates[el.id] !== undefined) {
+            el.style.display = openStates[el.id] ? 'block' : 'none';
+        }
+    });
+
+    const headers = historyList.querySelectorAll('.collapsible-header');
+    headers.forEach(header => {
+        const targetId = header.getAttribute('data-target');
+        const content = document.getElementById(targetId);
+        const icon = header.querySelector('.toggle-icon');
+        if (content && icon) {
+            icon.style.transform = content.style.display === 'none' ? 'rotate(-90deg)' : 'rotate(0deg)';
+        }
+        
+        header.addEventListener('click', (e) => {
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                if (icon) icon.style.transform = 'rotate(0deg)';
+            } else {
+                content.style.display = 'none';
+                if (icon) icon.style.transform = 'rotate(-90deg)';
+            }
+        });
+    });
+    
+    const showMoreBtns = historyList.querySelectorAll('.history-show-more-btn');
+    const showLessBtns = historyList.querySelectorAll('.history-show-less-btn');
+
+    const updatePaginationButtons = (content, moreBtn, lessBtn) => {
+        if (content.style.display === 'none') {
+            moreBtn.style.display = 'block';
+            lessBtn.style.display = 'none';
+        } else {
+            moreBtn.style.display = 'none';
+            lessBtn.style.display = 'block';
+        }
+    };
+
+    showMoreBtns.forEach(btn => {
+        const targetId = btn.getAttribute('data-target');
+        const content = document.getElementById(targetId);
+        const lessBtn = btn.parentElement.querySelector('.history-show-less-btn');
+        if (content) {
+            updatePaginationButtons(content, btn, lessBtn);
+            btn.addEventListener('click', () => {
+                content.style.display = 'block';
+                updatePaginationButtons(content, btn, lessBtn);
+            });
+        }
+    });
+
+    showLessBtns.forEach(btn => {
+        const targetId = btn.getAttribute('data-target');
+        const content = document.getElementById(targetId);
+        const moreBtn = btn.parentElement.querySelector('.history-show-more-btn');
+        if (content) {
+            btn.addEventListener('click', () => {
+                content.style.display = 'none';
+                updatePaginationButtons(content, moreBtn, btn);
+            });
+        }
+    });
+}
 
 function hideChatHistory() {
     historyLayer.classList.remove('show');
@@ -2749,6 +2892,7 @@ if (historyList) {
             selectChat(title);
         }
     });
+
 }
 
 // Delegation for empty state

@@ -558,6 +558,10 @@ textarea::-webkit-resizer {
     height: 24px;
 }
 
+#stopBtn {
+    color: var(--error);
+}
+
 #stopBtn svg {
     fill: currentColor;
     stroke: none;
@@ -913,14 +917,19 @@ textarea::-webkit-resizer {
 .history-card {
     background: var(--bg-panel);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 14px;
-    padding: 8px 10px;
+    border-radius: 12px;
+    padding: 6px 8px;
+    margin-bottom: 8px;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.history-card:last-child {
+    margin-bottom: 0;
 }
 
 .history-card:active {
@@ -930,9 +939,9 @@ textarea::-webkit-resizer {
 }
 
 .history-card-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.05));
     border: 1px solid rgba(59, 130, 246, 0.2);
     color: var(--accent);
@@ -962,7 +971,7 @@ textarea::-webkit-resizer {
 
 .history-card-title {
     display: block;
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-main);
     white-space: nowrap;
@@ -1228,4 +1237,40 @@ textarea::-webkit-resizer {
     opacity: 1 !important;
     background-color: rgba(34, 197, 94, 0.2);
     transition: background-color 0.5s;
+}
+
+/* Collapsible Header Styling */
+.collapsible-header {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border-bottom: none;
+    margin-bottom: 4px;
+    transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s;
+    user-select: none;
+}
+
+.collapsible-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+}
+
+.collapsible-header .toggle-icon {
+    font-size: 10px;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--text-secondary);
+}
+
+.collapsible-header:hover .toggle-icon {
+    color: var(--accent);
+}
+
+.project-sub-group {
+    padding-left: 12px;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    margin-left: 6px;
+    margin-bottom: 8px;
 }
