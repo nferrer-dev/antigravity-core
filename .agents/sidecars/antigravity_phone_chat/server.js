@@ -1363,13 +1363,18 @@ async function getChatHistory(cdp) {
                     let pillWorkspace = 'Global';
                     let isPinned = false;
                     
-                    const parentA = el.closest('a');
+                    const parentBtn = el.closest('a, [role="button"]');
                     let isActive = false;
-                    if (parentA) {
+                    let debugClasses = '';
+                    let debugData = '';
+                    if (parentBtn) {
                         try {
-                            isActive = parentA.classList.contains('bg-accent') || 
-                                       parentA.getAttribute('data-active') === 'true' ||
-                                       parentA.getAttribute('aria-current') === 'page';
+                            debugClasses = typeof parentBtn.className === 'string' ? parentBtn.className : '';
+                            debugData = parentBtn.getAttribute('data-state') || parentBtn.getAttribute('data-active') || '';
+                            isActive = parentBtn.classList.contains('bg-sidebar-secondary') || 
+                                       parentBtn.classList.contains('bg-accent') || 
+                                       parentBtn.getAttribute('data-active') === 'true' ||
+                                       parentBtn.getAttribute('aria-current') === 'page';
                         } catch(e) {
                             console.error(e);
                         }
@@ -1388,7 +1393,7 @@ async function getChatHistory(cdp) {
                     }
                     
                     logLines.push({ originalText: el.textContent, parsedTitle: text, section: currentSection, group: currentGroup, workspace: pillWorkspace, isPinned, id: testId, isActive });
-                    chats.push({ title: text, workspace: pillWorkspace, date: 'Recent', isPinned, id: testId, isActive });
+                    chats.push({ title: text, workspace: pillWorkspace, date: 'Recent', isPinned, id: testId, isActive, debugClasses, debugData });
                     if (chats.length >= 200) break;
                 }
             }
