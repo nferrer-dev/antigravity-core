@@ -46,16 +46,39 @@ for (const file of files) {
     if (fs.statSync(fullPath).isFile()) {
         console.log(`Ingesting ${file}...`);
         const content = fs.readFileSync(fullPath, 'utf8');
+        
+        // Chunk into ~1000 character slices at paragraph boundaries
+        const paragraphs = content.split(/\n\s*\n/);
+        let chunks = [];
+        let currentChunk = "";
+        
+        for (const p of paragraphs) {
+            if (currentChunk.length + p.length > 1000 && currentChunk.length > 0) {
+                chunks.push(currentChunk.trim());
+                currentChunk = "";
+            }
+            currentChunk += p + "\n\n";
+        }
+        if (currentChunk.trim().length > 0) {
+            chunks.push(currentChunk.trim());
+        }
+
+        console.log(`  -> Sliced into ${chunks.length} chunks`);
+        
         try {
-            const cmd = `python "${savePyPath}" --type reference --namespace "${workflow}"`;
-            execSync(cmd, { 
-                input: content, 
-                stdio: ['pipe', 'inherit', 'inherit'],
-                env: { ...process.env, PYTHONUTF8: '1' }
-            });
+            for (let i = 0; i < chunks.length; i++) {
+                const chunkContent = chunks[i];
+                // Use importance 1.0 (Permanent Memory) and category "textbook" (Semantic Isolation)
+                const cmd = `python "${savePyPath}" --type reference --namespace "${workflow}" --importance 1.0 --category "textbook"`;
+                execSync(cmd, { 
+                    input: chunkContent, 
+                    stdio: ['pipe', 'inherit', 'inherit'],
+                    env: { ...process.env, PYTHONUTF8: '1' }
+                });
+            }
             successCount++;
         } catch (err) {
-            console.error(`Failed to ingest ${file}`);
+            console.error(`Failed to ingest ${file}: ${err.message}`);
         }
     }
 }

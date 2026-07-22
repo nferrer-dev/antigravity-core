@@ -19,4 +19,4 @@ Do not manually guess style violations. You must rely on automated tooling to en
 ## 3. Learned Edge Cases
 *(This section acts as the trainable state. When the Iterative-Implement loop catches a Python-specific anti-pattern that the mechanical enforcer misses, the Style Expert MUST append the new rule here.)*
 
-- (No learned rules yet.)
+- **N+1 Query Anti-Pattern**: Avoid executing `SELECT` queries iteratively inside a loop (e.g., `for` loop). This creates severe performance degradation. Consolidate into a single query using an `IN` clause to fetch relevant records in one batch.
