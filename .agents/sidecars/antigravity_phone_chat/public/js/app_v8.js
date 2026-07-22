@@ -1429,6 +1429,10 @@ let highestScrollHeight = 0;
 function hasMoreHistory() {
     if (loadAttempts >= 3) return false;
 
+    if (chatContent && chatContent.textContent.includes("The server cleared a prefix of the conversation as it grew too large")) {
+        return false;
+    }
+
     const btn = document.querySelector('button[aria-label^="Load older messages"]');
     if (!btn) return false;
     if (btn.getAttribute('aria-disabled') === 'true' || btn.disabled) return false;
