@@ -1365,12 +1365,8 @@ async function getChatHistory(cdp) {
                     
                     const parentBtn = el.closest('a, [role="button"]');
                     let isActive = false;
-                    let debugClasses = '';
-                    let debugData = '';
                     if (parentBtn) {
                         try {
-                            debugClasses = typeof parentBtn.className === 'string' ? parentBtn.className : '';
-                            debugData = parentBtn.getAttribute('data-state') || parentBtn.getAttribute('data-active') || '';
                             isActive = parentBtn.classList.contains('bg-sidebar-secondary') || 
                                        parentBtn.classList.contains('bg-accent') || 
                                        parentBtn.getAttribute('data-active') === 'true' ||
@@ -1393,7 +1389,7 @@ async function getChatHistory(cdp) {
                     }
                     
                     logLines.push({ originalText: el.textContent, parsedTitle: text, section: currentSection, group: currentGroup, workspace: pillWorkspace, isPinned, id: testId, isActive });
-                    chats.push({ title: text, workspace: pillWorkspace, date: 'Recent', isPinned, id: testId, isActive, debugClasses, debugData });
+                    chats.push({ title: text, workspace: pillWorkspace, date: 'Recent', isPinned, id: testId, isActive });
                     if (chats.length >= 200) break;
                 }
             }
