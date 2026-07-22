@@ -1892,12 +1892,11 @@ async function startPolling(wss) {
                         });
                     }
                 } catch (err) { }
-                syncInProgress = false;
                 if (!cdpConnection) {
+                    syncInProgress = false;
                     setTimeout(performSync, 2000);
+                    return;
                 }
-                }
-                return;
             }
 
             try {
