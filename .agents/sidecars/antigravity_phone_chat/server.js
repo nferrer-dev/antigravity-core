@@ -272,6 +272,17 @@ async function captureSnapshot(cdp) {
     const CAPTURE_SCRIPT = `(async () => {
         const cascade = document.querySelector('[data-testid="conversation-view"]');
         if (!cascade) {
+            // Check if we are on an empty new chat screen
+            const hasInput = document.querySelector('[aria-label="Message input"]');
+            if (hasInput) {
+                return {
+                    html: '<div class="w-full flex h-full min-h-0 flex-col items-center justify-center relative overflow-y-auto" data-testid="conversation-view"><div class="text-muted-foreground opacity-50 mt-10">New Conversation</div></div>',
+                    css: '',
+                    isGenerating: false,
+                    stats: { nodes: 1, htmlSize: 100, cssSize: 0 }
+                };
+            }
+
             // If the chat container is missing (e.g. user is on a background task tab), attempt to click back to the chat!
             const chatTab = Array.from(document.querySelectorAll('a, button, [role="button"]')).find(e => e.innerText && e.innerText.trim().length > 0 && e.closest('.bg-sidebar-secondary'));
             if (chatTab) chatTab.click();
