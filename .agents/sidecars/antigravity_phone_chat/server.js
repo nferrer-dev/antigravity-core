@@ -1999,6 +1999,7 @@ async function startPolling(wss) {
         }
         syncInProgress = true;
         syncPending = false;
+        let isEarlyReturn = false;
         try {
             if (!cdpConnection || (cdpConnection.ws && cdpConnection.ws.readyState !== WebSocket.OPEN)) {
                 if (!isConnecting) {
@@ -2033,7 +2034,7 @@ async function startPolling(wss) {
                     }
                 } catch (err) { }
                 if (!cdpConnection) {
-                    syncInProgress = false;
+                    isEarlyReturn = true;
                     setTimeout(performSync, 2000);
                     return;
                 }
@@ -2086,11 +2087,13 @@ async function startPolling(wss) {
             } catch (err) {
                 console.error('Poll error:', err.message);
             }
-            syncInProgress = false;
-            if (syncPending) setTimeout(performSync, 0);
         } catch (e) {
+            console.error('Unhandled sync error:', e);
+        } finally {
             syncInProgress = false;
-            if (syncPending) setTimeout(performSync, 0);
+            if (!isEarlyReturn && syncPending) {
+                setTimeout(performSync, 0);
+            }
         }
     };
 
