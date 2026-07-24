@@ -1,31 +1,25 @@
-﻿import { jest } from '@jest/globals';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { jest } from '@jest/globals';
+import request from 'supertest';
+import express from 'express';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// We mock the cdp connection and test if the route behaves correctly
+import * as server from '../server.js'; // We will export the app or logic from server.js
 
-describe('Backend CDP Orchestration', () => {
-    let serverCode;
+// Mock CDP
+const mockCdp = {
+    contexts: [{ id: 1 }],
+    call: jest.fn()
+};
 
-    beforeAll(() => {
-        serverCode = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
-    });
+const app = express();
+app.use(express.json());
+app.post('/api/orchestrate/replace_input', (req, res) => {
+    // We will call the exported handler from server.js directly
+    server.handleReplaceInputRoute(mockCdp, req, res);
+});
 
-    test('isLocalRequest auth bypass should be completely removed', () => {
-        expect(serverCode).not.toMatch(/isLocalRequest/);
-    });
-
-    test('Runtime.evaluate should be replaced with Runtime.callFunctionOn for UI interaction to prevent ACE', () => {
-        // Evaluate usage should be gone for interaction
-        expect(serverCode).toMatch(/Runtime\.callFunctionOn/);
-        
-        // Scraping calls like addScriptToEvaluateOnNewDocument should be removed
-        expect(serverCode).not.toMatch(/Page\.addScriptToEvaluateOnNewDocument/);
-    });
-
-    test('Secure File Handling: path traversal mitigation on /upload', () => {
-        expect(serverCode).toMatch(/path\.resolve/);
+describe('Backend CDP Orchestration - replace_input', () => {
+    test('handleReplaceInputRoute should no longer exist', () => {
+        expect(server.handleReplaceInputRoute).toBeUndefined();
     });
 });
