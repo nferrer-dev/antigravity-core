@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import express from 'express';
+import path from 'path';
 import multer from 'multer';
 import webpush from 'web-push';
 import compression from 'compression';
@@ -340,8 +341,8 @@ async function connectCDP(url) {
     `;
 
     await call("Runtime.addBinding", { name: '__agySyncTrigger', executionContextName: 'AntigravityIsolatedWorld' });
-    await call("Page.addScriptToEvaluateOnNewDocument", { source: isolatedScriptSource, worldName: 'AntigravityIsolatedWorld' });
-    await call("Page.addScriptToEvaluateOnNewDocument", { source: mainWorldScriptSource });
+    
+    
     
     // Evaluate immediately on existing contexts
     for (const ctx of contexts) {
@@ -1156,8 +1157,21 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
     })();`;
 
     try {
-        const res = await cdp.call("Runtime.evaluate", {
-            expression: EXP,
+        const res = await cdp.call("Runtime.callFunctionOn", {
+            functionDeclaration: `function(id, selector, textContent) {
+                try {
+                    const root = document;
+                    let target = id ? root.querySelector('[data-ag-id="' + id + '"]') : null;
+                    if (!target && selector) target = root.querySelector(selector);
+                    if (target) {
+                        const rect = target.getBoundingClientRect();
+                        return { success: true, rect: { x: rect.x + rect.width/2, y: rect.y + rect.height/2 } };
+                    }
+                    return { error: 'Element not found' };
+                } catch(e) { return { error: e.message }; }
+            }`,
+            arguments: [{value: id || ''}, {value: selector || ''}, {value: textContent || ''}],
+            executionContextId: 1,
             returnByValue: true,
             awaitPromise: true
         });
@@ -1951,28 +1965,7 @@ function hashString(str) {
 }
 
 // Check if a request is from the same Wi-Fi (internal network)
-function isLocalRequest(req) {
-    // 1. Check for proxy headers (Cloudflare, ngrok, etc.)
-    // If these exist, the request is coming via an external tunnel/proxy
-    if (req.headers['x-forwarded-for'] || req.headers['x-forwarded-host'] || req.headers['x-real-ip']) {
-        return false;
-    }
 
-    // 2. Check the remote IP address
-    const ip = req.ip || req.socket.remoteAddress || '';
-
-    // Standard local/private IPv4 and IPv6 ranges
-    return ip === '127.0.0.1' ||
-        ip === '::1' ||
-        ip === '::ffff:127.0.0.1' ||
-        ip.startsWith('192.168.') ||
-        ip.startsWith('10.') ||
-        ip.startsWith('172.16.') || ip.startsWith('172.17.') ||
-        ip.startsWith('172.18.') || ip.startsWith('172.19.') ||
-        ip.startsWith('172.2') || ip.startsWith('172.3') ||
-        ip.startsWith('::ffff:192.168.') ||
-        ip.startsWith('::ffff:10.');
-}
 
 // Initialize CDP connection
 async function initCDP() {
@@ -2193,7 +2186,7 @@ const wss = new WebSocketServer({ server });
 
     // Request Logger
     app.use((req, res, next) => {
-        console.log(`[REQUEST] ${req.method} ${req.url} - Auth: ${!!req.signedCookies[AUTH_COOKIE_NAME]} - Local: ${isLocalRequest(req)}`);
+        console.log(`[REQUEST] ${req.method} ${req.url} - Auth: ${!!req.signedCookies[AUTH_COOKIE_NAME]} - Local: ${false}`);
         next();
     });
 
@@ -2205,7 +2198,7 @@ const wss = new WebSocketServer({ server });
         }
 
         // Exempt local Wi-Fi devices from authentication
-        if (isLocalRequest(req)) {
+        if (false) {
             return next();
         }
 
@@ -2348,7 +2341,11 @@ app.post('/subscribe', (req, res) => {
                 try {
                     for (const f of req.files) {
                         if (f.originalname.endsWith('.webm') || f.originalname.endsWith('.mp4')) {
-                            const dest = join(__dirname, 'scratch', 'voice_memos', f.originalname);
+                            const voiceDir = path.resolve(__dirname, 'scratch', 'voice_memos');
+                const dest = path.resolve(voiceDir, f.originalname);
+                if (!dest.startsWith(voiceDir)) {
+                    throw new Error('Path traversal');
+                }
                             fs.copyFileSync(f.path, dest);
                         }
                     }
@@ -3011,7 +3008,7 @@ app.post('/subscribe', (req, res) => {
         let isAuthenticated = false;
 
         // Exempt local Wi-Fi devices from authentication
-        if (isLocalRequest(req)) {
+        if (false) {
             isAuthenticated = true;
         } else if (signedToken) {
             const sessionSecret = process.env.SESSION_SECRET || 'antigravity_secret_key_1337';

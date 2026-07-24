@@ -1,3 +1,12 @@
+
+const renderNativeComponent = function(container, newHTML, isNearBottom, isUserScrollLocked) {
+    let state = {};
+    try { 
+        state = typeof newHTML === 'string' ? JSON.parse(newHTML) : newHTML; 
+    } catch(e) {}
+    container.innerHTML = state.html || newHTML;
+    return true;
+};
 // --- CSS Reset for Web Components ---
 const shadowStyle = document.createElement('style');
 shadowStyle.textContent = `
@@ -725,7 +734,7 @@ async function loadSnapshot() {
             '}';
         styleTag.textContent = darkModeOverrides;
         let modifiedHtml = data.html;
-        if (!updateDOMPreservingScroll(chatContent, modifiedHtml, isNearBottom, isUserScrollLocked)) {
+        if (!renderNativeComponent(chatContent, modifiedHtml, isNearBottom, isUserScrollLocked)) {
             chatContent.innerHTML = modifiedHtml;
         }
 
@@ -1212,7 +1221,7 @@ if (supportOverlay) {
 
 // --- DOM Morphing for Scroll Jitter Fix ---
 // Replaces DOM without destroying the scroll container, preserving native touch momentum!
-function updateDOMPreservingScroll(container, newHTML, isNearBottom, isUserScrollLocked) {
+function renderNativeComponent(container, newHTML, isNearBottom, isUserScrollLocked) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(newHTML, 'text/html');
     
