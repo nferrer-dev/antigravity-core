@@ -40,6 +40,17 @@ html {
     background-color: #0f172a !important;
 }
 
+button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), filter 0.1s, opacity 0.1s !important;
+}
+
+button:active, a:active, [role="button"]:active {
+    filter: brightness(0.8) contrast(1.2);
+    transform: scale(0.96);
+}
+
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background-color: #0f172a !important;

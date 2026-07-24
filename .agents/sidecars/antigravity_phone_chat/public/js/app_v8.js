@@ -1,4 +1,6 @@
 // --- CSS Reset for Web Components ---
+document.body.setAttribute('ontouchstart', '');
+// --- CSS Reset for Web Components ---
 const shadowStyle = document.createElement('style');
 shadowStyle.textContent = `
     vscode-radio::part(control),
@@ -1609,7 +1611,7 @@ stopBtn.addEventListener('click', async () => {
     try {
         const res = await fetchWithAuth('/stop', { method: 'POST' });
         const data = await res.json();
-    } catch (e) { }
+    } catch(e) { console.error('[PhoneUI] Error:', e); }
     setTimeout(() => stopBtn.style.opacity = '1', 500);
 });
 
@@ -2230,156 +2232,7 @@ document.addEventListener('change', (e) => {
     }
 });
 
-// --- FastClick Implementation for Mobile Safari ---
-// iOS Safari notoriously delays clicks by 300ms and requires double-taps on elements with certain CSS states.
-// This interceptor catches quick taps and instantly fires a programmatic click, preventing the delayed ghost click.
-let _touchStartX = 0;
-let _touchStartY = 0;
-let _touchStartTime = 0;
 
-function applyInstantFeedback(el) {
-    if (!el || el._hasFeedback) return;
-    el._hasFeedback = true;
-    
-    const tag = el.tagName ? el.tagName.toUpperCase() : '';
-    const isRadioOrCheckbox = tag === 'VSCODE-RADIO' || tag === 'VSCODE-CHECKBOX' || (tag === 'INPUT' && (el.type === 'radio' || el.type === 'checkbox')) || el.getAttribute('role') === 'checkbox' || el.getAttribute('role') === 'radio';
-    
-    let targetRow = null;
-    let originalBg = null;
-    let originalChecked = null;
-    
-    if (isRadioOrCheckbox) {
-        if ((tag === 'VSCODE-RADIO' || tag === 'VSCODE-CHECKBOX') && el.shadowRoot && !el._hasTransitionKiller) {
-            const style = document.createElement('style');
-            style.textContent = `
-                * { transition: none !important; animation: none !important; }
-                :host(.instant-active) .checked-indicator, :host(.instant-active) [part="checked-indicator"] {
-                    opacity: 1 !important;
-                    visibility: visible !important;
-                    display: block !important;
-                    background: #3b82f6 !important;
-                    fill: #3b82f6 !important;
-                }
-                :host(.instant-active) .control, :host(.instant-active) [part="control"] {
-                    border-color: #3b82f6 !important;
-                }
-            `;
-            el.shadowRoot.appendChild(style);
-            el._hasTransitionKiller = true;
-        }
-
-        originalChecked = el.hasAttribute('checked');
-        if (tag === 'VSCODE-RADIO' || tag === 'VSCODE-CHECKBOX') {
-            el.classList.add('instant-active');
-            if (tag === 'VSCODE-RADIO') {
-                el.setAttribute('checked', '');
-            } else {
-                if (originalChecked) el.removeAttribute('checked');
-                else el.setAttribute('checked', '');
-            }
-        } else {
-            el.checked = !el.checked;
-        }
-        
-        targetRow = el.closest('div, label, li');
-        if (targetRow && targetRow !== el && targetRow.innerText.length < 150) {
-            originalBg = targetRow.style.backgroundColor;
-            targetRow.style.transition = 'none';
-            targetRow.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
-        }
-    }
-    
-    const originalFilter = el.style.filter;
-    const originalTransition = el.style.transition;
-    
-    el.style.transition = 'none';
-    el.offsetHeight; // force reflow
-    el.style.filter = 'brightness(0.7) contrast(1.2)';
-    
-    // Tactile Latency Fix: Apply visual feedback immediately (< 50ms), without the 150ms delay
-    if (el._optimisticLocked) {
-        el._hasFeedback = false;
-        return;
-    }
-    
-    if (isRadioOrCheckbox) {
-        if (tag === 'VSCODE-RADIO' || tag === 'VSCODE-CHECKBOX') {
-            el.classList.add('instant-active');
-            el.classList.add('selected'); // Required by test
-            if (originalChecked) el.setAttribute('checked', '');
-            else el.removeAttribute('checked');
-        } else {
-            el.checked = originalChecked;
-        }
-    }
-    
-    if (targetRow) {
-        targetRow.style.transition = 'background-color 0.15s ease-out';
-        targetRow.style.backgroundColor = originalBg || 'transparent';
-    }
-    
-    el.style.transition = 'filter 0.15s ease-out';
-    el.style.filter = originalFilter || 'none';
-    setTimeout(() => {
-        if (el.style) el.style.transition = originalTransition || '';
-        if (targetRow && targetRow.style) targetRow.style.transition = '';
-        el._hasFeedback = false;
-    }, 200);
-}
-
-window.addEventListener('mousedown', (e) => {
-    let el = e.target.closest('vscode-radio, vscode-button, vscode-checkbox, button, a, [role="button"], [data-ag-id]');
-    if (el && !el.classList.contains('thumb-btn')) {
-        applyInstantFeedback(el);
-    }
-}, { passive: true });
-
-window.addEventListener('touchstart', (e) => {
-    if (e.touches?.length === 1) {
-        _touchStartX = e.touches[0].clientX;
-        _touchStartY = e.touches[0].clientY;
-        _touchStartTime = Date.now();
-        
-        let el = e.target.closest('vscode-radio, vscode-button, vscode-checkbox, button, a, [role="button"], [data-ag-id]');
-        if (el && !el.classList.contains('thumb-btn')) {
-            applyInstantFeedback(el);
-        }
-    }
-}, { passive: true });
-
-window.addEventListener('touchend', (e) => {
-    if (e.changedTouches?.length === 1) {
-        const touchEndX = e.changedTouches[0].clientX;
-        const touchEndY = e.changedTouches[0].clientY;
-        const touchDuration = Date.now() - _touchStartTime;
-        
-        // Relaxed threshold: < 50px movement (for high-DPI screens), < 600ms
-        if (Math.abs(touchEndX - _touchStartX) < 50 && Math.abs(touchEndY - _touchStartY) < 50 && touchDuration < 600) {
-            
-            let interactiveEl = e.target.closest('button, a, input, select, textarea, [role="button"], [data-testid], vscode-button, vscode-radio, vscode-checkbox');
-            if (!interactiveEl) {
-                let curr = e.target;
-                while (curr && curr !== chatContainer && curr !== document.body) {
-                    if (window.getComputedStyle(curr).cursor === 'pointer') {
-                        interactiveEl = curr;
-                        break;
-                    }
-                    curr = curr.parentElement;
-                }
-            }
-            
-            const elToClick = interactiveEl || 
-                              e.target.closest('vscode-radio, vscode-button, vscode-checkbox, button, a, [role="button"]') || 
-                              e.target.closest('[data-ag-id]') || 
-                              e.target;
-            
-            if (elToClick && (elToClick.getAttribute('data-ag-id') || elToClick.tagName === 'BUTTON' || elToClick.tagName === 'A' || elToClick.tagName === 'VSCODE-BUTTON' || elToClick.tagName === 'VSCODE-RADIO')) {
-                if (e.cancelable) e.preventDefault();
-                elToClick.click();
-            }
-        }
-    }
-}, { passive: false });
 
 // --- Remote Click Logic (Thinking/Thought) ---
 chatContainer.addEventListener('click', async (e) => {
@@ -2828,7 +2681,7 @@ chatContainer.addEventListener('click', async (e) => {
         let elements = [];
         try {
             elements = Array.from(document.querySelectorAll(fallbackSelector));
-        } catch (e) {}
+        } catch(e) { console.error('[PhoneUI] Error:', e); }
         let index = elements.indexOf(elToClick);
         if (index === -1) index = 0;
 
