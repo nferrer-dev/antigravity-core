@@ -3174,7 +3174,7 @@ async function main() {
             expression: 'document.body.innerHTML',
             returnByValue: true
         });
-        require('fs').writeFileSync('dom_dump.html', result.result.value);
+        fs.writeFileSync('dom_dump.html', result.result.value);
         res.send('OK');
     } catch (e) {
         res.status(500).send(e.toString());
@@ -3204,10 +3204,7 @@ async function main() {
         // Debug route
         app.get('/debug-brain', (req, res) => {
             try {
-                const fs = require('fs');
-                const path = require('path');
-                const os = require('os');
-                const brainDir = path.join(os.homedir(), '.gemini', 'antigravity', 'brain');
+                const brainDir = join(os.homedir(), '.gemini', 'antigravity', 'brain');
                 if (!fs.existsSync(brainDir)) return res.json({ error: 'brainDir does not exist', path: brainDir });
                 const folders = fs.readdirSync(brainDir).filter(f => f.length === 36);
                 res.json({ success: true, count: folders.length, path: brainDir });
