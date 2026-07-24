@@ -1990,10 +1990,15 @@ async function startPolling(wss) {
     let lastErrorLog = 0;
     let isConnecting = false;
     let syncInProgress = false;
+    let syncPending = false;
 
     const performSync = async () => {
-        if (syncInProgress) return;
+        if (syncInProgress) {
+            syncPending = true;
+            return;
+        }
         syncInProgress = true;
+        syncPending = false;
         try {
             if (!cdpConnection || (cdpConnection.ws && cdpConnection.ws.readyState !== WebSocket.OPEN)) {
                 if (!isConnecting) {
@@ -2082,8 +2087,10 @@ async function startPolling(wss) {
                 console.error('Poll error:', err.message);
             }
             syncInProgress = false;
+            if (syncPending) setTimeout(performSync, 0);
         } catch (e) {
             syncInProgress = false;
+            if (syncPending) setTimeout(performSync, 0);
         }
     };
 
