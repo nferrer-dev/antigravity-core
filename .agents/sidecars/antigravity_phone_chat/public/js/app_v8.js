@@ -1403,15 +1403,7 @@ async function syncScrollToDesktop() {
             body: JSON.stringify({ scrollPercent })
         });
 
-        // After scrolling desktop, reload snapshot to get newly visible content
-        // (Antigravity uses virtualized scrolling - only visible messages are in DOM)
-        if (!snapshotReloadPending) {
-            snapshotReloadPending = true;
-            setTimeout(() => {
-                loadSnapshot();
-                snapshotReloadPending = false;
-            }, 300);
-        }
+        // Server MutationObserver will automatically push the new DOM state as virtual scrolling renders new nodes
     } catch (e) {
         console.log('Scroll sync failed:', e.message);
     }
@@ -2005,13 +1997,7 @@ async function selectChat(title) {
             // Close the desktop drawer so it doesn't get synced to mobile view
             await fetchWithAuth('/close-history', { method: 'POST' });
 
-            // Persistent polling to catch delayed desktop render/update
-            let attempts = 0;
-            const poll = setInterval(async () => {
-                await loadSnapshot();
-                attempts++;
-                if (attempts > 10) clearInterval(poll);
-            }, 500);
+            // Server MutationObserver will push updates automatically
         } else {
             console.error('Failed to select chat:', data.error);
         }

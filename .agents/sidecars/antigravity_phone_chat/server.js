@@ -238,6 +238,8 @@ async function connectCDP(url) {
                 if (idx !== -1) contexts.splice(idx, 1);
             } else if (data.method === 'Runtime.executionContextsCleared') {
                 contexts.length = 0;
+            } else if (data.method === 'Runtime.bindingCalled' && data.params.name === '__agySyncTrigger') {
+                if (global.onSyncTrigger) global.onSyncTrigger();
             } else if (data.method === 'Runtime.consoleAPICalled') {
                 const args = data.params.args;
                 if (args && args.length > 0 && args[0].value && typeof args[0].value === 'string' && args[0].value.startsWith('AG_CLIPBOARD_HOOK:')) {
@@ -264,6 +266,118 @@ async function connectCDP(url) {
     });
 
     await call("Runtime.enable", {});
+    await call("Page.enable", {});
+
+    const isolatedScriptSource = `
+        (function() {
+            if (window.__AGY_SYNC_OBSERVER_ACTIVE) return;
+            window.__AGY_SYNC_OBSERVER_ACTIVE = true;
+
+            function triggerSync() {
+                if (window.__agySyncTrigger) window.__agySyncTrigger(JSON.stringify({}));
+            }
+
+            let syncTimeout = null;
+            function debouncedSync() {
+                if (syncTimeout) clearTimeout(syncTimeout);
+                syncTimeout = setTimeout(triggerSync, 50);
+            }
+
+            window.__agyObserver = new MutationObserver((mutations) => {
+                if (window.__AGY_PAUSE_OBSERVER) return;
+                debouncedSync();
+            });
+
+            function startObserve() {
+                const target = document.body || document.documentElement;
+                if (target) {
+                    window.__agyObserver.observe(target, { childList: true, attributes: true, subtree: true, characterData: true });
+                } else {
+                    setTimeout(startObserve, 100);
+                }
+            }
+            startObserve();
+
+            ['input', 'change', 'focus', 'blur', '__agy_react_update'].forEach((evt) => {
+                document.addEventListener(evt, () => {
+                    if (!window.__AGY_PAUSE_OBSERVER) debouncedSync();
+                }, true);
+            });
+        })();
+    `;
+
+    const mainWorldScriptSource = `
+        (function() {
+            if (window.__AGY_REACT_INTERCEPTOR_ACTIVE) return;
+            window.__AGY_REACT_INTERCEPTOR_ACTIVE = true;
+
+            const nativeInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+            if (nativeInputValue && nativeInputValue.set) {
+                Object.defineProperty(HTMLInputElement.prototype, 'value', {
+                    configurable: true,
+                    enumerable: true,
+                    get: nativeInputValue.get,
+                    set: function(val) {
+                        nativeInputValue.set.call(this, val);
+                        document.dispatchEvent(new CustomEvent('__agy_react_update'));
+                    }
+                });
+            }
+
+            const nativeTextAreaValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+            if (nativeTextAreaValue && nativeTextAreaValue.set) {
+                Object.defineProperty(HTMLTextAreaElement.prototype, 'value', {
+                    configurable: true,
+                    enumerable: true,
+                    get: nativeTextAreaValue.get,
+                    set: function(val) {
+                        nativeTextAreaValue.set.call(this, val);
+                        document.dispatchEvent(new CustomEvent('__agy_react_update'));
+                    }
+                });
+            }
+        })();
+    `;
+
+    await call("Runtime.addBinding", { name: '__agySyncTrigger', executionContextName: 'AntigravityIsolatedWorld' });
+    await call("Page.addScriptToEvaluateOnNewDocument", { source: isolatedScriptSource, worldName: 'AntigravityIsolatedWorld' });
+    await call("Page.addScriptToEvaluateOnNewDocument", { source: mainWorldScriptSource });
+    
+    // Evaluate immediately on existing contexts
+    for (const ctx of contexts) {
+        if (ctx.name === 'AntigravityIsolatedWorld') {
+            try {
+                await call("Runtime.evaluate", { expression: isolatedScriptSource, contextId: ctx.id });
+            } catch (e) {
+                /* ignore */
+            }
+        } else {
+            try {
+                await call("Runtime.evaluate", { expression: mainWorldScriptSource, contextId: ctx.id });
+            } catch (e) {
+                /* ignore */
+            }
+        }
+    }
+
+    // Force isolated world creation for current page
+    try {
+        const defaultCtx = contexts.find((c) => c.auxData && c.auxData.isDefault);
+        const frameId = defaultCtx ? defaultCtx.auxData.frameId : "";
+        const res = await call("Page.createIsolatedWorld", {
+            frameId: frameId,
+            worldName: "AntigravityIsolatedWorld"
+        });
+        if (res && res.executionContextId) {
+            await call("Runtime.evaluate", {
+                expression: isolatedScriptSource,
+                contextId: res.executionContextId
+            });
+        }
+    } catch (e) {
+        /* ignore */
+    }
+
     await new Promise(r => setTimeout(r, 1000));
 
     return { ws, call, contexts };
@@ -674,11 +788,32 @@ async function captureSnapshot(cdp) {
                     console.log(`Context ${ctx.id} script error:`, val.error);
                     if (val.debug) console.log(`   Debug info:`, JSON.stringify(val.debug));
                 } else {
+                    for (const unpauseCtx of cdp.contexts) {
+                        try {
+                            await cdp.call('Runtime.evaluate', {
+                                expression: 'if (window.__agyObserver) window.__agyObserver.takeRecords(); window.__AGY_PAUSE_OBSERVER = false;',
+                                contextId: unpauseCtx.id
+                            });
+                        } catch (e) {
+                            /* ignore */
+                        }
+                    }
                     return val;
                 }
             }
         } catch (e) {
             console.log(`Context ${ctx.id} connection error:`, e.message);
+        }
+    }
+
+    for (const ctx of cdp.contexts) {
+        try {
+            await cdp.call('Runtime.evaluate', {
+                expression: 'if (window.__agyObserver) window.__agyObserver.takeRecords(); window.__AGY_PAUSE_OBSERVER = false;',
+                contextId: ctx.id
+            });
+        } catch (e) {
+            /* ignore */
         }
     }
 
@@ -1367,7 +1502,7 @@ async function getChatHistory(cdp) {
                     if (seenTitles.has(testId)) continue;
                     
                     if (text === 'New Chat' || 
-                        /(You are the|Review the|Please review|Please query|Your objective|Created At:|Call the MCP|I have drafted|Just reply|Review the plan|Review the implementation|You are a JS Style|Review the modifications)/i.test(text) ||
+                        /(You are the|Review the|Please review|Please query|Your objective|Created At:|Call the MCP|I have drafted|Just reply|Review the plan|Review the implementation|You are a JS Style|Review the modifications|refactoring engineer|task running)/i.test(text) ||
                         text.length < 5) {
                         continue;
                     }
