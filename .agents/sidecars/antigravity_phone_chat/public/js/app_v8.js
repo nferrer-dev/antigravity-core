@@ -243,7 +243,20 @@ const MODELS = [
 ];
 
 // --- WebSocket ---
-function connectWebSocket() {
+async function connectWebSocket() {
+    try {
+        const res = await fetch('/');
+        if (res.redirected && res.url.includes('/login.html')) {
+            window.location.href = '/login.html';
+            return;
+        } else if (res.status === 401 || res.status === 403) {
+            window.location.href = '/login.html';
+            return;
+        }
+    } catch(e) {
+        console.warn('Fetch health check failed before WS connection', e);
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${window.location.host}`);
 

@@ -1579,30 +1579,6 @@ function hashString(str) {
     return hash.toString(36);
 }
 
-// Check if a request is from the same Wi-Fi (internal network)
-function isLocalRequest(req) {
-    // 1. Check for proxy headers (Cloudflare, ngrok, etc.)
-    // If these exist, the request is coming via an external tunnel/proxy
-    if (req.headers['x-forwarded-for'] || req.headers['x-forwarded-host'] || req.headers['x-real-ip']) {
-        return false;
-    }
-
-    // 2. Check the remote IP address
-    const ip = req.ip || req.socket.remoteAddress || '';
-
-    // Standard local/private IPv4 and IPv6 ranges
-    return ip === '127.0.0.1' ||
-        ip === '::1' ||
-        ip === '::ffff:127.0.0.1' ||
-        ip.startsWith('192.168.') ||
-        ip.startsWith('10.') ||
-        ip.startsWith('172.16.') || ip.startsWith('172.17.') ||
-        ip.startsWith('172.18.') || ip.startsWith('172.19.') ||
-        ip.startsWith('172.2') || ip.startsWith('172.3') ||
-        ip.startsWith('::ffff:192.168.') ||
-        ip.startsWith('::ffff:10.');
-}
-
 // Initialize CDP connection
 async function initCDP() {
     console.log('🔍 Discovering Antigravity CDP endpoint...');
@@ -1734,6 +1710,16 @@ async function startPolling(wss) {
 async function createServer() {
     const app = express();
 
+    const isSafeMode = (process.env.APP_PASSWORD || 'antigravity') === 'antigravity' || (process.env.SESSION_SECRET === 'antigravity_secret_key_1337');
+    if (isSafeMode) {
+        app.use((req, res) => res.status(403).send('Forbidden: Default secrets in use. Change APP_PASSWORD and SESSION_SECRET in .env.'));
+        const keyPath = join(__dirname, 'certs', 'server.key');
+        const certPath = join(__dirname, 'certs', 'server.cert');
+        const hasSSL = fs.existsSync(keyPath) && fs.existsSync(certPath);
+        const server = hasSSL ? https.createServer({ key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }, app) : http.createServer(app);
+        return { server, wss: null, app, hasSSL };
+    }
+
     // Initialize voice memos directory and cleanup interval
     const voiceMemosDir = join(__dirname, 'scratch', 'voice_memos');
     if (!fs.existsSync(voiceMemosDir)) {
@@ -1822,19 +1808,25 @@ const wss = new WebSocketServer({ server });
 
     // Request Logger
     app.use((req, res, next) => {
-        console.log(`[REQUEST] ${req.method} ${req.url} - Auth: ${!!req.signedCookies[AUTH_COOKIE_NAME]} - Local: ${isLocalRequest(req)}`);
+        console.log(`[REQUEST] ${req.method} ${req.url} - Auth: ${!!req.signedCookies[AUTH_COOKIE_NAME]} `);
         next();
+    });
+
+    // Health check endpoint (Unauthenticated)
+    app.get('/health', (req, res) => {
+        res.json({
+            status: 'ok',
+            cdpConnected: cdpConnection?.ws?.readyState === 1,
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString(),
+            https: hasSSL
+        });
     });
 
     // Auth Middleware
     app.use((req, res, next) => {
         const publicPaths = ['/login', '/login.html', '/favicon.ico'];
         if (publicPaths.includes(req.path) || req.path.startsWith('/css/')) {
-            return next();
-        }
-
-        // Exempt local Wi-Fi devices from authentication
-        if (isLocalRequest(req)) {
             return next();
         }
 
@@ -2087,17 +2079,7 @@ app.post('/subscribe', (req, res) => {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.json(lastSnapshot);
     });
-
-    // Health check endpoint
-    app.get('/health', (req, res) => {
-        res.json({
-            status: 'ok',
-            cdpConnected: cdpConnection?.ws?.readyState === 1, // WebSocket.OPEN = 1
-            uptime: process.uptime(),
-            timestamp: new Date().toISOString(),
-            https: hasSSL
-        });
-    });
+    // Health check was moved above auth middleware
 
     // SSL status endpoint
     app.get('/ssl-status', (req, res) => {
@@ -2634,23 +2616,15 @@ app.post('/subscribe', (req, res) => {
                 }
             }
         });
-
         // Verify signed cookie manually
         const signedToken = parsedCookies[AUTH_COOKIE_NAME];
         let isAuthenticated = false;
 
-        // Exempt local Wi-Fi devices from authentication
-        if (isLocalRequest(req)) {
-            isAuthenticated = true;
-        } else if (signedToken) {
+        if (signedToken) {
             const sessionSecret = process.env.SESSION_SECRET || 'antigravity_secret_key_1337';
-
-            if (sessionSecret === 'antigravity_secret_key_1337') {
-                // Warning already printed on startup, but we check here for token verification
-            }
-
+            // Verify strict signed-cookie
             const token = cookieParser.signedCookie(signedToken, sessionSecret);
-            if (token === AUTH_TOKEN) {
+            if (token !== signedToken && token === AUTH_TOKEN) {
                 isAuthenticated = true;
             }
         }
