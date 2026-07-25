@@ -448,96 +448,100 @@ async function captureSnapshot(cdp) {
 async function injectMessage(cdp, text) {
     // Use JSON.stringify for robust escaping (handles ", \, newlines, backticks, unicode, etc.)
     const EXPRESSION = `async (textToInsert) => {
-        const isModalOpen = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]').length > 0;
+        try {
+            const isModalOpen = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]').length > 0;
         
-        let radioClicked = false;
-        if (isModalOpen && /^\\d+$/.test(textToInsert.trim())) {
-            const index = parseInt(textToInsert.trim(), 10) - 1;
-            const radios = Array.from(document.querySelectorAll('[role="dialog"] input[type="radio"], [aria-modal="true"] input[type="radio"]'));
-            if (radios[index]) {
-                const radio = radios[index];
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
-                if (nativeInputValueSetter) {
-                    nativeInputValueSetter.call(radio, true);
+            let radioClicked = false;
+            if (isModalOpen && /^\\d+$/.test(textToInsert.trim())) {
+                const index = parseInt(textToInsert.trim(), 10) - 1;
+                const radios = Array.from(document.querySelectorAll('[role="dialog"] input[type="radio"], [aria-modal="true"] input[type="radio"]'));
+                if (radios[index]) {
+                    const radio = radios[index];
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+                    if (nativeInputValueSetter) {
+                        nativeInputValueSetter.call(radio, true);
+                    } else {
+                        radio.checked = true;
+                    }
+                    radio.dispatchEvent(new Event('input', { bubbles: true }));
+                    radio.dispatchEvent(new Event('change', { bubbles: true }));
+                    radio.click();
+                    radioClicked = true;
+                }
+            }
+        
+            if (!radioClicked) {
+                let editors = [];
+            
+                if (isModalOpen) {
+                    // Target the write-in input/textarea in the modal. Catch inputs without explicit type attribute
+                    editors = [...document.querySelectorAll('[role="dialog"] input:not([type="radio"]):not([type="checkbox"]), [role="dialog"] textarea, [aria-modal="true"] input:not([type="radio"]):not([type="checkbox"]), [aria-modal="true"] textarea, [role="dialog"] [contenteditable="true"]')]
+                        .filter(el => el.offsetParent !== null);
+                }
+            
+                if (editors.length === 0) {
+                    // Fallback to main chat inputs
+                    editors = [...document.querySelectorAll('textarea, input:not([type="radio"]):not([type="checkbox"]), [data-testid="conversation-view"] [contenteditable="true"], #root [contenteditable="true"], .overflow-y-auto [contenteditable="true"]')]
+                        .filter(el => el.offsetParent !== null);
+                }
+
+                const editor = editors.at(-1);
+                if (!editor) return { ok:false, error:"editor_not_found" };
+
+                editor.focus();
+
+                if (editor.tagName === 'INPUT' || editor.tagName === 'TEXTAREA') {
+                    editor.value = textToInsert;
+                    editor.dispatchEvent(new Event("input", { bubbles: true }));
+                    editor.dispatchEvent(new Event("change", { bubbles: true }));
                 } else {
-                    radio.checked = true;
+                    document.execCommand?.("selectAll", false, null);
+                    document.execCommand?.("delete", false, null);
+
+                    let inserted = false;
+                    try { inserted = !!document.execCommand?.("insertText", false, textToInsert); } catch {}
+                    if (!inserted) {
+                        editor.textContent = textToInsert;
+                        editor.dispatchEvent(new InputEvent("beforeinput", { bubbles:true, inputType:"insertText", data: textToInsert }));
+                        editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data: textToInsert }));
+                    }
                 }
-                radio.dispatchEvent(new Event('input', { bubbles: true }));
-                radio.dispatchEvent(new Event('change', { bubbles: true }));
-                radio.click();
-                radioClicked = true;
             }
-        }
-        
-        if (!radioClicked) {
-            let editors = [];
-            
+
+            // Wait for React to re-render the Submit button (give it up to 150ms)
+            await new Promise(r => setTimeout(r, 150));
+
+            let submit = null;
             if (isModalOpen) {
-                // Target the write-in input/textarea in the modal. Catch inputs without explicit type attribute
-                editors = [...document.querySelectorAll('[role="dialog"] input:not([type="radio"]):not([type="checkbox"]), [role="dialog"] textarea, [aria-modal="true"] input:not([type="radio"]):not([type="checkbox"]), [aria-modal="true"] textarea, [role="dialog"] [contenteditable="true"]')]
-                    .filter(el => el.offsetParent !== null);
-            }
-            
-            if (editors.length === 0) {
-                // Fallback to main chat inputs
-                editors = [...document.querySelectorAll('textarea, input:not([type="radio"]):not([type="checkbox"]), [data-testid="conversation-view"] [contenteditable="true"], #root [contenteditable="true"], .overflow-y-auto [contenteditable="true"]')]
-                    .filter(el => el.offsetParent !== null);
+                // Find "Submit" button in modal
+                const modalBtns = Array.from(document.querySelectorAll('[role="dialog"] button, [aria-modal="true"] button'));
+                submit = modalBtns.find(b => {
+                    const txt = (b.innerText || '').trim().toLowerCase();
+                    return txt === 'submit' || txt === 'send' || txt === 'proceed' || txt === 'confirm' || !!b.querySelector('svg.lucide-send, svg.lucide-arrow-right');
+                });
             }
 
-            const editor = editors.at(-1);
-            if (!editor) return { ok:false, error:"editor_not_found" };
-
-            editor.focus();
-
-            if (editor.tagName === 'INPUT' || editor.tagName === 'TEXTAREA') {
-                editor.value = textToInsert;
-                editor.dispatchEvent(new Event("input", { bubbles: true }));
-                editor.dispatchEvent(new Event("change", { bubbles: true }));
-            } else {
-                document.execCommand?.("selectAll", false, null);
-                document.execCommand?.("delete", false, null);
-
-                let inserted = false;
-                try { inserted = !!document.execCommand?.("insertText", false, textToInsert); } catch {}
-                if (!inserted) {
-                    editor.textContent = textToInsert;
-                    editor.dispatchEvent(new InputEvent("beforeinput", { bubbles:true, inputType:"insertText", data: textToInsert }));
-                    editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data: textToInsert }));
-                }
+            if (!submit) {
+                submit = document.querySelector('[data-tooltip-id="input-send-button-tooltip"]') 
+                      || document.querySelector('[data-tooltip-id="send-button-tooltip"]')
+                      || document.querySelector('button[aria-label="Send Message"]')
+                      || document.querySelector('button[aria-label="Send"]')
+                      || document.querySelector("svg.lucide-arrow-right")?.closest("button")
+                      || document.querySelector("svg.lucide-arrow-up")?.closest("button")
+                      || document.querySelector("svg.lucide-send")?.closest("button");
             }
+
+            if (submit && !submit.disabled) {
+                submit.click();
+                return { ok:true, method:"click_submit", isModal: isModalOpen, radioClicked };
+            }
+
+            // Submit button not found or disabled - tell the backend to use CDP to press Enter
+            return { ok:true, method:"needs_cdp_enter", submit_button_found: !!submit, submit_disabled: submit ? submit.disabled : null, isModal: isModalOpen, radioClicked };
+        } catch(err) {
+            return { ok: false, error: err.toString(), stack: err.stack };
         }
-
-        // Wait for React to re-render the Submit button (give it up to 150ms)
-        await new Promise(r => setTimeout(r, 150));
-
-        let submit = null;
-        if (isModalOpen) {
-            // Find "Submit" button in modal
-            const modalBtns = Array.from(document.querySelectorAll('[role="dialog"] button, [aria-modal="true"] button'));
-            submit = modalBtns.find(b => {
-                const txt = (b.innerText || '').trim().toLowerCase();
-                return txt === 'submit' || txt === 'send' || txt === 'proceed' || txt === 'confirm' || !!b.querySelector('svg.lucide-send, svg.lucide-arrow-right');
-            });
-        }
-
-        if (!submit) {
-            submit = document.querySelector('[data-tooltip-id="input-send-button-tooltip"]') 
-                  || document.querySelector('[data-tooltip-id="send-button-tooltip"]')
-                  || document.querySelector('button[aria-label="Send Message"]')
-                  || document.querySelector('button[aria-label="Send"]')
-                  || document.querySelector("svg.lucide-arrow-right")?.closest("button")
-                  || document.querySelector("svg.lucide-arrow-up")?.closest("button")
-                  || document.querySelector("svg.lucide-send")?.closest("button");
-        }
-
-        if (submit && !submit.disabled) {
-            submit.click();
-            return { ok:true, method:"click_submit", isModal: isModalOpen, radioClicked };
-        }
-
-        // Submit button not found or disabled - tell the backend to use CDP to press Enter
-        return { ok:true, method:"needs_cdp_enter", submit_button_found: !!submit, submit_disabled: submit ? submit.disabled : null, isModal: isModalOpen, radioClicked };
-    })()`;
+    }`;
 
     for (const ctx of cdp.contexts) {
         try {
@@ -549,6 +553,9 @@ async function injectMessage(cdp, text) {
                 awaitPromise: true
             });
 
+            if (result.exceptionDetails) {
+                console.error("EVAL EXCEPTION:", JSON.stringify(result.exceptionDetails));
+            }
             if (result.result && result.result.value) {
                 const val = result.result.value;
                 if (val.method === "needs_cdp_enter") {
@@ -1518,7 +1525,7 @@ async function getAppState(cdp) {
 
         // 3. Get Running Tasks
         // Strategy: Look for an element containing text like "1 task running" or "N tasks running"
-        const taskRegex = /^\\d+ .*running$/i;
+        const taskRegex = /^\\d+\\s+task(s)?(\\s+running)?$/i;
         const taskEl = textNodes2.find(el => {
             return taskRegex.test(el.innerText.trim());
         });
@@ -2737,7 +2744,7 @@ async function main() {
             if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
             
             const KILL_EXP = `(async () => {
-                const taskRegex = /^\\d+ .*running$/i;
+                const taskRegex = /^\d+\s+task(s)?(\s+running)?$/i;
                 const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
                 let taskEl = null;
                 while (walker.nextNode()) {

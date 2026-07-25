@@ -1287,3 +1287,11 @@ textarea::-webkit-resizer {
     margin-left: 6px;
     margin-bottom: 8px;
 }
+
+/* Fix nested scrollable areas from Desktop UI */
+.overflow-y-auto {
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    pointer-events: auto !important;
+    touch-action: pan-y !important;
+}

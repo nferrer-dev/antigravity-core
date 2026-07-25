@@ -2802,7 +2802,7 @@ if (taskIndicator) {
             const options = currentRunningTasksList.map(task => ({
                 value: task,
                 keepOpen: true,
-                html: `<span>${task}</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" class="text-red-500 opacity-80 hover:opacity-100 transition-opacity"><path d="M330-330H630V-630H330v300ZM480.07-100q-78.84,0-148.2-29.92T211.18-211.13T129.93-331.76T100-479.93t29.92-148.2t81.21-120.68t120.63-81.25T479.93-860t148.2,29.92t120.68,81.21t81.25,120.63T860-480.07t-29.92,148.2T748.87-211.18T628.24-129.93T480.07-100ZM480-160q134,0 227-93t93-227T707-707T480-800T253-707T160-480t93,227t227,93Zm0-320Z"/></svg>`
+                html: `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px;">${task}</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" style="flex-shrink: 0; min-width: 16px; min-height: 16px;" class="text-red-500 opacity-80 hover:opacity-100 transition-opacity"><path d="M330-330H630V-630H330v300ZM480.07-100q-78.84,0-148.2-29.92T211.18-211.13T129.93-331.76T100-479.93t29.92-148.2t81.21-120.68t120.63-81.25T479.93-860t148.2,29.92t120.68,81.21t81.25,120.63T860-480.07t-29.92,148.2T748.87-211.18T628.24-129.93T480.07-100ZM480-160q134,0 227-93t93-227T707-707T480-800T253-707T160-480t93,227t227,93Zm0-320Z"/></svg>`
             }));
             openModal('Running Tasks', options, async (selectedTask, optionDiv) => {
                 optionDiv.style.opacity = '0.5';
