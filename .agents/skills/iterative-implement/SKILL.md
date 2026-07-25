@@ -35,3 +35,8 @@ Spawn the following subagents concurrently via `invoke_subagent`. Pass them the 
 - You MUST wait for ALL invoked subagents to return an explicit `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Set a 3-minute absolute timeout using `schedule`.
 - If a subagent rejects the patch, use `send_message` to resubmit the revised artifact to the ENTIRE committee, instructing them to perform a diff-only review on the fix.
 - Cap loops at a maximum of 5 rounds. If stagnation occurs, yield to the USER.
+
+## 6. Resource Cleanup (Anti-Leak Protocol)
+To prevent system instability and memory leaks across the framework, you MUST execute a strict teardown upon loop completion (whether approved, rejected, or timed out).
+- **Subagents:** Use `manage_subagents` (`kill` action) to explicitly terminate the Style Expert, Security Auditor, Performance Profiler, and Code Health Agent.
+- **Background Tasks:** Use `manage_task` (`list` action) to identify any lingering test processes, server monitors, or "Sleep" timers (e.g., from `schedule` or `run_command`), and explicitly `kill` them.

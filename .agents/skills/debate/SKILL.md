@@ -35,9 +35,10 @@ Subjective LLM scoring is strictly banned to prevent infinite hallucination loop
 3. **Synthesis via Retrieval:** The Hostile Adjudicator MUST NOT read a monolithic text transcript. It MUST invoke `recall` on the `cortex` server to query the isolated shard arguments.
 
 ## 4. Phase 4: Resource Cleanup (Anti-Leak Protocol)
-To prevent idle subagents from consuming system resources and causing memory leaks, the Parent Orchestrator MUST explicitly kill them once their arguments are ingested or if the debate loop is aborted.
-1. **Mandatory Sweeps:** Immediately after adopting the Hostile Adjudicator role (or upon a premature halt), use the `manage_subagents` tool with the `kill` action, passing the `ConversationIds` of ALL spawned Explorers, Sub-Orchestrators, Proponents, and Critics.
-2. **Timeout & Deadlock Fallback:** If a Sub-Orchestrator shard times out (e.g., hitting the 3-minute limit), you MUST still execute this global kill sweep to free resources before synthesizing the final verdict.
+To prevent system instability and memory leaks, the Parent Orchestrator MUST explicitly kill all spawned entities once their arguments are ingested or if the debate loop is aborted.
+1. **Subagent Sweeps:** Immediately after adopting the Hostile Adjudicator role (or upon a premature halt), use the `manage_subagents` tool with the `kill` action, passing the `ConversationIds` of ALL spawned Explorers, Sub-Orchestrators, Proponents, and Critics.
+2. **Background Task Sweeps:** Use `manage_task` with the `list` action to identify any lingering timeout tasks (e.g., from `schedule`), server mocks, or PoC spikes, and explicitly `kill` them.
+3. **Timeout & Deadlock Fallback:** If a Sub-Orchestrator shard times out (e.g., hitting the 3-minute limit), you MUST still execute this global kill sweep of subagents and tasks to free resources before synthesizing the final verdict.
 
 ## Final Output Structure
 The Parent (acting as Hostile Adjudicator) synthesizes the retrieved vectors and outputs a highly distilled summary containing:

@@ -1710,7 +1710,7 @@ async function startPolling(wss) {
 async function createServer() {
     const app = express();
 
-    const isSafeMode = (process.env.APP_PASSWORD || 'antigravity') === 'antigravity' || (process.env.SESSION_SECRET === 'antigravity_secret_key_1337');
+    const isSafeMode = (process.env.APP_PASSWORD || 'antigravity') === 'antigravity' || (process.env.SESSION_SECRET || 'antigravity_secret_key_1337') === 'antigravity_secret_key_1337';
     if (isSafeMode) {
         app.use((req, res) => res.status(403).send('Forbidden: Default secrets in use. Change APP_PASSWORD and SESSION_SECRET in .env.'));
         const keyPath = join(__dirname, 'certs', 'server.key');
