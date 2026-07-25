@@ -1,19 +1,20 @@
 ---
-name: technical-debate
-description: Automates a rigorous adversarial review to vet a technical proposition (Stage 1 Idea Vetting).
+name: design-validate
+description: Automatically trigger the canonical debate engine to validate design artifacts, replacing legacy consensus loops.
 ---
 
-# Technical Debate Workflow (Stage 1 Idea Vetting)
+# Design Validation Workflow (Stage 2)
 
-When the user triggers this skill to vet a technical proposition or configuration change, you must execute the canonical Level 4 Map-Reduce debate engine.
+When the user finalizes a draft of an implementation plan, design document, or architecture artifact, you must execute the canonical Level 4 Map-Reduce debate engine to rigorously validate the artifact before any code is written.
 
 ## 1. Context Scoping & Pre-Flight
-- **Triviality Fast-Path**: Evaluate if the proposition is purely cosmetic, non-functional, or trivial. If so, bypass the debate, log a 'Triviality Exemption', and proceed.
+- **Triviality Fast-Path**: If the proposed change is purely cosmetic or non-functional, you may bypass this validation.
 - **Workflow Delegation**: You MUST immediately read the canonical debate skill instructions via `view_file` at `C:\Users\nferr\.gemini\config\skills\debate\SKILL.md`.
 - **Execution**: Follow the Level 4 Orchestration guidelines defined in the `debate` skill. You will act as the Parent Orchestrator, executing Phase 1 (Dynamic Ontology Discovery) and invoking the isolated Sub-Orchestrators for Phase 2 (Concurrent Map-Reduce Debate).
+- **Target Artifacts**: The debate will rigorously audit the proposed `implementation_plan.md` (or equivalent artifact).
 
 ## 2. Adjudication & RAG Synthesis
 - Once the Map-Reduce engine completes, execute Phase 3 (Vectorized RAG Memory). Use `recall` on the `cortex` MCP server to synthesize the empirically validated arguments from the isolated session namespace.
 - As the Hostile Adjudicator, determine the final binary verdict (`[GLOBAL VERDICT: PROCEED]` or `[GLOBAL VERDICT: REJECT]`).
 - You MUST explicitly present the retrieved empirical causal chain and the final verdict to the user.
-- **Strict Gate**: Do NOT proceed to write an implementation plan (Stage 2) until this Stage 1 verdict is `PROCEED`.
+- **Strict Gate**: Do NOT proceed to write code (Stage 3 Iterative-Implement) until this Stage 2 verdict is `PROCEED`.
