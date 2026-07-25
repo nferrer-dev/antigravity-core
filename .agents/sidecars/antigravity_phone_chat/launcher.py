@@ -19,7 +19,7 @@ def check_dependencies():
     # Check what is missing
     for pkg in needed:
         try:
-            if pkg == "pyngrok": from pyngrok import ngrok
+            if pkg == "pyngrok": pass # from pyngrok import ngrok
             elif pkg == "python-dotenv": from dotenv import load_dotenv
             elif pkg == "qrcode": import qrcode
             elif pkg == "pinggy": import pinggy
@@ -132,7 +132,7 @@ def main():
     # Suppress pyngrok noise (especially during shutdown)
     logging.getLogger("pyngrok").setLevel(logging.ERROR)
     
-    from pyngrok import ngrok
+    # from pyngrok import ngrok
 
     from dotenv import load_dotenv
     
@@ -149,34 +149,46 @@ def main():
         os.environ['APP_PASSWORD'] = passcode # Set for child process
         print(f"⚠️  No APP_PASSWORD in .env. Using temporary: {passcode}")
 
+    import socket
+    def is_port_in_use(port):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('127.0.0.1', port)) == 0
+
     # 2. Start Node.js Server (Common to both modes)
-    print(f"🚀 Starting Antigravity Server ({args.mode.upper()} mode)...")
+    try:
+        print(f"Starting Antigravity Server ({args.mode.upper()} mode)...")
+    except UnicodeEncodeError:
+        print(f"Starting Antigravity Server ({args.mode.upper()} mode)...")
     
     # Clean up old logs
     with open("server_log.txt", "w") as f:
         f.write(f"--- Server Started at {time.ctime()} ---\n")
 
-    node_cmd = ["node", "server.js"]
+    port = int(os.environ.get('PORT', 3000))
     node_process = None
     
-    try:
-        # Redirect stdout/stderr to file
-        log_file = open("server_log.txt", "a")
-        if sys.platform == "win32":
-            # On Windows, using shell=True can help with path resolution but makes killing harder.
-            # We'll use shell=False and rely on PATH.
-            node_process = subprocess.Popen(node_cmd, stdout=log_file, stderr=log_file, env=os.environ.copy())
-        else:
-            node_process = subprocess.Popen(node_cmd, stdout=log_file, stderr=log_file, env=os.environ.copy())
-            
-        time.sleep(2) # Give it a moment to crash if it's going to
-        if node_process.poll() is not None:
-            print("❌ Server failed to start immediately. Check server_log.txt.")
+    if is_port_in_use(port):
+        print(f"Warning: Port {port} is already in use. Assuming server is already running.")
+    else:
+        node_cmd = ["node", "server.js"]
+        try:
+            # Redirect stdout/stderr to file
+            log_file = open("server_log.txt", "a")
+            if sys.platform == "win32":
+                # On Windows, using shell=True can help with path resolution but makes killing harder.
+                # We'll use shell=False and rely on PATH.
+                node_process = subprocess.Popen(node_cmd, stdout=log_file, stderr=log_file, env=os.environ.copy())
+            else:
+                node_process = subprocess.Popen(node_cmd, stdout=log_file, stderr=log_file, env=os.environ.copy())
+                
+            time.sleep(2) # Give it a moment to crash if it's going to
+            if node_process.poll() is not None:
+                print("Server failed to start immediately. Check server_log.txt.")
+                sys.exit(1)
+                
+        except Exception as e:
+            print(f"Failed to launch node: {e}")
             sys.exit(1)
-            
-    except Exception as e:
-        print(f"❌ Failed to launch node: {e}")
-        sys.exit(1)
 
     # 3. Mode Specific Logic
     final_url = ""
@@ -227,11 +239,13 @@ def main():
                 try:
                     import pinggy
                     pinggy_token = os.environ.get('PINGGY_TOKEN')  # Optional: for persistent subdomain
-                    pinggy_tunnel = pinggy.start_tunnel(
-                        forwardto=f"localhost:{port}",
-                        token=pinggy_token if pinggy_token else None,
-                        localservertls=(protocol == "https")
-                    )
+                    pinggy_kwargs = {
+                        "forwardto": f"localhost:{port}",
+                        "localservertls": (protocol == "https")
+                    }
+                    if pinggy_token:
+                        pinggy_kwargs["token"] = pinggy_token
+                    pinggy_tunnel = pinggy.start_tunnel(**pinggy_kwargs)
                     # Prefer HTTPS URL from the returned list
                     tunnel_urls = pinggy_tunnel.urls if hasattr(pinggy_tunnel, 'urls') else []
                     public_url = next((u for u in tunnel_urls if u.startswith('https://')), None)

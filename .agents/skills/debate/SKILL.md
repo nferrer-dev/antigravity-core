@@ -34,6 +34,11 @@ Subjective LLM scoring is strictly banned to prevent infinite hallucination loop
 2. **Session-ID Namespace Bounding:** To prevent concurrent cross-talk between shards, all RAG ingestion via `store_memory` MUST be heavily tagged with a unique session ID tied strictly to that active workflow instance.
 3. **Synthesis via Retrieval:** The Hostile Adjudicator MUST NOT read a monolithic text transcript. It MUST invoke `recall` on the `cortex` server to query the isolated shard arguments.
 
+## 4. Phase 4: Resource Cleanup (Anti-Leak Protocol)
+To prevent idle subagents from consuming system resources and causing memory leaks, the Parent Orchestrator MUST explicitly kill them once their arguments are ingested or if the debate loop is aborted.
+1. **Mandatory Sweeps:** Immediately after adopting the Hostile Adjudicator role (or upon a premature halt), use the `manage_subagents` tool with the `kill` action, passing the `ConversationIds` of ALL spawned Explorers, Sub-Orchestrators, Proponents, and Critics.
+2. **Timeout & Deadlock Fallback:** If a Sub-Orchestrator shard times out (e.g., hitting the 3-minute limit), you MUST still execute this global kill sweep to free resources before synthesizing the final verdict.
+
 ## Final Output Structure
 The Parent (acting as Hostile Adjudicator) synthesizes the retrieved vectors and outputs a highly distilled summary containing:
 1. **Global Verdict** (`[GLOBAL VERDICT: PROCEED]` or `[GLOBAL VERDICT: REJECT]`)
