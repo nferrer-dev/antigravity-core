@@ -2078,18 +2078,17 @@ app.post('/subscribe', (req, res) => {
         if (html && !html.includes('killBtnPulseOverride')) {
             html += `<style>
                 @-webkit-keyframes killBtnPulseOverride {
-                    0%, 100% { opacity: 1; -webkit-transform: scale(1); }
-                    50% { opacity: 0.4; -webkit-transform: scale(1.2); }
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
                 }
                 @keyframes killBtnPulseOverride {
-                    0%, 100% { opacity: 1; transform: scale(1); }
-                    50% { opacity: 0.4; transform: scale(1.2); }
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
                 }
                 .kill-task-btn, .kill-task-btn svg, #stopBtn, #stopBtn svg {
                     -webkit-animation: killBtnPulseOverride 2s ease-in-out infinite !important;
                     animation: killBtnPulseOverride 2s ease-in-out infinite !important;
-                    transform-origin: center !important;
-                    will-change: transform, opacity !important;
+                    will-change: opacity !important;
                 }
             </style>`;
         }
