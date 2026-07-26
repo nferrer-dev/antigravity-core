@@ -190,13 +190,14 @@ async function fetchAppState() {
                         const options = currentRunningTasksList.map(task => ({
                             label: task,
                             html: `
-                                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%;" onclick="showToast('${task.replace(/'/g, "\\'")}')">${task}</span>
-                                    <svg class="kill-task-btn" data-task="${task.replace(/'/g, "\\'")}" style="width:16px; height:16px; stroke:var(--error); cursor:pointer;" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line>
-                                    </svg>
-                                </div>
-                            `
+                                  <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                      <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%;" onclick="showToast('${task.replace(/'/g, "\\'")}')">${task}</span>
+                                      <div class="kill-task-btn" data-task="${task.replace(/'/g, "\\'")}" style="display:flex; align-items:center; justify-content:center; padding:4px;">
+                                          <svg style="width:16px; height:16px; stroke:var(--error); cursor:pointer;" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line>
+                                          </svg>
+                                      </div>
+                                  </div>`
                         }));
                         openModal('Running Tasks', options, () => {});
                         
