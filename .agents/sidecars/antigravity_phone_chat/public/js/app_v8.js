@@ -624,6 +624,25 @@ async function loadSnapshot() {
             '    overflow-y: auto !important;\n' +
             '}\n' +
             '\n' +
+            '/* Float user messages to the right */\n' +
+            '[aria-label="User message"] [data-testid="user-input-step"] {\n' +
+            '    align-items: flex-end !important;\n' +
+            '}\n' +
+            '[aria-label="User message"] .bg-card-border {\n' +
+            '    max-width: 85% !important;\n' +
+            '    align-self: flex-end !important;\n' +
+            '    background: none !important;\n' +
+            '    background-color: var(--primary) !important;\n' +
+            '    border-radius: 1.25rem !important;\n' +
+            '    border-bottom-right-radius: 0.25rem !important;\n' +
+            '    padding: 0 !important;\n' +
+            '    overflow: hidden !important;\n' +
+            '}\n' +
+            '[aria-label="User message"] .bg-card {\n' +
+            '    background-color: transparent !important;\n' +
+            '    color: var(--primary-foreground) !important;\n' +
+            '}\n' +
+            '\n' +
             '/* Force user message buttons to sit underneath the text */\n' +
             '[data-testid="conversation-view"] .flex-row:has(> .user-input-buttons-container) {\n' +
             '    flex-direction: column !important;\n' +
