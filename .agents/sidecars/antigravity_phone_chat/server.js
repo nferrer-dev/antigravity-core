@@ -2393,12 +2393,11 @@ app.post('/subscribe', (req, res) => {
         
         if (result.ok) {
             console.log(`Triggering explicit sync because we just sent a message! (Method: ${result.method})`);
-            // Wait for the desktop UI to process the input and update the DOM.
-            // If the message triggers a modal (e.g. Enqueue), it needs a few hundred ms to fade in.
-            // If it's a normal message, it still needs ~100-200ms to render in React.
-            setTimeout(() => {
-                if (global.onSyncTrigger) global.onSyncTrigger();
-            }, 400);
+            // Desktop React UI can take varying amounts of time to render the new DOM state (e.g. user bubble or modal).
+            // Trigger a cascading set of syncs to ensure the phone UI instantly reflects the desktop state as it updates.
+            setTimeout(() => { if (global.onSyncTrigger) global.onSyncTrigger(); }, 150);
+            setTimeout(() => { if (global.onSyncTrigger) global.onSyncTrigger(); }, 500);
+            setTimeout(() => { if (global.onSyncTrigger) global.onSyncTrigger(); }, 1000);
         }
 
         res.json({
