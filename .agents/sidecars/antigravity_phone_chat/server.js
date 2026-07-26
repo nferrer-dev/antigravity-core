@@ -2392,18 +2392,12 @@ app.post('/subscribe', (req, res) => {
         // The client will refresh and see if the message appeared
         
         if (result.method === 'cdp_enter') {
-            console.log("Triggering explicit snapshot dump because we just queued a message!");
-            setTimeout(async () => {
-                const snap = await captureSnapshot(cdpConnection);
-                if (snap && snap.html) {
-                    try {
-                        fs.writeFileSync('pending_dump.html', snap.html);
-                        console.log("Dumped post-enter snapshot to pending_dump.html");
-                    } catch(e) { console.error('Error writing dump', e); }
-                } else {
-                    console.log("Failed to take snapshot for dump!");
-                }
-            }, 500);
+            console.log("Triggering explicit sync because we just queued a message!");
+            // The desktop UI has a short fade animation for the enqueue menu.
+            // Wait for it to fully appear, then trigger a global sync to broadcast it to the phone.
+            setTimeout(() => {
+                if (global.onSyncTrigger) global.onSyncTrigger();
+            }, 400);
         }
 
         res.json({
