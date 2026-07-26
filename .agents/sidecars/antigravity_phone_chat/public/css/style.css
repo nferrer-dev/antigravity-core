@@ -1313,3 +1313,24 @@ textarea::-webkit-resizer {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.2; transform: scale(1.5); }
 }
+
+/* Fix long text overflow in the queued message list */
+.max-h-32.overflow-y-auto {
+    overflow-x: hidden !important;
+}
+.max-h-32.overflow-y-auto * {
+    min-width: 0;
+}
+.max-h-32.overflow-y-auto .truncate {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+/* Fix Queued Messages title bar text overflow */
+[data-testid="queued-messages-card"] .flex.items-center.justify-between {
+    min-width: 0;
+}
+[data-testid="queued-messages-card"] .flex.items-center.gap-1\.5 {
+    min-width: 0;
+}
