@@ -2391,10 +2391,11 @@ app.post('/subscribe', (req, res) => {
         // Always return 200 - the message usually goes through even if CDP reports issues
         // The client will refresh and see if the message appeared
         
-        if (result.method === 'cdp_enter') {
-            console.log("Triggering explicit sync because we just queued a message!");
-            // The desktop UI has a short fade animation for the enqueue menu.
-            // Wait for it to fully appear, then trigger a global sync to broadcast it to the phone.
+        if (result.ok) {
+            console.log(`Triggering explicit sync because we just sent a message! (Method: ${result.method})`);
+            // Wait for the desktop UI to process the input and update the DOM.
+            // If the message triggers a modal (e.g. Enqueue), it needs a few hundred ms to fade in.
+            // If it's a normal message, it still needs ~100-200ms to render in React.
             setTimeout(() => {
                 if (global.onSyncTrigger) global.onSyncTrigger();
             }, 400);
