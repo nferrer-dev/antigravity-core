@@ -2074,9 +2074,29 @@ app.post('/subscribe', (req, res) => {
             return res.status(503).json({ error: 'No snapshot available yet' });
         }
         
+        let html = lastSnapshot.html;
+        if (html && !html.includes('killBtnPulseOverride')) {
+            html += `<style>
+                @-webkit-keyframes killBtnPulseOverride {
+                    0%, 100% { opacity: 1; -webkit-transform: scale(1); }
+                    50% { opacity: 0.1; -webkit-transform: scale(1.6); }
+                }
+                @keyframes killBtnPulseOverride {
+                    0%, 100% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.1; transform: scale(1.6); }
+                }
+                .kill-task-btn, .kill-task-btn svg {
+                    -webkit-animation: killBtnPulseOverride 1s infinite !important;
+                    animation: killBtnPulseOverride 1s infinite !important;
+                    transform-origin: center !important;
+                    will-change: transform, opacity !important;
+                }
+            </style>`;
+        }
+        
         console.log(`[GET /snapshot] Serving snapshot. isGenerating: ${lastSnapshot.isGenerating}`);
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.json(lastSnapshot);
+        res.json({ ...lastSnapshot, html: html });
     });
     // Health check was moved above auth middleware
 
