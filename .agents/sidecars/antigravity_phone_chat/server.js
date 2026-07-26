@@ -2079,11 +2079,11 @@ app.post('/subscribe', (req, res) => {
             html += `<style>
                 @-webkit-keyframes killBtnPulseOverride {
                     0%, 100% { opacity: 1; }
-                    50% { opacity: 0.5; }
+                    50% { opacity: 0.7; }
                 }
                 @keyframes killBtnPulseOverride {
                     0%, 100% { opacity: 1; }
-                    50% { opacity: 0.5; }
+                    50% { opacity: 0.7; }
                 }
                 .kill-task-btn, .kill-task-btn svg, #stopBtn, #stopBtn svg {
                     -webkit-animation: killBtnPulseOverride 2s ease-in-out infinite !important;
