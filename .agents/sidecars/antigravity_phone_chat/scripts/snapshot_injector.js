@@ -337,7 +337,7 @@
             });
         } catch(e) {}
         
-        const html = clone.outerHTML;
+        const html = clone.outerHTML.replace(/Sends after agent finishes working/g, 'Sends after agent work');
         
         const rules = [];
         for (const sheet of document.styleSheets) {

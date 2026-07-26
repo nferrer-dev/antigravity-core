@@ -326,6 +326,8 @@ body {
 
 .status-dot.disconnected {
     background: var(--warning);
+    -webkit-animation: killBtnPulse 1.5s infinite;
+    animation: killBtnPulse 1.5s infinite;
 }
 
 /* Chat Container */
