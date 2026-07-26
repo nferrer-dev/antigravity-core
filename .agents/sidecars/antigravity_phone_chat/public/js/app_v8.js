@@ -3089,6 +3089,21 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('focus', clearNotifications);
 
+// --- User Message Copy Button Logic ---
+document.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('.ag-phone-user-copy-btn');
+    if (copyBtn) {
+        e.stopPropagation();
+        const textContainer = copyBtn.parentElement.querySelector('.whitespace-pre-wrap');
+        if (textContainer && navigator.clipboard) {
+            navigator.clipboard.writeText(textContainer.innerText);
+            const origHtml = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor"><path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/></svg>';
+            setTimeout(() => { if (copyBtn.isConnected) copyBtn.innerHTML = origHtml; }, 1500);
+        }
+    }
+});
+
 // --- Voice Input Logic ---
 function initializeVoiceInput() {
     if (!voiceBtn) return;

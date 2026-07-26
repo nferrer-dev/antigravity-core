@@ -157,8 +157,7 @@
                 '.mx-4.mb-4',
                 '.fixed.bottom-0',
                 '.absolute.bottom-0',
-                '#InputBox',
-                '[class*="bg-gradient-to-"]'
+                '#InputBox'
             ];
 
             interactionSelectors.forEach(selector => {
@@ -318,6 +317,24 @@
                     }
                 } catch(e) {}
             }
+        } catch(e) {}
+        
+        // Inject copy button for user messages so they match the phone UI aesthetic
+        try {
+            const userMessages = clone.querySelectorAll('[aria-label="User message"]');
+            userMessages.forEach(msg => {
+                const textContainer = msg.querySelector('.whitespace-pre-wrap');
+                if (textContainer && textContainer.parentElement) {
+                    const copyBtn = document.createElement('button');
+                    // We need a custom class that app_v8.js can target for the click listener
+                    copyBtn.className = 'ag-phone-user-copy-btn inline-flex items-center font-medium transition-colors select-none outline-none cursor-pointer justify-center disabled:opacity-50 bg-transparent text-[rgba(255,255,255,0.7)] hover:text-white h-6 w-6 shrink-0 rounded-md mt-1 mb-1 self-end';
+                    copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor"><path d="M362.31-260Q332-260 311-281t-21-51.31V-787.69Q290-818 311-839t51.31-21H697.69Q728-860 749-839t21,51.31v455.38Q770-302 749-281t-51.31,21H362.31Zm0-60H697.69q4.62,0 8.46-3.85t3.85-8.46V-787.69q0-4.62-3.85-8.46T697.69-800H362.31q-4.62,0-8.46,3.85T350-787.69v455.38q0,4.62 3.85,8.46t8.46,3.85Zm-140,200Q192-120 171-141t-21-51.31V-707.69h60v515.38q0,4.62 3.85,8.46t8.46,3.85H617.69v60H222.31ZM350-320q0,0 0-3.85t0-8.46V-787.69q0-4.62 0-8.46t0-3.85q0,0 0,3.85t0,8.46v455.38q0,4.62 0,8.46t0,3.85Z"/></svg>';
+                    // The client app_v8.js will bind the click listener via event delegation
+                    textContainer.parentElement.appendChild(copyBtn);
+                    textContainer.parentElement.style.display = 'flex';
+                    textContainer.parentElement.style.flexDirection = 'column';
+                }
+            });
         } catch(e) {}
         
         const html = clone.outerHTML;
