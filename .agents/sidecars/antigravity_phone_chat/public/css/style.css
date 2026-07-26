@@ -326,8 +326,18 @@ body {
 
 .status-dot.disconnected {
     background: var(--warning);
-    -webkit-animation: killBtnPulse 1.5s infinite;
-    animation: killBtnPulse 1.5s infinite;
+    -webkit-animation: reconnectPulse 1.5s infinite ease-in-out;
+    animation: reconnectPulse 1.5s infinite ease-in-out;
+}
+
+@-webkit-keyframes reconnectPulse {
+    0%, 100% { -webkit-transform: scale(1); transform: scale(1); }
+    50% { -webkit-transform: scale(1.5); transform: scale(1.5); }
+}
+
+@keyframes reconnectPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.5); }
 }
 
 /* Chat Container */
