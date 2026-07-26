@@ -1524,10 +1524,10 @@ async function getAppState(cdp) {
         }
 
         // 3. Get Running Tasks
-        // Strategy: Look for an element containing text like "1 task running" or "N tasks running"
-        const taskRegex = /^\\d+\\s+task(s)?(\\s+running)?$/i;
+        // Strategy: Look for an element containing text like "1 task" or "N subagents"
+        const taskRegex = /^\\d+\\s+(subagents?\\/tasks?|tasks?\\/subagents?|tasks?|subagents?)(\\s+running)?$/i;
         const taskEl = textNodes2.find(el => {
-            return taskRegex.test(el.innerText.trim());
+            return taskRegex.test(el.innerText.trim()) && el.closest('button');
         });
         
         let runningTasksList = [];
@@ -1840,14 +1840,13 @@ const wss = new WebSocketServer({ server });
             // Remove the key from the URL by redirecting to the base path
             return res.redirect('/');
         }
-
+        
         const token = req.signedCookies[AUTH_COOKIE_NAME];
         if (token === AUTH_TOKEN) {
             return next();
         }
-
         // If it's an API request, return 401, otherwise redirect to login
-        if (req.xhr || req.headers.accept?.includes('json') || req.path.startsWith('/snapshot') || req.path.startsWith('/send')) {
+        if (req.xhr || req.headers.accept?.includes('json') || req.path.startsWith('/snapshot') || req.path.startsWith('/send') || req.path === '/cdp-targets') {
             res.status(401).json({ error: 'Unauthorized' });
         } else {
             res.redirect('/login.html');
@@ -2718,7 +2717,7 @@ async function main() {
             if (!cdpConnection) return res.status(503).json({ error: 'CDP disconnected' });
             
             const KILL_EXP = `(async () => {
-                const taskRegex = /^\d+\s+task(s)?(\s+running)?$/i;
+                const taskRegex = /^\\d+\\s+(subagents?\\/tasks?|tasks?\\/subagents?|tasks?|subagents?)(\\s+running)?$/i;
                 const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
                 let taskEl = null;
                 while (walker.nextNode()) {
@@ -2730,7 +2729,14 @@ async function main() {
                 if (!taskEl) return { success: false, error: 'Task indicator not found' };
                 
                 const btn = taskEl.closest('button');
-                if (!btn || !btn.nextElementSibling) return { success: false, error: 'Task dropdown not found' };
+                if (!btn) return { success: false, error: 'Task button not found' };
+                
+                if (btn.getAttribute('aria-expanded') === 'false') {
+                    btn.click();
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                
+                if (!btn.nextElementSibling) return { success: false, error: 'Task dropdown not found' };
                 
                 const spans = Array.from(btn.nextElementSibling.querySelectorAll('span.font-mono, span.truncate'));
                 const span = spans.find(el => el.innerText.trim() === ${JSON.stringify(taskName)});
@@ -2742,7 +2748,7 @@ async function main() {
                 const stopBtn = container.querySelector('button[data-tooltip-id^="stop-task"], button[data-tooltip-id^="stop-subagent"]');
                 if (!stopBtn) return { success: false, error: 'Stop button not found' };
                 
-                stopBtn.click();
+                stopBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
                 return { success: true };
             })()`;
             
@@ -2773,10 +2779,25 @@ async function main() {
             res.json(result);
         });
 
+        // --- API Routes ---
+        app.get('/force-reload', (req, res) => {
+            console.log('[API] /force-reload requested. Broadcasting to all clients...');
+            let count = 0;
+            wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({ type: 'force_reload' }));
+                    count++;
+                }
+            });
+            res.json({ success: true, count: count, message: `Broadcasted force_reload to ${count} clients` });
+        });
+
         // Get App State
         app.get('/app-state', async (req, res) => {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
             if (!cdpConnection) return res.json({ mode: 'Unknown', model: 'Unknown' });
             const result = await getAppState(cdpConnection);
+            console.log('[API] /app-state requested, returning:', result.runningTasksText);
             res.json(result);
         });
 

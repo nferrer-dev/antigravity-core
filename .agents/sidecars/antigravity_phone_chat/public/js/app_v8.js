@@ -152,7 +152,7 @@ const USER_SCROLL_LOCK_DURATION = 500; // 0.5 seconds of scroll protection
 // --- Sync State (Desktop is Always Priority) ---
 async function fetchAppState() {
     try {
-        const res = await fetchWithAuth('/app-state');
+        const res = await fetchWithAuth(`/app-state?_t=${Date.now()}`);
         const data = await res.json();
 
         // Mode Sync (Fast/Planning) - Desktop is source of truth
@@ -168,15 +168,72 @@ async function fetchAppState() {
         }
 
         // Running Tasks Sync
-        const taskIndicator = document.getElementById('taskIndicator');
-        const taskIndicatorText = document.getElementById('taskIndicatorText');
-        if (data.runningTasksText) {
-            taskIndicatorText.textContent = data.runningTasksText;
-            taskIndicator.classList.remove('hidden');
-            currentRunningTasksList = data.runningTasksList || [];
-        } else {
-            taskIndicator.classList.add('hidden');
-            currentRunningTasksList = [];
+        let taskIndicator = document.getElementById('taskIndicator');
+        let taskIndicatorText = document.getElementById('taskIndicatorText');
+        
+        // Dynamically inject if missing (handles heavily cached PWA index.html)
+        if (!taskIndicator) {
+            const inputSection = document.querySelector('.input-section > div[style*="display:flex"]');
+            if (inputSection) {
+                const indicatorHtml = `
+                <div class="task-indicator hidden" id="taskIndicator" aria-label="Running Tasks">
+                    <svg class="task-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+                    <span id="taskIndicatorText">1 task running</span>
+                </div>`;
+                inputSection.insertAdjacentHTML('beforeend', indicatorHtml);
+                taskIndicator = document.getElementById('taskIndicator');
+                taskIndicatorText = document.getElementById('taskIndicatorText');
+                
+                // Re-bind click event
+                taskIndicator.addEventListener('click', () => {
+                    if (currentRunningTasksList && currentRunningTasksList.length > 0) {
+                        const options = currentRunningTasksList.map(task => ({
+                            label: task,
+                            html: `
+                                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%;" onclick="showToast('${task.replace(/'/g, "\\'")}')">${task}</span>
+                                    <svg class="kill-task-btn" data-task="${task.replace(/'/g, "\\'")}" style="width:16px; height:16px; stroke:var(--error); cursor:pointer;" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line>
+                                    </svg>
+                                </div>
+                            `
+                        }));
+                        openModal('Running Tasks', options, () => {});
+                        
+                        setTimeout(() => {
+                            document.querySelectorAll('.kill-task-btn').forEach(btn => {
+                                btn.addEventListener('click', async (e) => {
+                                    e.stopPropagation();
+                                    const taskName = btn.dataset.task;
+                                    try {
+                                        await fetchWithAuth('/kill-task', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ taskName: taskName })
+                                        });
+                                        const optionDiv = btn.closest('.modal-option');
+                                        if (optionDiv) optionDiv.remove();
+                                        if (document.querySelectorAll('#modal-list .modal-option').length === 0) closeModal();
+                                    } catch (err) {
+                                        console.error('Failed to kill task:', err);
+                                    }
+                                });
+                            });
+                        }, 50);
+                    }
+                });
+            }
+        }
+
+        if (taskIndicator && taskIndicatorText) {
+            if (data.runningTasksText) {
+                taskIndicatorText.textContent = data.runningTasksText;
+                taskIndicator.classList.remove('hidden');
+                currentRunningTasksList = data.runningTasksList || [];
+            } else {
+                taskIndicator.classList.add('hidden');
+                currentRunningTasksList = [];
+            }
         }
 
         console.log('[SYNC] State refreshed from Desktop:', data);
@@ -2845,6 +2902,7 @@ updateInputButtons();
 connectWebSocket();
 // Sync state initially and every 2 seconds to keep phone in sync with desktop changes
 fetchAppState();
+setInterval(fetchAppState, 2000);
 
 // Check chat status initially and periodically
 checkChatStatus();
@@ -3102,3 +3160,32 @@ function initializeVoiceInput() {
 initializeVoiceInput();
 
 
+function showToast(message) {
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.position = 'fixed';
+    toast.style.bottom = '20px';
+    toast.style.left = '50%';
+    toast.style.transform = 'translateX(-50%)';
+    toast.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    toast.style.color = '#fff';
+    toast.style.padding = '12px 24px';
+    toast.style.borderRadius = '24px';
+    toast.style.zIndex = '9999';
+    toast.style.fontSize = '14px';
+    toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s ease';
+    toast.style.maxWidth = '90%';
+    toast.style.wordBreak = 'break-word';
+    document.body.appendChild(toast);
+    
+    requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+    });
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
