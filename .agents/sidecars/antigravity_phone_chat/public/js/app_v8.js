@@ -1659,7 +1659,10 @@ chatContent.addEventListener('touchmove', (e) => {
     const currentY = e.touches[0].clientY;
     const deltaY = lastTouchY - currentY;
     lastTouchY = currentY;
-    const container = e.currentTarget;
+    
+    const container = getScrollContainer();
+    // Only intercept if we are touching inside the main scroll container
+    if (!container || !container.contains(e.target)) return;
     
     if (deltaY < 0 && container.scrollTop <= 50) {
         if (!hasMoreHistory()) return;
