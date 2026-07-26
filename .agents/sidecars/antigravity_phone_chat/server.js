@@ -2085,7 +2085,7 @@ app.post('/subscribe', (req, res) => {
                     0%, 100% { opacity: 1; transform: scale(1); }
                     50% { opacity: 0.1; transform: scale(1.6); }
                 }
-                .kill-task-btn, .kill-task-btn svg {
+                .kill-task-btn, .kill-task-btn svg, #stopBtn, #stopBtn svg {
                     -webkit-animation: killBtnPulseOverride 1s infinite !important;
                     animation: killBtnPulseOverride 1s infinite !important;
                     transform-origin: center !important;
