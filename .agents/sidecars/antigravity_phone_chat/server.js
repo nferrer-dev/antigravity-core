@@ -2079,15 +2079,15 @@ app.post('/subscribe', (req, res) => {
             html += `<style>
                 @-webkit-keyframes killBtnPulseOverride {
                     0%, 100% { opacity: 1; -webkit-transform: scale(1); }
-                    50% { opacity: 0.1; -webkit-transform: scale(1.6); }
+                    50% { opacity: 0.4; -webkit-transform: scale(1.2); }
                 }
                 @keyframes killBtnPulseOverride {
                     0%, 100% { opacity: 1; transform: scale(1); }
-                    50% { opacity: 0.1; transform: scale(1.6); }
+                    50% { opacity: 0.4; transform: scale(1.2); }
                 }
                 .kill-task-btn, .kill-task-btn svg, #stopBtn, #stopBtn svg {
-                    -webkit-animation: killBtnPulseOverride 1s infinite !important;
-                    animation: killBtnPulseOverride 1s infinite !important;
+                    -webkit-animation: killBtnPulseOverride 2s ease-in-out infinite !important;
+                    animation: killBtnPulseOverride 2s ease-in-out infinite !important;
                     transform-origin: center !important;
                     will-change: transform, opacity !important;
                 }
