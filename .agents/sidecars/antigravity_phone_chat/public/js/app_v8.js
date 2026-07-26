@@ -194,6 +194,8 @@ async function fetchAppState() {
                                       <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%;" onclick="showToast('${task.replace(/'/g, "\\'")}')">${task}</span>
                                       <div class="kill-task-btn" data-task="${task.replace(/'/g, "\\'")}" style="display:inline-block; padding:4px;">
                                           <svg style="width:16px; height:16px; stroke:var(--error); cursor:pointer;" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                              <animate attributeName="opacity" values="1;0.2;1" dur="1.5s" repeatCount="indefinite" />
+                                              <animate attributeName="stroke-width" values="2;4;2" dur="1.5s" repeatCount="indefinite" />
                                               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line>
                                           </svg>
                                       </div>
