@@ -1,0 +1,563 @@
+﻿diff --git a/.agents/sidecars/antigravity_phone_chat/launcher.py b/.agents/sidecars/antigravity_phone_chat/launcher.py
+index 4ad0c4a..c23c22d 100644
+--- a/.agents/sidecars/antigravity_phone_chat/launcher.py
++++ b/.agents/sidecars/antigravity_phone_chat/launcher.py
+@@ -189,7 +189,8 @@ def main():
+             if ts_serve_url:
+                 final_url = ts_serve_url
+             else:
+-                ip = get_local_ip()
++                ts_domain = os.environ.get('TAILSCALE_DOMAIN')
++                ip = ts_domain if ts_domain else get_local_ip()
+                 protocol = "http"
+                 if os.path.exists('certs/server.key') and os.path.exists('certs/server.cert'):
+                     protocol = "https"
+diff --git a/.agents/sidecars/antigravity_phone_chat/public/js/app_v8.js b/.agents/sidecars/antigravity_phone_chat/public/js/app_v8.js
+index 8840443..04fa999 100644
+--- a/.agents/sidecars/antigravity_phone_chat/public/js/app_v8.js
++++ b/.agents/sidecars/antigravity_phone_chat/public/js/app_v8.js
+@@ -338,13 +338,14 @@ async function loadSnapshot() {
+             '    position: relative !important;\n' +
+             '    height: auto !important;\n' +
+             '    width: 100% !important;\n' +
+-            '    overflow: visible !important;\n' +
++            '    overflow-y: auto !important;\n' +
++            '    overflow-x: hidden !important;\n' +
+             '}\n' +
+             '\n' +
+             '/* Let chatContainer handle all scrolling so its scrollTop survives innerHTML replacement! */\n' +
+ 
+             '#chatContainer {\n' +
+-            '    overflow: hidden !important; /* Move scroll handling to desktop virtual container */\n' +
++            '    overflow-y: auto !important; /* Move scroll handling to desktop virtual container */\n' +
+             '}\n' +
+             '#root > div {\n' +
+             '    flex: 1 !important;\n' +
+@@ -360,7 +361,8 @@ async function loadSnapshot() {
+             '[data-testid="conversation-view"], #conversation, #chat, #cascade {\n' +
+             '    flex: 1 !important;\n' +
+             '    height: 100% !important;\n' +
+-            '    overflow: hidden !important;\n' +
++            '    overflow-y: auto !important;\n' +
++            '    overflow-x: hidden !important;\n' +
+             '}\n' +
+             '/* EXCEPT code blocks, keep them horizontally scrollable */\n' +
+             '[data-testid="conversation-view"] pre, [data-testid="conversation-view"] code {\n' +
+@@ -2044,7 +2046,6 @@ setInterval(checkChatStatus, 10000); // Check every 10 seconds
+ async function initializePushNotifications() {
+     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+         console.warn('[PUSH] Web Push not supported in this browser.');
+-        alert('Web Push is not supported in this browser or wrapper app. PushManager is missing.');
+         return;
+     }
+ 
+diff --git a/.agents/sidecars/antigravity_phone_chat/server.js b/.agents/sidecars/antigravity_phone_chat/server.js
+index 6b0f239..4a951a1 100644
+--- a/.agents/sidecars/antigravity_phone_chat/server.js
++++ b/.agents/sidecars/antigravity_phone_chat/server.js
+@@ -9,11 +9,12 @@ import http from 'http';
+ import https from 'https';
+ import fs from 'fs';
+ import os from 'os';
++import tls from 'tls';
+ import WebSocket from 'ws';
+ import { fileURLToPath } from 'url';
+ import { dirname, join } from 'path';
+ import { inspectUI } from './ui_inspector.js';
+-import { execSync } from 'child_process';
++import { execSync, execFile } from 'child_process';
+ 
+ const SUBSCRIPTIONS_FILE = './pushSubscriptions.json';
+ 
+@@ -270,10 +271,6 @@ async function captureSnapshot(cdp) {
+     const CAPTURE_SCRIPT = `(async () => {
+         const cascade = document.querySelector('[data-testid="conversation-view"]');
+         if (!cascade) {
+-            // If the chat container is missing (e.g. user is on a background task tab), attempt to click back to the chat!
+-            const chatTab = Array.from(document.querySelectorAll('a, button, [role="button"]')).find(e => e.innerText && e.innerText.trim().length > 0 && e.closest('.bg-sidebar-secondary'));
+-            if (chatTab) chatTab.click();
+-            
+             // Debug info
+             const body = document.body;
+             const childIds = Array.from(body.children).map(c => c.id).filter(id => id).join(', ');
+@@ -561,14 +558,28 @@ async function captureSnapshot(cdp) {
+         const html = clone.outerHTML;
+         
+         const rules = [];
+-        for (const sheet of document.styleSheets) {
++        const allSheets = [];
++        try { allSheets.push(...document.styleSheets); } catch(e) {}
++        try { if (document.adoptedStyleSheets) allSheets.push(...document.adoptedStyleSheets); } catch(e) {}
++        
++        for (const sheet of allSheets) {
+             try {
+                 for (const rule of sheet.cssRules) {
+                     rules.push(rule.cssText);
+                 }
+             } catch (e) { }
+         }
++        
++        let linkCSS = '';
++        try {
++            const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
++            const cssPromises = links.map(l => fetch(l.href).then(r => r.text()).catch(() => ''));
++            linkCSS = (await Promise.all(cssPromises)).join('\\n');
++        } catch (e) {}
++
+         const allCSS = rules.join(' ') + 
++            linkCSS + ' ' +
++            Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join(' ') +
+             ' button.active-thumb, button.active-thumb svg { color: #3b82f6 !important; fill: currentColor !important; }' +
+             ' .conversation-button-group { display: none !important; }' +
+             ' div[class*="bg-sidebar"] { display: none !important; width: 0 !important; }' +
+@@ -1152,6 +1163,15 @@ async function startNewChat(cdp) {
+                 return { success: true, method: 'data-tooltip-id' };
+             }
+ 
++            // Priority 1.5: Look for button with text "New Conversation"
++            const textMatchBtn = Array.from(document.querySelectorAll('button, [role="button"], a')).find(btn => {
++                return btn.offsetParent !== null && btn.innerText && btn.innerText.trim() === 'New Conversation';
++            });
++            if (textMatchBtn) {
++                textMatchBtn.click();
++                return { success: true, method: 'text-match' };
++            }
++
+             // Fallback: Use previous heuristics
+             const allButtons = Array.from(document.querySelectorAll('button, [role="button"], a'));
+             
+@@ -1709,14 +1729,55 @@ async function createServer() {
+ 
+     let server;
+     let httpsServer = null;
++    let secureContext = null;
+ 
+     if (hasSSL) {
++        try {
++            secureContext = tls.createSecureContext({
++                key: fs.readFileSync(keyPath),
++                cert: fs.readFileSync(certPath)
++            });
++        } catch (e) {
++            console.error("Failed to load initial SSL certificates", e);
++        }
++
+         const sslOptions = {
+-            key: fs.readFileSync(keyPath),
+-            cert: fs.readFileSync(certPath)
++            SNICallback: (domain, cb) => {
++                if (secureContext) {
++                    cb(null, secureContext);
++                } else {
++                    cb(new Error("No secure context available"));
++                }
++            }
+         };
+         httpsServer = https.createServer(sslOptions, app);
+         server = httpsServer;
++
++        if (process.env.TAILSCALE_DOMAIN) {
++            // Periodically renew the cert from Tailscale daemon (e.g., weekly)
++            setInterval(() => {
++                console.log("Checking for updated Tailscale certificates...");
++                execFile('C:\\Program Files\\Tailscale\\tailscale.exe', 
++                    ['cert', '-cert-file', certPath, '-key-file', keyPath, process.env.TAILSCALE_DOMAIN], 
++                    (error) => {
++                        if (error) {
++                            console.error("Failed to renew Tailscale certificate:", error);
++                            return;
++                        }
++                        try {
++                            const newContext = tls.createSecureContext({
++                                key: fs.readFileSync(keyPath),
++                                cert: fs.readFileSync(certPath)
++                            });
++                            secureContext = newContext;
++                            console.log("Successfully reloaded updated SSL certificates from Tailscale.");
++                        } catch (e) {
++                            console.error("Failed to reload secure context:", e);
++                        }
++                    }
++                );
++            }, 7 * 24 * 60 * 60 * 1000); // Weekly
++        }
+     } else {
+         server = http.createServer(app);
+     }
+@@ -2336,7 +2397,7 @@ async function main() {
+         // Start server
+         const localIP = getLocalIP();
+         const protocol = hasSSL ? 'https' : 'http';
+-        server.listen(SERVER_PORT, '0.0.0.0', () => {
++        server.listen(SERVER_PORT, process.env.HOST || '0.0.0.0', () => {
+             console.log(`≡ƒÜÇ Server running on ${protocol}://${localIP}:${SERVER_PORT}`);
+             if (hasSSL) {
+                 console.log(`≡ƒÆí First time on phone? Accept the security warning to proceed.`);
+diff --git a/.agents/sidecars/antigravity_phone_chat/start_ag_phone_connect.bat b/.agents/sidecars/antigravity_phone_chat/start_ag_phone_connect.bat
+index f686862..a634178 100644
+--- a/.agents/sidecars/antigravity_phone_chat/start_ag_phone_connect.bat
++++ b/.agents/sidecars/antigravity_phone_chat/start_ag_phone_connect.bat
+@@ -25,6 +25,23 @@ echo [STARTING] Launching via Unified Launcher...
+ chcp 65001 >nul
+ set PYTHONUTF8=1
+ 
++:: Extract Tailscale Domain
++python -c "import json, subprocess; out = b''; exec('try:\n out = subprocess.check_output([\'C:/Program Files/Tailscale/tailscale.exe\', \'status\', \'--json\'])\n data=json.loads(out)\n dns = data.get(\'Self\', {}).get(\'DNSName\', \'\')\n print(dns.rstrip(\'.\'))\nexcept Exception:\n pass')" > "%TEMP%\ts_domain.txt" 2>nul
++set /p TAILSCALE_DOMAIN=<"%TEMP%\ts_domain.txt"
++del "%TEMP%\ts_domain.txt"
++
++if not "!TAILSCALE_DOMAIN!"=="" (
++    echo [INFO] Detected Tailscale Domain: !TAILSCALE_DOMAIN!
++    echo [INFO] Generating Tailscale SSL certificates...
++    if not exist "certs\" mkdir certs
++    "C:\Program Files\Tailscale\tailscale.exe" cert -cert-file certs\server.cert -key-file certs\server.key !TAILSCALE_DOMAIN!
++    if !errorlevel! neq 0 (
++        echo [WARNING] Failed to generate Tailscale certificates. Server will fall back to HTTP if certificates are missing.
++    )
++) else (
++    echo [INFO] Could not detect Tailscale domain. Ensure Tailscale is running if you want HTTPS.
++)
++
+ if not exist "venv\" (
+     echo [INFO] Creating Python virtual environment...
+     python -m venv venv
+@@ -33,6 +50,15 @@ if exist "venv\Scripts\activate.bat" (
+     call venv\Scripts\activate.bat
+ )
+ 
++:: Detect Tailscale IPv4 address
++for /f "tokens=*" %%i in ('tailscale ip -4 2^>nul') do set "TAILSCALE_IP=%%i"
++if defined TAILSCALE_IP (
++    set "HOST=%TAILSCALE_IP%"
++    echo [INFO] Tailscale IP detected: %TAILSCALE_IP%
++) else (
++    echo [INFO] Tailscale IP not detected. Falling back to default host.
++)
++
+ python launcher.py --mode local
+ 
+ :: Keep window open if server crashes
+diff --git a/0001-fix-phone_chat-Resolve-React-Fiber-visual-state-pers.patch b/0001-fix-phone_chat-Resolve-React-Fiber-visual-state-pers.patch
+new file mode 100644
+index 0000000..4d7aa9d
+--- /dev/null
++++ b/0001-fix-phone_chat-Resolve-React-Fiber-visual-state-pers.patch
+@@ -0,0 +1,228 @@
++From 72eb029f45b8b6a2739858be65a130939b08f897 Mon Sep 17 00:00:00 2001
++From: nferrer-dev <nferrertech@gmail.com>
++Date: Wed, 15 Jul 2026 13:32:32 -0400
++Subject: [PATCH] fix(phone_chat): Resolve React Fiber visual state persistence
++ and button double-activation
++
++This commit addresses the following issues:
++1. Thumbs up/down states disappearing after DOM morphs: Extracted internal React Fiber UUIDs into data-message-id to bridge client-side window.tappedThumbs tracking with the server snapshot.
++2. ChatGPT DOM structure changes: Updated app_v8.js DOM traversal query to accommodate sibling action buttons instead of nested ones.
++3. Double activation conflicts: Removed legacy DOM reading rules from server.js CSS injected payload, making the UI blue state strictly driven by client-side .active-thumb classes.
++---
++ .../antigravity_phone_chat/public/index.html  |  2 +-
++ .../public/js/app_v8.js                       | 49 +++++++++++++
++ .../sidecars/antigravity_phone_chat/server.js | 72 +++++++++++++++++--
++ 3 files changed, 115 insertions(+), 8 deletions(-)
++
++diff --git a/.agents/sidecars/antigravity_phone_chat/public/index.html b/.agents/sidecars/antigravity_phone_chat/public/index.html
++index 81de0ba..175e2e8 100644
++--- a/.agents/sidecars/antigravity_phone_chat/public/index.html
+++++ b/.agents/sidecars/antigravity_phone_chat/public/index.html
++@@ -128,7 +128,7 @@
++         </div>
++     </div>
++ 
++-    <script src="js/app_v8.js?v=43"></script>
+++    <script src="js/app_v8.js?v=48"></script>
++ </body>
++ 
++ </html>
++diff --git a/.agents/sidecars/antigravity_phone_chat/public/js/app_v8.js b/.agents/sidecars/antigravity_phone_chat/public/js/app_v8.js
++index b2dae4c..8840443 100644
++--- a/.agents/sidecars/antigravity_phone_chat/public/js/app_v8.js
+++++ b/.agents/sidecars/antigravity_phone_chat/public/js/app_v8.js
++@@ -607,6 +607,18 @@ async function loadSnapshot() {
++             chatContent.innerHTML = data.html;
++         }
++ 
+++        // Re-apply active thumb visual states based on data-message-id
+++        window.tappedThumbs = window.tappedThumbs || {};
+++        const allBtns = document.querySelectorAll('button[aria-label="Good response"], button[aria-label="Bad response"]');
+++        allBtns.forEach(btn => {
+++            const type = btn.getAttribute('aria-label');
+++            const article = btn.closest('[role="article"]') || (btn.closest('.group') ? btn.closest('.group').querySelector('[role="article"]') : null);
+++            const messageId = article ? article.getAttribute('data-message-id') : null;
+++            if (messageId && window.tappedThumbs[messageId] === type) {
+++                btn.classList.add('active-thumb');
+++            }
+++        });
+++
++         // Add mobile copy buttons to all code blocks
++         addMobileCopyButtons();
++ 
++@@ -1881,6 +1893,43 @@ chatContainer.addEventListener('click', async (e) => {
++         elToClick.style.opacity = '0.5';
++         setTimeout(() => elToClick.style.opacity = originalOpacity || '1', 300);
++ 
+++        // Enhanced visual feedback for thumbs up/down
+++        const checkAriaLabel = (interactiveEl && interactiveEl.getAttribute('aria-label')) || elToClick.getAttribute('aria-label');
+++        if (checkAriaLabel === 'Good response' || checkAriaLabel === 'Bad response') {
+++            const btn = interactiveEl || elToClick;
+++            const article = btn.closest('[role="article"]') || (btn.closest('.group') ? btn.closest('.group').querySelector('[role="article"]') : null);
+++            const messageId = article ? article.getAttribute('data-message-id') : null;
+++            
+++            if (messageId) {
+++                window.tappedThumbs = window.tappedThumbs || {};
+++                const isAlreadyActive = btn.classList.contains('active-thumb');
+++                
+++                if (isAlreadyActive) {
+++                    // Toggle off
+++                    btn.classList.remove('active-thumb');
+++                    if (window.tappedThumbs[messageId] === checkAriaLabel) {
+++                        delete window.tappedThumbs[messageId];
+++                    }
+++                } else {
+++                    // Toggle on
+++                    btn.classList.add('active-thumb');
+++                    window.tappedThumbs[messageId] = checkAriaLabel;
+++                    
+++                    // If they tapped one, remove the other (mutually exclusive)
+++                    const oppositeLabel = checkAriaLabel === 'Good response' ? 'Bad response' : 'Good response';
+++                    
+++                    // Remove visual class from opposite button if it's currently on screen
+++                    const oppositeBtnList = Array.from(document.querySelectorAll(`button[aria-label="${oppositeLabel}"]`));
+++                    oppositeBtnList.forEach(oppBtn => {
+++                        const oppArticle = oppBtn.closest('[role="article"]') || (oppBtn.closest('.group') ? oppBtn.closest('.group').querySelector('[role="article"]') : null);
+++                        if (oppArticle && oppArticle.getAttribute('data-message-id') === messageId) {
+++                            oppBtn.classList.remove('active-thumb');
+++                        }
+++                    });
+++                }
+++            }
+++        }
+++
++         // Generate robust fallback selector
++         let fallbackSelector = elToClick.tagName.toLowerCase();
++         const ariaLabel = elToClick.getAttribute('aria-label');
++diff --git a/.agents/sidecars/antigravity_phone_chat/server.js b/.agents/sidecars/antigravity_phone_chat/server.js
++index f60bfb8..6b0f239 100644
++--- a/.agents/sidecars/antigravity_phone_chat/server.js
+++++ b/.agents/sidecars/antigravity_phone_chat/server.js
++@@ -282,6 +282,60 @@ async function captureSnapshot(cdp) {
++         
++         const cascadeStyles = window.getComputedStyle(cascade);
++         
+++        // Deep React Fiber Identity Extraction for messages
+++        try {
+++            const convId = window.location.pathname.split('/').pop();
+++            const articles = cascade.querySelectorAll('[role="article"]');
+++            for (const el of articles) {
+++                const fiberKey = Object.keys(el).find(k => k.startsWith('__reactFiber$'));
+++                if (!fiberKey) continue;
+++                
+++                let fiber = el[fiberKey];
+++                let depth = 0;
+++                let foundId = null;
+++                
+++                // Helper to deeply search for IDs
+++                function searchProps(obj, currentDepth, visited) {
+++                    if (!obj || typeof obj !== 'object' || currentDepth > 5) return null;
+++                    if (visited.has(obj)) return null;
+++                    visited.add(obj);
+++
+++                    for (const key in obj) {
+++                        try {
+++                            const val = obj[key];
+++                            // Match UUIDs (length 36) or message IDs
+++                            if (typeof val === 'string' && val.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
+++                                // Skip the conversation ID which we know is a UUID but shared across all messages
+++                                if (val === convId) continue;
+++                                return val;
+++                            } else if (typeof val === 'object') {
+++                                const res = searchProps(val, currentDepth + 1, visited);
+++                                if (res) return res;
+++                            }
+++                        } catch(e) {}
+++                    }
+++                    return null;
+++                }
+++
+++                while (fiber && depth < 15) {
+++                    if (fiber.memoizedProps) {
+++                        foundId = searchProps(fiber.memoizedProps, 0, new Set());
+++                        if (foundId) break;
+++                    }
+++                    if (fiber.pendingProps) {
+++                        foundId = searchProps(fiber.pendingProps, 0, new Set());
+++                        if (foundId) break;
+++                    }
+++                    fiber = fiber.return;
+++                    depth++;
+++                }
+++                
+++                if (foundId) {
+++                    el.setAttribute('data-message-id', foundId);
+++                }
+++            }
+++        } catch (e) {}
+++
++         // Find the main scrollable container
++         const scrollContainer = cascade.querySelector('.overflow-y-auto, [data-scroll-area]') || cascade;
++ 
++@@ -515,6 +569,7 @@ async function captureSnapshot(cdp) {
++             } catch (e) { }
++         }
++         const allCSS = rules.join(' ') + 
+++            ' button.active-thumb, button.active-thumb svg { color: #3b82f6 !important; fill: currentColor !important; }' +
++             ' .conversation-button-group { display: none !important; }' +
++             ' div[class*="bg-sidebar"] { display: none !important; width: 0 !important; }' +
++             ' div[style*=" width: 256px;"] { display: none !important; width: 0 !important; }' +
++@@ -840,7 +895,7 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
++                 if (target.scrollIntoView) {
++                     target.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
++                 }
++-                
+++
++                 // Get rect to perform hardware click
++                 const rect = target.getBoundingClientRect();
++                 return { 
++@@ -856,7 +911,7 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
++             }
++             return { error: 'Element not found' };
++         } catch(e) {
++-            return { error: e.toString() };
+++            return { error: e.message || e.toString(), stack: e.stack };
++         }
++     })();`;
++ 
++@@ -869,21 +924,23 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
++         
++         if (res.result && res.result.value && res.result.value.success && res.result.value.rect) {
++             const { x, y } = res.result.value.rect;
+++            const centerX = Math.round(x);
+++            const centerY = Math.round(y);
++             
++             // Perform true hardware click via CDP (isTrusted=true)
++             await cdp.call('Input.dispatchMouseEvent', {
++                 type: 'mousePressed',
++                 button: 'left',
++-                x: x,
++-                y: y,
+++                x: centerX,
+++                y: centerY,
++                 clickCount: 1
++             });
++             await new Promise(r => setTimeout(r, 50));
++             await cdp.call('Input.dispatchMouseEvent', {
++                 type: 'mouseReleased',
++                 button: 'left',
++-                x: x,
++-                y: y,
+++                x: centerX,
+++                y: centerY,
++                 clickCount: 1
++             });
++             
++@@ -892,7 +949,8 @@ async function clickElement(cdp, { id, selector, index, textContent }) {
++         
++         return res.result?.value || { error: 'Evaluate failed' };
++     } catch (e) {
++-        return { error: e.toString() };
+++        console.error("CDP ERROR in clickElement:", e);
+++        return { error: JSON.stringify(e) };
++     }
++ }
++ 
++-- 
++2.53.0.windows.1
++
+diff --git a/skills/upload-to-gdrive/SKILL.md b/skills/upload-to-gdrive/SKILL.md
+new file mode 100644
+index 0000000..6cfb498
+--- /dev/null
++++ b/skills/upload-to-gdrive/SKILL.md
+@@ -0,0 +1,23 @@
++---
++name: upload-to-gdrive
++description: Automatically convert and upload generated readable documents to Google Drive. Use this whenever you generate a long readable document (like an analysis, story, plan, or research report) that the user might want to read away from the computer.
++---
++
++# Instructions
++
++When you generate a readable document for the user, you MUST automatically upload a copy to their Google Drive as a `.docx` file. 
++
++To do this, you must run the `md_to_gdrive.py` script provided in this skill's `scripts/` directory.
++
++### Command Format
++```bash
++python "<absolute_path_to_this_skill_directory>\scripts\md_to_gdrive.py" "<absolute_path_to_markdown_file>" "[optional_document_title]"
++```
++
++* `<absolute_path_to_markdown_file>`: The path to the generated document artifact (e.g. `C:\Users\spurd\.gemini\antigravity\brain\...\my_document.md`).
++* `[optional_document_title]`: (Optional) The name you want the `.docx` file to have in Google Drive. If omitted, it will use the original markdown file's basename.
++
++### Example
++```bash
++python "<absolute_path_to_this_skill_directory>\scripts\md_to_gdrive.py" "C:\Users\spurd\.gemini\antigravity\brain\12345\analysis.md" "Analysis Report"
++```
+diff --git a/skills/upload-to-gdrive/scripts/md_to_gdrive.py b/skills/upload-to-gdrive/scripts/md_to_gdrive.py
+new file mode 100644
+index 0000000..0d70393
+--- /dev/null
++++ b/skills/upload-to-gdrive/scripts/md_to_gdrive.py
+@@ -0,0 +1,55 @@
++import sys
++import os
++import pypandoc
++import shutil
++import re
++
++def main():
++    if len(sys.argv) < 2:
++        print("Usage: python md_to_gdrive.py <absolute_path_to_markdown_file> [optional_document_title]")
++        sys.exit(1)
++
++    input_file = sys.argv[1]
++    title = sys.argv[2] if len(sys.argv) > 2 else None
++
++    if not os.path.exists(input_file):
++        print(f"Error: File not found: {input_file}")
++        sys.exit(1)
++
++    # Make sure pandoc is available
++    try:
++        pypandoc.get_pandoc_version()
++    except OSError:
++        print("Pandoc not found. Downloading...")
++        pypandoc.download_pandoc()
++
++    # Determine filename
++    base_name = os.path.basename(input_file)
++    name_without_ext = os.path.splitext(base_name)[0]
++    
++    if title:
++        # Sanitize title for filename
++        safe_title = re.sub(r'[<>:"/\\|?*]', '', title).strip()
++        if safe_title:
++            name_without_ext = safe_title
++            
++    output_filename = f"{name_without_ext}.docx"
++    
++    # Save to a temporary location first
++    temp_output = os.path.join(os.environ.get("TEMP", "."), output_filename)
++    
++    print(f"Converting {input_file} to DOCX...")
++    pypandoc.convert_file(input_file, 'docx', outputfile=temp_output)
++    print(f"Successfully converted to {temp_output}")
++    
++    # Copy to Google Drive if available
++    gdrive_path = r"G:\My Drive"
++    if os.path.exists(gdrive_path):
++        target_path = os.path.join(gdrive_path, output_filename)
++        shutil.copy2(temp_output, target_path)
++        print(f"Successfully uploaded to Google Drive: {target_path}")
++    else:
++        print(f"Warning: Google Drive not found at {gdrive_path}. File left at {temp_output}")
++
++if __name__ == "__main__":
++    main()
