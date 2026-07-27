@@ -352,7 +352,55 @@
                 }
             } catch (e) { }
         }
+        
+        let linkCSS = '';
+        try {
+            const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+            const cssPromises = links.map(async (l) => {
+                try {
+                    const url = new URL(l.href, window.location.origin);
+                    if (url.origin !== window.location.origin) {
+                        return '';
+                    }
+
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 1000);
+
+                    const response = await fetch(url.href, { signal: controller.signal });
+                    if (!response.ok) {
+                        clearTimeout(timeoutId);
+                        return '';
+                    }
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder('utf-8');
+                    let accumulatedBytes = 0;
+                    const MAX_BYTES = 1024 * 1024; // 1MB
+                    let text = '';
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        accumulatedBytes += value.length;
+                        if (accumulatedBytes > MAX_BYTES) {
+                            controller.abort();
+                            break;
+                        }
+                        text += decoder.decode(value, { stream: true });
+                    }
+                    text += decoder.decode();
+                    clearTimeout(timeoutId);
+                    return text;
+                } catch (e) {
+                    return '';
+                }
+            });
+            linkCSS = (await Promise.all(cssPromises)).join('\\n');
+        } catch (e) {}
+
         const allCSS = rules.join(' ') + 
+            linkCSS + ' ' +
+            Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join(' ') +
             ' button[aria-label="Good response"], button[aria-label="Bad response"] { opacity: 1 !important; transition: all 0.2s ease-in-out !important; }' +
             ' button.active-thumb, button.active-thumb svg { color: #3b82f6 !important; fill: currentColor !important; transition: all 0.2s ease-in-out !important; }' +
             ' .conversation-button-group { display: none !important; }' +

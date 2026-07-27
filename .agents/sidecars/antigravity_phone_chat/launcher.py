@@ -201,7 +201,8 @@ def main():
             if ts_serve_url:
                 final_url = ts_serve_url
             else:
-                ip = get_local_ip()
+                ts_domain = os.environ.get('TAILSCALE_DOMAIN')
+                ip = ts_domain if ts_domain else get_local_ip()
                 protocol = "http"
                 if os.path.exists('certs/server.key') and os.path.exists('certs/server.cert'):
                     protocol = "https"

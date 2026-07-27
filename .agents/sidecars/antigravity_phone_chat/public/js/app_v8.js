@@ -532,11 +532,22 @@ async function loadSnapshot() {
             '    width: 100% !important;\n' +
             '    overflow: visible !important;\n' +
             '}\n' +
+            '@media (pointer: coarse) {\n' +
+            '    [data-testid="conversation-view"], #conversation, #chat, #cascade {\n' +
+            '        overflow-y: auto !important;\n' +
+            '        overflow-x: hidden !important;\n' +
+            '    }\n' +
+            '}\n' +
             '\n' +
             '/* Let chatContainer handle all scrolling so its scrollTop survives innerHTML replacement! */\n' +
 
             '#chatContainer {\n' +
             '    overflow: hidden !important; /* Move scroll handling to desktop virtual container */\n' +
+            '}\n' +
+            '@media (pointer: coarse) {\n' +
+            '    #chatContainer {\n' +
+            '        overflow-y: auto !important;\n' +
+            '    }\n' +
             '}\n' +
             '#root > div {\n' +
             '    flex: 1 !important;\n' +
@@ -553,6 +564,12 @@ async function loadSnapshot() {
             '    flex: 1 !important;\n' +
             '    height: 100% !important;\n' +
             '    overflow: hidden !important;\n' +
+            '}\n' +
+            '@media (pointer: coarse) {\n' +
+            '    [data-testid="conversation-view"], #conversation, #chat, #cascade {\n' +
+            '        overflow-y: auto !important;\n' +
+            '        overflow-x: hidden !important;\n' +
+            '    }\n' +
             '}\n' +
             '/* EXCEPT code blocks, keep them horizontally scrollable */\n' +
             '[data-testid="conversation-view"] pre, [data-testid="conversation-view"] code {\n' +
@@ -2573,9 +2590,39 @@ chatContainer.addEventListener('click', async (e) => {
             elToClick.style.opacity = '0.8';
             elToClick.style.pointerEvents = 'none';
         } else if (isThumbBtn) {
-            elToClick.classList.add('active-thumb');
-            elToClick.style.color = '#3b82f6';
-            if (elToClick.querySelector('svg')) elToClick.querySelector('svg').style.fill = '#3b82f6';
+            const btn = interactiveEl || elToClick;
+            const article = btn.closest('[role="article"]') || (btn.closest('.group') ? btn.closest('.group').querySelector('[role="article"]') : null);
+            const messageId = article ? article.getAttribute('data-message-id') : null;
+            
+            if (messageId) {
+                window.tappedThumbs = window.tappedThumbs || {};
+                const isAlreadyActive = btn.classList.contains('active-thumb');
+                
+                if (isAlreadyActive) {
+                    btn.classList.remove('active-thumb');
+                    btn.style.color = '';
+                    if (btn.querySelector('svg')) btn.querySelector('svg').style.fill = '';
+                    if (window.tappedThumbs[messageId] === checkAriaLabel) {
+                        delete window.tappedThumbs[messageId];
+                    }
+                } else {
+                    btn.classList.add('active-thumb');
+                    btn.style.color = '#3b82f6';
+                    if (btn.querySelector('svg')) btn.querySelector('svg').style.fill = '#3b82f6';
+                    window.tappedThumbs[messageId] = checkAriaLabel;
+                    
+                    const oppositeLabel = checkAriaLabel === 'Good response' ? 'Bad response' : 'Good response';
+                    const oppositeBtnList = Array.from(document.querySelectorAll(`button[aria-label="${oppositeLabel}"]`));
+                    oppositeBtnList.forEach(oppBtn => {
+                        const oppArticle = oppBtn.closest('[role="article"]') || (oppBtn.closest('.group') ? oppBtn.closest('.group').querySelector('[role="article"]') : null);
+                        if (oppArticle && oppArticle.getAttribute('data-message-id') === messageId) {
+                            oppBtn.classList.remove('active-thumb');
+                            oppBtn.style.color = '';
+                            if (oppBtn.querySelector('svg')) oppBtn.querySelector('svg').style.fill = '';
+                        }
+                    });
+                }
+            }
         } else if (isCheckbox && stableId) {
             window.pendingMutations = window.pendingMutations || new Set();
             window.pendingMutations.add(stableId);

@@ -14,7 +14,8 @@ import WebSocket from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { inspectUI } from './ui_inspector.js';
-import { execSync } from 'child_process';
+import { execSync, execFile } from 'child_process';
+import tls from 'tls';
 
 const SUBSCRIPTIONS_FILE = './pushSubscriptions.json';
 
@@ -1748,15 +1749,55 @@ async function createServer() {
     const hasSSL = fs.existsSync(keyPath) && fs.existsSync(certPath);
 
     let server;
-    let httpsServer = null;
+    let secureContext = null;
 
     if (hasSSL) {
+        try {
+            secureContext = tls.createSecureContext({
+                key: fs.readFileSync(keyPath),
+                cert: fs.readFileSync(certPath)
+            });
+        } catch (e) {
+            console.error("Failed to load initial SSL certificates", e);
+        }
+
         const sslOptions = {
-            key: fs.readFileSync(keyPath),
-            cert: fs.readFileSync(certPath)
+            SNICallback: (domain, cb) => {
+                if (secureContext) {
+                    cb(null, secureContext);
+                } else {
+                    cb(new Error("No secure context available"));
+                }
+            }
         };
         httpsServer = https.createServer(sslOptions, app);
         server = httpsServer;
+
+        if (process.env.TAILSCALE_AVAILABLE === 'true' && process.env.TAILSCALE_DOMAIN) {
+            // Periodically renew the cert from Tailscale daemon (e.g., weekly)
+            setInterval(() => {
+                console.log("Checking for updated Tailscale certificates...");
+                execFile('C:\\Program Files\\Tailscale\\tailscale.exe', 
+                    ['cert', '-cert-file', certPath, '-key-file', keyPath, process.env.TAILSCALE_DOMAIN], 
+                    (error) => {
+                        if (error) {
+                            console.error("Failed to renew Tailscale certificate:", error);
+                            return;
+                        }
+                        try {
+                            const newContext = tls.createSecureContext({
+                                key: fs.readFileSync(keyPath),
+                                cert: fs.readFileSync(certPath)
+                            });
+                            secureContext = newContext;
+                            console.log("Successfully reloaded updated SSL certificates from Tailscale.");
+                        } catch (e) {
+                            console.error("Failed to reload secure context:", e);
+                        }
+                    }
+                );
+            }, 7 * 24 * 60 * 60 * 1000); // Weekly
+        }
     } else {
         server = http.createServer(app);
     }
@@ -2911,7 +2952,7 @@ async function main() {
         // Start server
         const localIP = getLocalIP();
         const protocol = hasSSL ? 'https' : 'http';
-        server.listen(SERVER_PORT, '0.0.0.0', () => {
+        server.listen(SERVER_PORT, process.env.HOST || '0.0.0.0', () => {
             console.log(`🚀 Server running on ${protocol}://${localIP}:${SERVER_PORT}`);
             if (hasSSL) {
                 console.log(`💡 First time on phone? Accept the security warning to proceed.`);
