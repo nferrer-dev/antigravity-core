@@ -7,7 +7,7 @@ You must integrate the `harness-nexus` team into your default workflow. To preve
    - **Triviality Exemption**: If a change is non-functional (typos, formatting) or highly isolated, you MUST bypass the consensus loop entirely. *Anti-Loophole*: Modifying execution paths (e.g., shell scripts, pipeline mocks) or altering global state boundaries (e.g., gitignore mutations) is explicitly defined as functional and is strictly forbidden from using this exemption, regardless of how small the boilerplate text update is.
    - **Targeted Review**: When modifying a plan or code, explicitly instruct the subagents to restrict their review strictly to their assigned domain.
 
-2. **Design-Validate Loop**: When you have finalized a draft of an implementation plan, design document, or architecture artifact, you MUST automatically invoke the impacted `harness-nexus` design-validate subagents (e.g., Idea Skeptic, System Architect, Requirements Engineer, Scope Reviewer). Instruct the System Architect and Idea Skeptic to proactively consult the `cortex-librarian` skill using `--workflow=validate-design` for architectural validation.
+2. **Stage 3 Design-Validate Loop**: When you have finalized a draft of an implementation plan, design document, or architecture artifact, you MUST automatically invoke the impacted `harness-nexus` design-validate subagents (e.g., Idea Skeptic, System Architect, Requirements Engineer, Scope Reviewer).
    - **Explicit Signalling**: Instruct subagents to conclude their review with an explicit `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Ignore intermediate chatter.
    - **Comprehensive Feedback**: You MUST NOT exit the loop or cancel pending subagents early. Wait for ALL invoked subagents to return a verdict to gather comprehensive feedback in parallel.
    - **Asynchronous Deadlines**: You MUST set an absolute timeout (e.g., a 3-minute `schedule` timer). If a subagent times out, you lack actionable feedback. You MUST halt the loop and escalate to the USER.
@@ -21,9 +21,9 @@ You must integrate the `harness-nexus` team into your default workflow. To preve
      - **Adjudication**: You (the parent) will act as the Hostile Adjudicator. Your final ruling (either `PROCEED` for the Proponent's stance or `REJECT` for the Critic's stance) explicitly OVERRIDES the unanimity requirement. The losing subagent's constraint is discarded, and the loop continues.
    - **Arbitration Circuit Breaker**: To prevent infinite meta-debate spirals, the arbitration debate is strictly timeboxed to 3 minutes. If the 3-minute timeout is reached without a resolution, or if the Hostile Adjudicator cannot determine a clear, first-principled winner, you MUST immediately halt all autonomous execution, compile a summary of the dissenting arguments, and yield to the USER for final manual arbitration.
 
-4. **Iterative-Implement Loop**: Whenever you execute or finalize code changes, you MUST automatically invoke the `harness-nexus` implementation committee.
+4. **Stage 4 Iterative-Implement Loop**: Whenever you execute or finalize code changes, you MUST automatically invoke the `harness-nexus` implementation committee.
    - **Bounded Pre-Flight Gate**: You MUST actively search for and run standard linters or unit tests on the modified files exactly ONCE. Do not enter an unmanaged "test-and-fix" loop. Inject the test output directly into the prompt for the subagents.
-   - **Context-Dependent Roster**: You must explicitly define and conditionally invoke subagents based on the code's domain: `Language-Specific Style Expert` (Always invoked for code), `Security Auditor` (Only for auth/crypto/inputs/network), `Performance Profiler` (Only for data-pipelines/loops), and `Markdown Style Expert` (Only for documentation/Markdown files). Pass them the explicit code diffs and absolute file paths. Instruct the `Language-Specific Style Expert` and `Security Auditor` to query the `cortex-librarian` skill using `--workflow=iterative-implement` to pull syntax rules, style limits, and edge-cases.
+   - **Context-Dependent Roster**: You must explicitly define and conditionally invoke subagents based on the code's domain: `Language-Specific Style Expert` (Always invoked for code), `Security Auditor` (Only for auth/crypto/inputs/network), `Performance Profiler` (Only for data-pipelines/loops), and `Markdown Style Expert` (Only for documentation/Markdown files). Pass them the explicit code diffs and absolute file paths.
        - **SkillOpt Style Integration (Lazy Evaluation)**: When invoking the `Language-Specific Style Expert`, you MUST explicitly instruct it to read the relevant style skill (e.g., `.agents/skills/style-python`, `style-go`, `style-js`, `style-cpp`, `style-java`, `style-rust`) based on the file extension. You must ALSO instruct the Style Expert that it MUST proactively read the corresponding `[skillname]-edge-cases.md` file (if it exists) as part of its standard evaluation rubric to ensure subjective edge cases are caught. Standard code-generating agents are strictly forbidden from reading the `-edge-cases.md` files unless they encounter a failure or ambiguity.
    - **Inherited State Machine**: The core orchestration rules (Triviality Exemptions, 3-minute Absolute Timeouts, Explicit `[VERDICT]` Signalling, Full-Committee Resubmissions, 5-round Cap, and Dynamic Stagnation Detection) strictly apply.
    - **Context-Aware Diff Resubmissions**: To conserve tokens, any resubmission must contain ONLY the newly generated code delta/diff. However, you MUST instruct subagents that they retain the mandate to use `view_file` to verify the localized fix within the broader file context.
@@ -34,11 +34,28 @@ You must integrate the `harness-nexus` team into your default workflow. To preve
 5. **Artifact-Scoped Singleton Constraint**: You must ensure that ONLY ONE consensus loop is running **per artifact** at any given time. Before launching a new loop, use `manage_subagents` to check for active subagents and `kill` any stale instances evaluating *that specific artifact* to prevent race conditions.
 
 ---
-# Technical Debate Auto-Trigger
+# Stage 0: Epistemic Comprehension Router
+
+You MUST execute the `comprehend-problem` skill for all non-trivial tasks to build a deterministic mental model of the ambiguity *before* entering Stage 1 (Divergent Brainstorming) or Stage 3 (Design-Validate).
+
+1. **The Epistemic Engine Routing**: The skill will classify the problem and route it to the appropriate external engine (e.g., CodeGraphContext for Structural, Chiasmus for Logical, or Blackboard Swarms for Exploratory).
+2. **The MVC "Pull" Mandate**: The formal rubric of constraints or structural graphs produced by these engines MUST be written to a temporary text file in the `scratch/` directory. Stage 0 will pass only the absolute file path of this rubric to the Stage 1 subagents, forcing them to explicitly "pull" the context they need.
+3. **Triviality Exemption Precedence & Anti-Loophole**: Trivial tasks bypass Stage 0 completely to preserve execution velocity. *Anti-Loophole*: Any user request that alters execution paths or global state boundaries (e.g., modifying `mcp_config.json`, `AGENTS.md`, or build scripts) is strictly forbidden from bypassing Stage 0.
+
+---
+# Stage 1: Divergent Brainstorming
+
+Once the problem is comprehended via Stage 0, you MUST invoke the `brainstorm-solutions` skill for complex or open-ended tasks to generate multiple, mutually exclusive candidate solutions using the ADHD (Parallel Divergent Ideation) and ReDNA patterns.
+- You must spawn a swarm of parallel subagents with unique "Cognitive Framing" (e.g., Radical Innovator, Security Paranoiac).
+- The subagents must have **Zero Shared Context** to prevent Degeneration-of-Thought (DoT).
+- You must use **Centralized Routing** (via `send_message` to the Parent Orchestrator) to sequentially compile their brainstorms into a single temporary file isolated in the `scratch/` directory (e.g., `scratch/candidate_solutions.md`), strictly preventing concurrent write collisions.
+
+---
+# Stage 2: Technical Debate Auto-Trigger
 
 You must automatically invoke the `technical-debate` skill as part of your default workflow without requiring explicit prompting under the following conditions:
 
-1. **Stage 1 Idea Vetting**: When a user asks a complex technical question, proposes a significant design decision, or asks if a specific change correctly accomplishes a goal, you MUST run the `technical-debate` skill to rigorously vet the proposition BEFORE creating an implementation plan. Instruct the debate adjudicators (Proponent/Critic) to consult the `cortex-librarian` skill using `--workflow=technical-debate` to supply hard evidence. 
+1. **Stage 2 Idea Vetting**: When a user asks a complex technical question, proposes a significant design decision, or asks if a specific change correctly accomplishes a goal (including vetting the candidates generated in Stage 1), you MUST run the `technical-debate` skill to rigorously vet the proposition BEFORE creating an implementation plan.
 2. **Pipeline Integration**: The `technical-debate` workflow runs upstream of the `validate-design` loop. You are NOT allowed to proceed with writing an `implementation_plan.md` (which triggers the `validate-design` consensus loop) until the `technical-debate` workflow completes and the parent agent (acting as the Hostile Adjudicator) delivers a `PROCEED` verdict.
 3. **Major Configuration Changes**: When a user proposes a major configuration change (e.g., swapping databases, altering deployment environments, changing core dependencies), you MUST automatically run the `technical-debate` skill to audit downstream/upstream risks.
 4. **Triviality Exemption**: If a requested change is purely cosmetic, trivial (e.g., fixing typos), or non-functional, you may bypass the debate and log a 'Triviality Exemption'. *Anti-Loophole*: You are strictly forbidden from applying this exemption to changes that alter execution paths or global state boundaries (e.g., shell scripts, CI mocks, gitignore files).

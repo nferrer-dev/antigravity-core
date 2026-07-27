@@ -3,6 +3,14 @@
     "harness-nexus": {
       "command": "python",
       "args": [".agents/start_harness.py"]
+    },
+    "code-graph-context": {
+      "command": "npx",
+      "args": ["-y", "@codegraphcontext/mcp-server"]
+    },
+    "chiasmus": {
+      "command": "python",
+      "args": ["-m", "chiasmus.mcp"]
     }
   }
 }
