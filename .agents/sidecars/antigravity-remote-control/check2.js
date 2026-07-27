@@ -1,1 +1,0 @@
-fetch('http://localhost:3000/snapshot').then(res => res.json()).then(data => { const html = data.html; console.log('user-input-step:', html.split('user-input-step').length - 1); console.log('revert-button:', html.split('revert-button').length - 1); })

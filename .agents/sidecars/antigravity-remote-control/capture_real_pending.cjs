@@ -1,1 +1,0 @@
-const fs = require('fs'); setTimeout(async () => { try { const res = await fetch('http://localhost:3000/snapshot'); const data = await res.json(); fs.writeFileSync('real_pending.html', data.html); console.log('Saved real_pending.html'); } catch(e) { console.log(e); } process.exit(0); }, 25000);

@@ -1,1 +1,0 @@
-fetch('http://localhost:3000/snapshot').then(res => res.json()).then(data => { const html = data.html; const revertIdx = html.indexOf('revert-button'); const sub = html.substring(Math.max(0, revertIdx - 1500), revertIdx); const matches = [...sub.matchAll(/data-testid="([^"]+)"/g)]; console.log('Sent message wrappers:', matches.map(m => m[1])); })

@@ -1,1 +1,0 @@
-fetch('http://localhost:3000/snapshot').then(res => res.json()).then(data => { const html = data.html; const blocks = html.split('data-testid="user-input-step"'); let queued = 0; let sent = 0; blocks.slice(1).forEach(b => { if (b.includes('revert-button')) sent++; else queued++; }); console.log('Queued:', queued, 'Sent:', sent); })

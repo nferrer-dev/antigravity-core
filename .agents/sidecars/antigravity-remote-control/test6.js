@@ -1,1 +1,0 @@
-fetch('http://localhost:3000/snapshot').then(res => res.json()).then(data => { const html = data.html; const matches = [...html.matchAll(/data-testid="([^"]+)"/g)]; console.log(new Set(matches.map(m => m[1]))); })

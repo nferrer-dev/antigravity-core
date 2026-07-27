@@ -1,1 +1,0 @@
-const { JSDOM } = require('jsdom'); fetch('http://localhost:3000/snapshot').then(res => res.json()).then(data => { console.log('Contains Pending messages?', data.html.includes('Pending messages')); })
