@@ -290,3 +290,20 @@ To prevent catastrophic token exhaustion and deadlocks during long-running orche
 2. **Execution-Equipped Subagents**: When a subagent requires execution capabilities (running scripts, Git commands), the parent MUST NOT spawn them as a read-only esearch type. The parent MUST use the self type or explicitly grant enable_write_tools=true to prevent capability deadlocks.
 3. **Stage-Gated Checkpointing**: Before transitioning across major workflow boundaries (e.g., Stage 3 to Stage 4) in heavily bloated conversations, the Parent Orchestrator MUST automatically serialize its state into a conversation_checkpoint.md artifact, halt execution, and instruct the user to resume in a fresh chat session.
 ---
+
+---
+# Known Failure Mode: Internal Tool Leak (moma_search)
+
+When using the define_subagent tool, the backend framework may occasionally attempt to inject Google-internal tools (e.g., moma_search). Because these tools do not exist in the external build, the subagent will fatally crash on startup with the error: ailed to construct executor: no tool converter registered for moma_search.
+
+**The Catch Condition & Fallback:**
+If you receive this error directly, OR if a subagent you spawned via define_subagent fails to respond and triggers your 3-minute schedule timeout circuit-breaker, you MUST deduce if it hit the internal tool bug:
+1. Run the manage_subagents tool with the list action.
+2. If the subagent is actively running, it simply needs more time. Do NOT fallback.
+3. If the subagent's ID is missing or marked dead, it crashed on startup due to the tool leak.
+
+You MUST NOT halt the workflow or wait indefinitely. You MUST immediately execute the fallback:
+1. Abandon the custom subagent.
+2. Use invoke_subagent to spawn the predefined self or esearch subagents instead.
+3. Inject your custom system instructions comprehensively into the Prompt parameter of the invoke_subagent tool to preserve cognitive framing.
+---
