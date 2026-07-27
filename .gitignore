@@ -1,2 +1,6 @@
 ﻿.env
 .agents/sidecars/**/node_modules/
+
+scratch/
+scratch_tdd/
+scratch_rag/
