@@ -44,11 +44,18 @@ function spawnServer() {
 
   console.log('[Watchdog] Starting server.js...');
 
+  const isWindows = process.platform === 'win32';
+  const pythonPath = isWindows ? 'venv\\\\Scripts\\\\python.exe' : 'venv/bin/python';
+
   // Spawn as an attached child process (not detached)
-  serverChild = spawn('node', ['server.js'], {
+  serverChild = spawn(pythonPath, ['-u', 'launcher.py', '--mode', 'local'], {
     cwd: __dirname,
-    stdio: 'ignore' // We don't need its output
+    stdio: 'pipe', // Capture output
+    env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8' }
   });
+  
+  serverChild.stdout.on('data', (data) => console.log(data.toString()));
+  serverChild.stderr.on('data', (data) => console.error(data.toString()));
 
   console.log(`[Watchdog] Server started with PID: ${serverChild.pid}`);
 

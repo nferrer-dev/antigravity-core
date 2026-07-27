@@ -1,4 +1,4 @@
 Set fso = CreateObject("Scripting.FileSystemObject")
-Set shell = CreateObject("WScript.Shell")
-shell.CurrentDirectory = fso.GetParentFolderName(WScript.ScriptFullName)
-shell.Run "node watchdog.cjs", 0, False
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.CurrentDirectory = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)
+WshShell.Run "cmd.exe /c """"C:\Program Files\nodejs\node.exe"" watchdog.cjs > watchdog.log 2>&1""", 0, False

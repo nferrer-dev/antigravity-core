@@ -1,6 +1,6 @@
 param()
 
-$SidecarDir = "$PSScriptRoot\.agents\sidecars\antigravity-remote-control"
+$SidecarDir = $PSScriptRoot
 $AppPath = "C:\Users\nferr\AppData\Local\Programs\Antigravity\Antigravity.exe"
 
 Write-Host "Starting Antigravity Phone Connect Sidecar..."

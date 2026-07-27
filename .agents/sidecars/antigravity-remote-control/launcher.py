@@ -380,8 +380,11 @@ def main():
             
             # Check process status
             if node_process.poll() is not None:
-                print("\n❌ Server process died unexpectedly!")
-                sys.exit(1)
+                print("\n❌ Server process died unexpectedly! Restarting in 3 seconds...")
+                time.sleep(3)
+                log_file = open("server_log.txt", "a", encoding="utf-8")
+                node_process = subprocess.Popen(node_cmd, stdout=log_file, stderr=log_file, env=os.environ.copy())
+                print("✅ Server restarted.")
                 
             # Monitor logs for errors
             try:

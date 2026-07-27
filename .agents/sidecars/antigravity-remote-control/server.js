@@ -1770,7 +1770,7 @@ async function createServer() {
                 }
             }
         };
-        httpsServer = https.createServer(sslOptions, app);
+        const httpsServer = https.createServer(sslOptions, app);
         server = httpsServer;
 
         if (process.env.TAILSCALE_AVAILABLE === 'true' && process.env.TAILSCALE_DOMAIN) {
