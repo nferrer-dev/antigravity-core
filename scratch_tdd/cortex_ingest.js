@@ -1,8 +1,0 @@
-console.log(`
-<BLAST_RADIUS>
-  <TARGET>Cortex Database</TARGET>
-  <REVERSIBILITY>Low</REVERSIBILITY>
-  <WORST_CASE_IMPACT>High</WORST_CASE_IMPACT>
-</BLAST_RADIUS>
-`);
-process.exit(1);
