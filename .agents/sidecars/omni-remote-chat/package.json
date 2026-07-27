@@ -1,7 +1,0 @@
-{
-  "name": "omni-remote-chat-sidecar",
-  "private": true,
-  "dependencies": {
-    "omni-antigravity-remote-chat": "^1.0.0"
-  }
-}
