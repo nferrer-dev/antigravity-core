@@ -279,3 +279,14 @@ When making UI changes to `sidecars/antigravity_phone_chat`, you MUST adhere to 
 - **The Image Embed Citation Protocol**: Cite images at the beginning of paragraphs with at least 3-5 sentences.
 - **The Tool Channel Segregation Protocol**: Strict channel boundaries for tool calls (user functions = commentary, reasoning = analysis).
 - **SQL for Operational State Tracking**: Track deterministic operational state (batch items, statuses) using SQL, not markdown.
+
+---
+# Context Isolation & Checkpoint Protocol
+
+To prevent catastrophic token exhaustion and deadlocks during long-running orchestrations, agents MUST enforce state compartmentalization:
+
+1. **Pull-Only Routing Mandate**: Subagents MUST write complex outputs (graphs, brainstorms, debate transcripts) to isolated files in the scratch/ directory and return ONLY the absolute file path to the parent.
+   - *Micro-Context Exemption*: If the output payload is strictly under 200 lines TOTAL, the subagent may return the payload inline to bypass API latency.
+2. **Execution-Equipped Subagents**: When a subagent requires execution capabilities (running scripts, Git commands), the parent MUST NOT spawn them as a read-only esearch type. The parent MUST use the self type or explicitly grant enable_write_tools=true to prevent capability deadlocks.
+3. **Stage-Gated Checkpointing**: Before transitioning across major workflow boundaries (e.g., Stage 3 to Stage 4) in heavily bloated conversations, the Parent Orchestrator MUST automatically serialize its state into a conversation_checkpoint.md artifact, halt execution, and instruct the user to resume in a fresh chat session.
+---
