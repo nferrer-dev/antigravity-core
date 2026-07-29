@@ -40,8 +40,18 @@ graph TD
     C3 --> C4
     end
     
-    C4 --> D[Stage 2: Technical Debate]
-    D --> E
+    C4 --> D{Stage 2: Technical Debate}
+    
+    subgraph "Canonical Debate Engine (Stage 2)"
+    D --> D1[Dynamic Ontology Discovery: AST Sharder]
+    D1 --> D2[Concurrent Map-Reduce Debate]
+    D2 --> D3[Deterministic Empirical Survival Gate]
+    D3 --> D4[Vectorized RAG Memory: Cortex Ingestion]
+    D4 --> D5[Hostile Adjudicator: Terminal Verdict]
+    end
+    
+    D5 -->|Approve| E
+    D5 -->|Reject| C
     
     subgraph "Native Agentic Orchestration"
     E --> F[Bounded Pre-Flight Gate]
