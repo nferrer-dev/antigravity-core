@@ -15,6 +15,20 @@ By installing this template, you inject the **Harness-Nexus** orchestration
 engine into your workspace. This transforms raw LLM execution into a structured,
 self-policing loop.
 
+### High-Level Execution Flow
+
+```mermaid
+graph LR
+    A[User Request] --> B(Stage 0: Epistemic Router)
+    B --> C(Stage 1: Divergent Brainstorm)
+    C --> D(Stage 2: Technical Debate)
+    D --> E(Stage 3: Design Validate)
+    E --> F(Stage 4: Iterative Implement)
+    F --> G[Production Code]
+```
+
+### Deep Architectural Dive
+
 ```mermaid
 graph TD
     A[User Request] --> B{Stage 0: Epistemic Router}
