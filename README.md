@@ -28,10 +28,19 @@ graph TD
     S3 --> S4
     end
 
-    S4 -->|Complex/Ambiguous| C[Stage 1: Divergent Brainstorm]
+    S4 -->|Complex/Ambiguous| C{Stage 1: Divergent Brainstorm}
     B -->|Trivial/Cosmetic| E[Stage 4: Iterative-Implement]
     
-    C --> D[Stage 2: Technical Debate]
+    subgraph "ADHD Framework (Stage 1)"
+    C -->|Zero Shared Context| C1[The Radical Innovator]
+    C -->|Zero Shared Context| C2[The Enterprise Minimalist]
+    C -->|Zero Shared Context| C3[The Security Paranoiac]
+    C1 --> C4[Sequential Compilation]
+    C2 --> C4
+    C3 --> C4
+    end
+    
+    C4 --> D[Stage 2: Technical Debate]
     D --> E
     
     subgraph "Native Agentic Orchestration"
