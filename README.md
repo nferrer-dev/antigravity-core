@@ -19,12 +19,20 @@ self-policing loop.
 
 ```mermaid
 graph TD
-    A[User Request] -->|Parse Ambiguity| B(Stage 0: Epistemic Router)
-    B -->|Structural Context| C(Stage 1: Divergent Brainstorm)
-    C -->|Candidate Solutions| D(Stage 2: Technical Debate)
-    D -->|implementation_plan.md| E(Stage 3: Artifact Validation)
-    E -->|Approved Blueprint| F(Stage 4: Iterative-Implement)
-    F -->|Tested Patch| G[Production Code]
+    A[User Request]
+    B("Stage 0: Epistemic Router\n(CodeGraphContext / SMT)")
+    C("Stage 1: Divergent Brainstorm\n(Zero-Shared-Context Swarms)")
+    D("Stage 2: Technical Debate\n(Map-Reduce / Cortex Vector)")
+    E("Stage 3: Artifact Validation\n(Parallel Review / Arbitration)")
+    F("Stage 4: Iterative-Implement\n(Agentic TDD / Expert Roster)")
+    G[Production Code]
+
+    A -->|Parse Ambiguity| B
+    B -->|Structural Context| C
+    C -->|Candidate Solutions| D
+    D -->|implementation_plan.md| E
+    E -->|Approved Blueprint| F
+    F -->|Tested Patch| G
 ```
 
 ### Deep Architectural Dive
