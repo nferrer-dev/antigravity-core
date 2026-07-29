@@ -18,8 +18,19 @@ self-policing loop.
 ```mermaid
 graph TD
     A[User Request] --> B{Stage 0: Epistemic Router}
+    
+    subgraph "Epistemic Engines"
+    B -->|Structural| S1[CodeGraphContext AST]
+    B -->|Logical| S2[Chiasmus SMT Proofs]
+    B -->|Exploratory| S3[Blackboard Swarms]
+    S1 --> S4[MVC Pull Mandate: Scratch File]
+    S2 --> S4
+    S3 --> S4
+    end
+
+    S4 -->|Complex/Ambiguous| C[Stage 1: Divergent Brainstorm]
     B -->|Trivial/Cosmetic| E[Stage 4: Iterative-Implement]
-    B -->|Complex/Ambiguous| C[Stage 1: Divergent Brainstorm]
+    
     C --> D[Stage 2: Technical Debate]
     D --> E
     
