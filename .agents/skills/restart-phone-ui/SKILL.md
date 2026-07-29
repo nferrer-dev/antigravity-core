@@ -10,7 +10,7 @@ the dedicated restart script.
 Use the `run_command` tool to execute the following PowerShell script:
 
 ```powershell
-netstat -aon | Select-String ':39201' | ForEach-Object {
+netstat -aon | Select-String ':3000' | ForEach-Object {
     $fields = $_.ToString().Trim() -split '\s+'
     $targetPid = $fields[-1]
     if ($targetPid -match '^\d+$' -and $targetPid -ne '0') {
@@ -19,7 +19,7 @@ netstat -aon | Select-String ':39201' | ForEach-Object {
 }
 ```
 
-This script will automatically hunt down the active Node process on port 39201
+This script will automatically hunt down the active Node process on port 3000
 and terminate it.
 After executing the script, inform the user that the background watchdog will
 automatically resurrect the server with the latest code within 15 seconds.
