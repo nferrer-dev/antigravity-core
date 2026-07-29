@@ -69,11 +69,18 @@ graph TD
     E7 --> E[Stage 4: Iterative-Implement]
     B -->|Trivial/Cosmetic| E
     
-    subgraph "Native Agentic Orchestration (Stage 4)"
-    E --> F[Bounded Pre-Flight Gate]
-    F -->|Tests/Lint| G{Stage 4 Committee}
-    G -->|Reject| E
-    G -->|Approve| H[Execution]
+    subgraph "Iterative-Implement (Stage 4)"
+    E --> F1[Agentic TDD Protocol: Red/Green]
+    F1 --> F[Bounded Pre-Flight Gate: Linters & Tests]
+    F --> G1{Context-Dependent Roster}
+    G1 -->|Always| G2[Language Style Expert]
+    G1 -->|Conditional| G3[Security/Performance Experts]
+    G2 --> G4[Bounded Quality Constraints: Diff-Only Review]
+    G3 --> G4
+    G4 -->|Reject: Edge Case| G5[SkillOpt Self-Evolution: Cortex DB]
+    G5 --> E
+    G4 -->|Reject: Standard| E
+    G4 -->|Approve| H[Final Execution & Push]
     end
 ```
 
