@@ -56,14 +56,17 @@ graph TD
     D6 --> E1{Stage 3: Design-Validate}
     
     subgraph "Artifact Validation (Stage 3)"
-    E1 --> E2[Invoke Design-Validate Committee]
-    E2 --> E3[Full-Committee Resubmission if Rejected]
-    E3 --> E4[Unanimous Consensus Gate]
-    E4 -->|Reject| E6[User Arbitration]
-    E4 -->|Approve| E5[Proceed to Code Generation]
+    E1 --> E2[Invoke Expert Committee]
+    E2 --> E3[Bounded Parallel Review]
+    E3 --> E4{Unanimous Consensus Loop}
+    E4 -->|Reject| E5[Fix & Full-Committee Resubmission]
+    E5 --> E4
+    E4 -->|5-Round Deadlock| E6[Hostile Deadlock Arbitration]
+    E6 -->|Override| E7[Proceed to Code Generation]
+    E4 -->|Approve| E7
     end
     
-    E5 --> E[Stage 4: Iterative-Implement]
+    E7 --> E[Stage 4: Iterative-Implement]
     B -->|Trivial/Cosmetic| E
     
     subgraph "Native Agentic Orchestration (Stage 4)"
