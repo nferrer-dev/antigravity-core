@@ -18,7 +18,7 @@ self-policing loop.
 ### High-Level Execution Flow
 
 ```mermaid
-graph LR
+graph TD
     A[User Request] -->|Parse Ambiguity| B(Stage 0: Epistemic Router)
     B -->|Structural Context| C(Stage 1: Divergent Brainstorm)
     C -->|Candidate Solutions| D(Stage 2: Technical Debate)
