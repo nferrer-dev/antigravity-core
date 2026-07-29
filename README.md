@@ -77,9 +77,7 @@ graph TD
     G1 -->|Conditional| G3[Security/Performance Experts]
     G2 --> G4[Bounded Quality Constraints: Diff-Only Review]
     G3 --> G4
-    G4 -->|Reject: Edge Case| G5[SkillOpt Self-Evolution: Cortex DB]
-    G5 --> E
-    G4 -->|Reject: Standard| E
+    G4 -->|Reject| E
     G4 -->|Approve| H[Final Execution & Push]
     end
 ```
