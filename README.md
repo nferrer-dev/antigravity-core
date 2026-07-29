@@ -19,12 +19,12 @@ self-policing loop.
 
 ```mermaid
 graph LR
-    A[User Request] --> B(Stage 0: Epistemic Router)
-    B --> C(Stage 1: Divergent Brainstorm)
-    C --> D(Stage 2: Technical Debate)
-    D --> E(Stage 3: Design Validate)
-    E --> F(Stage 4: Iterative Implement)
-    F --> G[Production Code]
+    A[User Request] -->|Parse Ambiguity| B(Stage 0: Epistemic Router)
+    B -->|Structural Context| C(Stage 1: Divergent Brainstorm)
+    C -->|Candidate Solutions| D(Stage 2: Technical Debate)
+    D -->|implementation_plan.md| E(Stage 3: Artifact Validation)
+    E -->|Approved Blueprint| F(Stage 4: Iterative-Implement)
+    F -->|Tested Patch| G[Production Code]
 ```
 
 ### Deep Architectural Dive
