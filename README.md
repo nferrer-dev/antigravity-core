@@ -50,10 +50,21 @@ graph TD
     D4 --> D5[Hostile Adjudicator: Terminal Verdict]
     end
     
-    D5 -->|Approve| E
+    D5 -->|Approve| D6[Draft implementation_plan.md Artifact]
     D5 -->|Reject| C
     
-    subgraph "Native Agentic Orchestration"
+    D6 --> E1{Stage 3: Design-Validate}
+    
+    subgraph "Artifact Validation (Stage 3)"
+    E1 --> E2[Invoke Design-Validate Committee]
+    E2 --> E3[Full-Committee Resubmission if Rejected]
+    E3 --> E4[Unanimous Consensus Gate]
+    E4 -->|Reject| E6[User Arbitration]
+    E4 -->|Approve| E5[Proceed to Code Generation]
+    end
+    
+    E5 --> E[Stage 4: Iterative-Implement]
+    B -->|Trivial/Cosmetic| E
     E --> F[Bounded Pre-Flight Gate]
     F -->|Tests/Lint| G{Stage 4 Committee}
     G -->|Reject| E
