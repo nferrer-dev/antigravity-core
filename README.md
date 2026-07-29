@@ -65,6 +65,8 @@ graph TD
     
     E5 --> E[Stage 4: Iterative-Implement]
     B -->|Trivial/Cosmetic| E
+    
+    subgraph "Native Agentic Orchestration (Stage 4)"
     E --> F[Bounded Pre-Flight Gate]
     F -->|Tests/Lint| G{Stage 4 Committee}
     G -->|Reject| E
