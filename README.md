@@ -23,7 +23,7 @@ graph TD
     C --> D[Stage 2: Technical Debate]
     D --> E
     
-    subgraph "Harness-Nexus Orchestration"
+    subgraph "Native Agentic Orchestration"
     E --> F[Bounded Pre-Flight Gate]
     F -->|Tests/Lint| G{Stage 4 Committee}
     G -->|Reject| E
@@ -132,20 +132,3 @@ To install these protocols into a specific project:
 > install this template into simple, throwaway projects (like a static HTML
 > site) as the consensus loops, RAG ingestion, and test-driven requirements will
 > introduce unnecessary computational overhead.
-
----
-
-## ⚙️ Dependencies
-
-This ecosystem relies heavily on the **harness-nexus** orchestrator for advanced
-multi-agent workflows.
-
-To run the orchestration tools:
-
-1. Install `harness-nexus` globally on your machine.
-2. Set the `HARNESS_NEXUS_PATH` environment variable to point to its installation
-   directory.
-
-The MCP configuration in `.agents/mcp_config.json` will automatically detect
-this variable and attach the orchestrator to your Antigravity workspace. If this
-variable is missing, the tools will safely hard-fail with an explicit error.
