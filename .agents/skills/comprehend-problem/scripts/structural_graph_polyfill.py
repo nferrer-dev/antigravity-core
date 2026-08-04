@@ -5,8 +5,15 @@ import sys
 
 def parse_file(filepath):
     """Parse a single python file and return its imports and function definitions."""
-    with open(filepath, 'r', encoding='utf-8') as f:
-        content = f.read()
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except UnicodeDecodeError:
+        try:
+            with open(filepath, 'r', encoding='utf-16') as f:
+                content = f.read()
+        except UnicodeDecodeError:
+            return {"imports": [], "functions": [], "error": "UnicodeDecodeError"}
     
     try:
         tree = ast.parse(content)
