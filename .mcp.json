@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "code-graph-context": {
+      "command": "npx",
+      "args": ["-y", "@codegraphcontext/mcp-server"]
+    }
+  }
+}
