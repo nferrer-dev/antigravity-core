@@ -22,7 +22,9 @@ try {
         if ($prop -and $prop.Value) { $text = [string]$prop.Value; break }
     }
     if (-not $text -and $payload.transcript_path -and (Test-Path -LiteralPath $payload.transcript_path)) {
-        $tail = Get-Content -LiteralPath $payload.transcript_path -Tail 40 -ErrorAction Stop
+        # Transcripts are UTF-8; without -Encoding UTF8, PS 5.1 reads ANSI and
+        # mangles multi-byte chars (em-dash -> mojibake) in appended traces.
+        $tail = Get-Content -LiteralPath $payload.transcript_path -Tail 40 -Encoding UTF8 -ErrorAction Stop
         $text = $tail -join "`n"
     }
 
@@ -35,9 +37,12 @@ try {
             if ($payload.hook_event_name) { $eventName = [string]$payload.hook_event_name }
 
             # Summary: event name + text starting at the marker, whitespace
-            # collapsed, capped at 200 chars.
+            # collapsed, capped at 200 chars. Markers are neutralized in the
+            # summary (brackets stripped) so hook-written lines can never
+            # re-trigger this hook when a later transcript quotes the log.
             $summary = ($text.Substring($idx) -replace '\s+', ' ').Trim()
             if ($summary.Length -gt 200) { $summary = $summary.Substring(0, 200) }
+            $summary = $summary.Replace('[VERDICT: REJECT]', 'VERDICT:REJECT').Replace('<BLAST_RADIUS>', 'BLAST_RADIUS')
 
             $root = $env:CLAUDE_PROJECT_DIR
             if (-not $root) { $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path }

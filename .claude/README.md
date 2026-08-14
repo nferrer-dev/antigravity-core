@@ -30,7 +30,7 @@ Then run the `harness-scaffold` skill in the target repo to create `tests/`, the
 
 ## Optional MCP Server: chiasmus
 
-`.mcp.json` ships with only `code-graph-context` (runs via `npx`, no install needed). The `chiasmus` logical engine used by `comprehend-problem` is not installed on every machine; when you have it, add this entry to `mcpServers` in `.mcp.json`:
+`.mcp.json` ships with only `code-graph-context`, which requires the PyPI package: `pip install codegraphcontext` (the historical `npx @codegraphcontext/mcp-server` invocation is a nonexistent npm package — CodeGraphContext is distributed on PyPI). If the package is absent, `comprehend-problem` degrades gracefully to its bundled Python polyfill. The `chiasmus` logical engine is likewise not installed on every machine; when you have it, add this entry to `mcpServers` in `.mcp.json`:
 
 ```json
 "chiasmus": {
