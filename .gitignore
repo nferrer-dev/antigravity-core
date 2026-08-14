@@ -1,4 +1,4 @@
-﻿.env
+.env
 .agents/sidecars/**/node_modules/
 __pycache__/
 
