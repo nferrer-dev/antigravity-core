@@ -281,6 +281,39 @@ When making UI changes to `sidecars/antigravity-remote-control`, you MUST adhere
 - **SQL for Operational State Tracking**: Track deterministic operational state (batch items, statuses) using SQL, not markdown.
 
 ---
+
+# Operational & Execution Safety (Adopted)
+
+1. **Defensive Port Management**: Before launching servers, explicitly kill stale processes on that port using robust, error-handled Windows/PowerShell pipelines (e.g., `Get-NetTCPConnection -LocalPort <port> -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }`) to prevent deadlocks and crashing on free ports.
+2. **Robust Background Processes**: When starting long-running servers, explicitly recommend native backgrounding with redirection in PowerShell (e.g., `Start-Process -FilePath <exe> -ArgumentList <args> -NoNewWindow -RedirectStandardOutput out.log -RedirectStandardError err.log`) to preserve error logs without synchronously blocking the agent.
+3. **Git & Environment Boundaries**: Explicitly ban skipping hooks (`--no-verify`), force pushing to `main`, and mutating `git config`.
+4. **Diagnose Before Altering**: If encountering a build/test failure, prioritize diagnosing code or configuration before attempting to mutate the global environment (e.g., `npm install`).
+
+---
+
+# Context & Tool Optimization (Adopted)
+
+1. **Mandatory Schema Audits**: Agents MUST ALWAYS read the target tool's schema/descriptor file before executing an MCP call to prevent blind parameter failures.
+2. **Strict Code Citation Syntax**: Enforce the `startLine:endLine:filepath` format for citing existing code in text to prevent hallucinated context.
+
+---
+
+# Agentic Workflow & Communication (Adopted)
+
+1. **"Show, Don't Tell" Ban**: Agents should NEVER explicitly explain their compliance with user instructions (e.g., "Here is the concise version"). *Exception: This ban strictly applies to conversational filler and DOES NOT suppress mandatory system signaling (e.g., `[VERDICT: APPROVE]`, `<BLAST_RADIUS>` XML, or blocked state markers).*
+2. **Never Delegate Understanding (Bounded)**: When invoking subagents, the parent must provide concrete, deterministic starting points (e.g., absolute paths and distilled objectives). However, the parent MUST NOT attempt to preemptively supply exact line numbers, preserving the MVC Protocol which mandates that subagents retain the autonomy to use `grep_search` to pinpoint targets.
+3. **Directives vs. Inquiries Discrimination**: Strictly limit the scope of "Inquiries" to research and proposal; DO NOT mutate files until a corresponding "Directive" is given. *Exception: This restriction respects the Triviality Exemption. If an exploratory subagent encounters a non-functional typo or trivial formatting error during an inquiry, it may immediately resolve it.*
+
+---
+
+# Code & Memory Hygiene (Adopted)
+
+1. **Minimalist Abstraction**: Implement an "Anti-Over-Engineering" constraint. Do not add features, refactor, or introduce abstractions beyond what the immediate task requires.
+2. **Data-Driven Completeness**: Ban lazy placeholders (e.g., "TODO: Implement here").
+3. **No Thinking in Code**: Ban using code comments or shell script comments as reasoning scratchpads.
+4. **Memory Scope Filtering**: Explicitly restrict the Cortex vector DB from saving raw code patterns, git history, or transient file paths to prevent vector decay. Restrict memory strictly to user preferences, project deadlines, and feedback loop results.
+
+---
 # Context Isolation & Checkpoint Protocol
 
 To prevent catastrophic token exhaustion and deadlocks during long-running orchestrations, agents MUST enforce state compartmentalization:
@@ -307,3 +340,18 @@ You MUST NOT halt the workflow or wait indefinitely. You MUST immediately execut
 2. Use invoke_subagent to spawn the predefined self or esearch subagents instead.
 3. Inject your custom system instructions comprehensively into the Prompt parameter of the invoke_subagent tool to preserve cognitive framing.
 ---
+
+# Advanced Memory & Context Hygiene (Adopted)
+
+1. **The "Invisible Influence" Mandate**: Agents must strictly limit explicit meta-references to memory retrieval (e.g., "From our previous chat..."). Memory should shape responses invisibly to reduce token bloat and conversational fluff.
+2. **Search Stagnation Circuit Breaker**: Cap consecutive search attempts for the exact same information at 2 iterations to prevent infinite search loops.
+3. **Project vs. Personal Memory Bifurcation**: Strictly separate workspace-level invariants (recorded proactively) from personal user preferences (which require explicit intent to record).
+
+---
+
+# Advanced Planning & Workflows (Adopted)
+
+1. **Command Execution Output Asymmetry**: When running terminal commands (e.g. tests, builds), enforce an asymmetric contract: On success, return a 1-line summary. On failure, return the stack trace; *however, if the stack trace exceeds the 200-line Micro-Context Exemption threshold, you MUST pipe it to a file in `scratch/` and return the absolute file path instead of the inline trace*. This perfectly adheres to the *Minimal Viable Context (MVC)* protocol.
+2. **Search to Discover, Fetch to Investigate**: Bound the discovery phase to 3–5 broad targeted searches, then aggressively pivot to exact file fetches (`view_file`).
+3. **Mandatory "Gaps and Uncertainties" Block**: Research tasks must explicitly declare zero-result queries and untested assumptions to reinforce the *No Guessing Protocol*.
+4. **Tool Output Simulation Ban**: Strictly forbid the generation of synthetic, hallucinated tool execution logs or fake citation paths.
