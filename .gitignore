@@ -1,5 +1,6 @@
 ﻿.env
 .agents/sidecars/**/node_modules/
+__pycache__/
 
 scratch/
 scratch_tdd/
