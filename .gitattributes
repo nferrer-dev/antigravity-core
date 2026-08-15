@@ -1,0 +1,5 @@
+# Claude Code tree is LF-canonical (validator INV-1/INV-6 enforce it); scoped
+# so .agents/ (Antigravity) materialization is untouched per the isolation rule.
+.claude/** text eol=lf
+CLAUDE.md text eol=lf
+.mcp.json text eol=lf
