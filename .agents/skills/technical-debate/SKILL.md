@@ -9,7 +9,7 @@ When the user triggers this skill to vet a technical proposition or configuratio
 
 ## 1. Context Scoping & Pre-Flight
 - **Triviality Fast-Path**: Evaluate if the proposition is purely cosmetic, non-functional, or trivial. If so, bypass the debate, log a 'Triviality Exemption', and proceed.
-- **Workflow Delegation**: You MUST immediately read the canonical debate skill instructions via `view_file` at `C:\Users\nferr\.gemini\config\skills\debate\SKILL.md`.
+- **Workflow Delegation**: You MUST immediately read the canonical debate skill instructions via `view_file` at `.agents/skills/debate/SKILL.md` (relative to the workspace root).
 - **Execution**: Follow the Level 4 Orchestration guidelines defined in the `debate` skill. You will act as the Parent Orchestrator, executing Phase 1 (Dynamic Ontology Discovery) and invoking the isolated Sub-Orchestrators for Phase 2 (Concurrent Map-Reduce Debate).
 
 ## 2. Adjudication & RAG Synthesis

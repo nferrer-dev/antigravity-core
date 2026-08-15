@@ -1,10 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { execSync } = require('node:child_process');
+const path = require('node:path');
+
+const SCRIPT = path.join(__dirname, '..', 'scripts', 'cortex_ingest.js');
 
 test('cortex_ingest outputs exact BLAST_RADIUS XML', () => {
     try {
-        const output = execSync('node ./cortex_ingest.js', { encoding: 'utf-8' });
+        const output = execSync(`node "${SCRIPT}"`, { encoding: 'utf-8' });
         assert.match(output, /<BLAST_RADIUS>[\s\S]*<\/BLAST_RADIUS>/);
         assert.match(output, /<TARGET>.*<\/TARGET>/);
         assert.match(output, /<REVERSIBILITY>.*<\/REVERSIBILITY>/);

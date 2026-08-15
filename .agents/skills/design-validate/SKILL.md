@@ -9,7 +9,7 @@ When the user finalizes a draft of an implementation plan, design document, or a
 
 ## 1. Context Scoping & Pre-Flight
 - **Triviality Fast-Path**: If the proposed change is purely cosmetic or non-functional, you may bypass this validation.
-- **Workflow Delegation**: You MUST immediately read the canonical debate skill instructions via `view_file` at `C:\Users\nferr\.gemini\config\skills\debate\SKILL.md`.
+- **Workflow Delegation**: You MUST immediately read the canonical debate skill instructions via `view_file` at `.agents/skills/debate/SKILL.md` (relative to the workspace root).
 - **Execution**: Follow the Level 4 Orchestration guidelines defined in the `debate` skill. You will act as the Parent Orchestrator, executing Phase 1 (Dynamic Ontology Discovery) and invoking the isolated Sub-Orchestrators for Phase 2 (Concurrent Map-Reduce Debate).
 - **Target Artifacts**: The debate will rigorously audit the proposed `implementation_plan.md` (or equivalent artifact).
 

@@ -156,8 +156,8 @@ Antigravity executes these protocols via the following dynamic skills located in
 
 ### Cortex & RAG Integration
 
-- `cortex-librarian` & `textbook-librarian`: Agents querying the local Cortex
-  vector database to retrieve cited architectural best practices.
+- `cortex-librarian`: Agent querying the local Cortex vector database to
+  retrieve cited architectural best practices.
 - `skill-evolve`: Universal self-evolution hook that patches vulnerabilities
   into the Cortex memory when an edge-case failure occurs.
 
