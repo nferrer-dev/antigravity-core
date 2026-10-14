@@ -41,7 +41,7 @@ To prevent catastrophic hallucinations and wild goose chases, all agents and sub
 | 3 — Design validation | `design-validate` | A drafted `implementation_plan.md` or architecture artifact — committee consensus before code |
 | 4 — Iterative implementation | `iterative-implement` | Executing or finalizing code changes — implementation committee reviews the diff |
 
-Full routing rules, gates, and exemptions: `.claude/rules/pipeline.md`. Committee mechanics: `.claude/rules/consensus.md`.
+**3-Tier Proportional Routing**: Tasks route by risk weight — **Tier 0 (Trivial)** executes directly (subject to the Anti-Loophole for execution paths and global state); **Tier 1 (Standard Bounded Feature)** runs `Stage 0 -> implementation_plan.md -> Agentic TDD -> Stage 4` (skipping Stage 1 swarms and Stage 2/3 debates when architectural/security ambiguity is absent); **Tier 2 (High-Risk / Architectural / Security / Global State)** runs the full `Stage 0 -> Stage 1 -> Stage 2 -> Stage 3 -> Agentic TDD -> Stage 4` pipeline. Full routing rules, gates, and exemptions: `.claude/rules/pipeline.md`. Committee mechanics: `.claude/rules/consensus.md`.
 
 ## Rules Modules
 

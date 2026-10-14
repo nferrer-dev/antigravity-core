@@ -15,9 +15,14 @@ Your objective is to optimize the target skill in real-time so that future agent
 
 Determine the absolute path to the `SKILL.md` file of the skill that failed. Read its current contents with the Read tool.
 
-### 2. Draft the Mitigating Heuristic
+### 2. Draft the Mitigating Heuristic (SkillFactory 4-Field Contract)
 
-Based on the failure mode encountered, draft a strict, 1-2 sentence mitigating heuristic or rule that would have prevented the failure.
+Based on the failure mode encountered, draft a strict, 1-2 sentence mitigating heuristic accompanied by the four mandatory execution-grounded fields:
+
+1. **Trace Anchor:** Exact command, tool call, or `file:line` range that triggered the failure.
+2. **Concrete Target:** Exact `[skill-dir]/[skillname]-edge-cases.md` path and section modified.
+3. **Falsifiable Prediction:** Specific check or command output that will succeed once the heuristic is applied.
+4. **Structural Verification Gate:** Execution of `python .claude/tests/validate_tree.py` returning exit code `0`.
 
 ### 3. Pre-Flight Validation & Artifact-Scoped Singleton Lock
 
@@ -36,7 +41,9 @@ You are STRICTLY FORBIDDEN from applying optimizations autonomously, regardless 
     > [!CAUTION]
     > [PROPOSED SKILL OPTIMIZATION]
     > Target Skill: [Name of Skill]
-    > Reason: [Brief explanation of the failure mode]
+    > Trace Anchor: [Exact command, tool call, or file:line failure]
+    > Concrete Target: [Path to [skillname]-edge-cases.md]
+    > Falsifiable Prediction: [Check or command that will pass after applying]
     > Proposed Heuristic: [Your 1-2 sentence rule]
     >
     > USER: Do you approve adding this heuristic to the edge cases file?
@@ -44,4 +51,4 @@ You are STRICTLY FORBIDDEN from applying optimizations autonomously, regardless 
 2. Wait for the user to explicitly reply with approval.
 3. Once approved, you must NOT write to the primary `SKILL.md` file. **This Quarantine Protocol explicitly OVERRIDES any global rule requiring appending to `## Learned Edge Cases`.**
 4. To safely append, first Read the `[skill-dir]/[skillname]-edge-cases.md` quarantine file (if it exists).
-5. Then use Edit to append the heuristic to the quarantine file (or Write to create the file if it does not exist).
+5. Then use Edit to append the heuristic to the quarantine file (or Write to create the file if it does not exist), and run `python .claude/tests/validate_tree.py` via Bash to confirm exit code `0`.

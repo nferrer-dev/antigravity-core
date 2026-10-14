@@ -18,6 +18,6 @@ When the user finalizes a draft of an implementation plan, design document, or a
 ## 2. Adjudication & RAG Synthesis
 
 - Once the map-reduce waves complete, execute Phase 4 (Vectorized RAG Memory): recall the surviving arguments via `mcp__cortex__recall` from the isolated session namespace. If the cortex MCP server is unavailable, degrade gracefully: synthesize from the consolidated survivors file at `<scratchpad>\debate\<session-id>\survivors.md`.
-- Spawn the Phase 5 Hostile Adjudicator to attack the surviving consensus and emit the terminal line — exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]` with its one-paragraph causal justification — plus the `PROCEED` or `REVISE` directive.
+- Spawn the Phase 5 Hostile Adjudicator to attack the surviving consensus and emit the terminal line — exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]` with its one-paragraph causal justification (plus a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX` whenever the verdict is `REJECT`) — plus the `PROCEED` or `REVISE` directive.
 - You MUST explicitly present the retrieved empirical causal chain and the final verdict to the user.
 - **Strict Gate:** Do NOT proceed to write code (Stage 4, `iterative-implement`) until this Stage 3 gate returns `PROCEED`. On `REVISE`, revise the artifact and resubmit it through this workflow.

@@ -1,0 +1,18 @@
+repos:
+  - repo: local
+    hooks:
+      - id: antigravity-secret-scan
+        name: Antigravity Secret Scanner (Betterleaks + Built-in Entropy/Regex)
+        entry: python .agents/scripts/secret_scan.py --staged
+        language: system
+        pass_filenames: false
+      - id: antigravity-validate-agents-tree
+        name: Validate .agents Tree Invariants
+        entry: python .agents/tests/validate_tree.py
+        language: system
+        pass_filenames: false
+      - id: antigravity-validate-claude-tree
+        name: Validate .claude Tree Invariants
+        entry: python .claude/tests/validate_tree.py
+        language: system
+        pass_filenames: false

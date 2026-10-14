@@ -21,9 +21,10 @@ Execute the chosen path using the designated tooling:
 2. **Graceful Degradation (Polyfill)**: If the `code-graph-context` server fails or is unavailable, you MUST fallback to executing the local pure-Python polyfill script located at `.agents/skills/comprehend-problem/scripts/structural_graph_polyfill.py` via the `run_command` tool.
 3. The output will be a JSON graph.
 
-### B. Logical (Chiasmus / MCP-Solver)
+### B. Logical (Chiasmus / Z3 Polyfill)
 1. Translate the problem requirements into formal constraints.
-2. Use `call_mcp_tool` on the `chiasmus` server to run Z3 SMT logic proofs and extract verifiable invariants.
+2. If the `chiasmus` MCP server is configured, use `call_mcp_tool` to run Z3 SMT logic proofs and extract verifiable invariants.
+3. **Graceful Degradation (Polyfill)**: If the `chiasmus` server is unavailable, you MUST fallback to executing the local Python Z3 polyfill script located at `.agents/skills/comprehend-problem/scripts/logical_z3_polyfill.py` via `run_command` (`python .agents/skills/comprehend-problem/scripts/logical_z3_polyfill.py <spec_json_path> <output_json_path>`).
 
 ### C. Exploratory (Blackboard)
 1. Use `invoke_subagent` to spawn multiple decoupled research subagents.
@@ -32,4 +33,4 @@ Execute the chosen path using the designated tooling:
 ## 3. The MVC "Pull" Mandate (CRITICAL)
 You are strictly forbidden from dumping the raw graphs or SMT proofs directly into the prompt of downstream Stage 1 subagents. Token bloat causes catastrophic hallucination.
 1. Write the formal rubric (JSON graph or logical constraints) to a temporary text file in your `scratch/` directory.
-2. Pass ONLY the **absolute file path** of this temporary file to the Stage 1 Idea Vetting committee, instructing them to `grep_search` or `view_file` to pull the exact context they need.
+2. Pass ONLY the **absolute file path** of this temporary file to the Stage 1 Idea Vetting committee, instructing them to use `grep_search` (or `run_command` with `rg -n` / `Select-String` when `grep_search` is unmounted) or `view_file` to pull the exact context they need.

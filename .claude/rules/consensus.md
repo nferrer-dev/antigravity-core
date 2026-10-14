@@ -4,7 +4,7 @@ The committee state machine defined here governs the Stage 4 gate (iterative-imp
 
 ## Verdict Grammar
 
-Committee members end their review with a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`, followed by a one-paragraph causal justification citing evidence. Only the verdict line and its justification are load-bearing; ignore intermediate chatter.
+Committee members end their review with a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`, followed by a one-paragraph causal justification citing evidence. Every `[VERDICT: REJECT]` MUST also include a structured `<REJECTION_EVIDENCE>` block (`FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, `FALSIFIABLE_FIX`); any `[VERDICT: REJECT]` lacking `<REJECTION_EVIDENCE>` is discarded as non-actionable speculation without consuming a consensus round. Only the verdict line, its `<REJECTION_EVIDENCE>` block, and its justification are load-bearing; ignore intermediate chatter.
 
 ## Roster Composition
 
@@ -13,7 +13,7 @@ Spawn reviewers as parallel Task calls — natively context-isolated — each re
 Roster for the Stage 4 implementation review, conditional on the code's domain:
 
 - **Language-Specific Style Expert** — ALWAYS invoked for code. Instruct it to read the language style skill matching the file extension, if one exists, and to proactively read any corresponding `-edge-cases.md` companion file as part of its standard rubric. (Code-generating agents may read edge-case files only on failure or ambiguity; auditing agents must read them proactively.)
-- **Security Auditor** — only for auth/crypto/input-handling/network code.
+- **Security Auditor** — only for auth/crypto/input-handling/network/hook code. Instruct it to Read `.claude/skills/security-auditor/SKILL.md` (and any corresponding `security-auditor-edge-cases.md` companion file) and execute its Two-Pass Hunter-Verifier rubric.
 - **Performance Profiler** — only for data pipelines and hot loops.
 - **Markdown Style Expert** — only for documentation/Markdown files.
 

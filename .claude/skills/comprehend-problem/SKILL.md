@@ -23,10 +23,11 @@ Execute the chosen path using the designated tooling:
    Point `<output_json_path>` at the session scratchpad directory (see Section 3).
 3. Either engine yields a JSON graph.
 
-### B. Logical (Chiasmus / MCP-Solver)
+### B. Logical (Chiasmus / Z3 Polyfill)
 1. The `chiasmus` MCP server is **optional and absent by default**. Check whether `mcp__chiasmus__*` tools exist before routing here.
 2. If configured: translate the problem requirements into formal constraints, run Z3 SMT logic proofs via the server, and extract verifiable invariants.
-3. If not configured: do NOT fabricate a proof. Record that the logical engine is unavailable, derive the constraints manually as a plain-text invariant list, or reroute the problem to the Exploratory path.
+3. **Graceful Degradation (Polyfill)**: If not configured, fall back to the bundled Python Z3 polyfill at `scripts/logical_z3_polyfill.py` inside this skill's directory. Run it via Bash:
+   `python .claude/skills/comprehend-problem/scripts/logical_z3_polyfill.py <spec_json_path> <output_json_path>`
 
 ### C. Exploratory (Blackboard Swarm)
 1. Spawn multiple decoupled research subagents as parallel Task calls issued in a single message. Parallel Task calls are natively context-isolated: the swarm shares zero context by construction.

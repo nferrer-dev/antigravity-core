@@ -20,3 +20,5 @@ Do not manually guess style violations. You must rely on automated tooling to en
 *(This section acts as the trainable state. When the Iterative-Implement loop catches a Python-specific anti-pattern that the mechanical enforcer misses, the Style Expert MUST append the new rule here.)*
 
 - **N+1 Query Anti-Pattern**: Avoid executing `SELECT` queries iteratively inside a loop (e.g., `for` loop). This creates severe performance degradation. Consolidate into a single query using an `IN` clause to fetch relevant records in one batch.
+
+- **Numerical Anti-Pattern**: Avoid exact floating-point comparisons (e.g., `value == 0.0`). In numpy/numeric computing, use `np.isclose(value, 0.0)` or a small epsilon check instead due to floating-point imprecision.

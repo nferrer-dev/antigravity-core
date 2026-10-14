@@ -3,10 +3,6 @@
     "code-graph-context": {
       "command": "codegraphcontext",
       "args": ["mcp", "start"]
-    },
-    "chiasmus": {
-      "command": "python",
-      "args": ["-m", "chiasmus.mcp"]
     }
   }
 }

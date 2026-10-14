@@ -16,5 +16,6 @@ When the user finalizes a draft of an implementation plan, design document, or a
 ## 2. Adjudication & RAG Synthesis
 - Once the Map-Reduce engine completes, execute Phase 3 (Vectorized RAG Memory). Use `recall` on the `cortex` MCP server to synthesize the empirically validated arguments from the isolated session namespace.
 - As the Hostile Adjudicator, determine the final binary verdict (`[GLOBAL VERDICT: PROCEED]` or `[GLOBAL VERDICT: REJECT]`).
+- **Execution-Grounded Rejection Gate (VeriHarness)**: Any `[VERDICT: REJECT]` or `[GLOBAL VERDICT: REJECT]` must include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`.
 - You MUST explicitly present the retrieved empirical causal chain and the final verdict to the user.
 - **Strict Gate**: Do NOT proceed to write code (Stage 3 Iterative-Implement) until this Stage 2 verdict is `PROCEED`.

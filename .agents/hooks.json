@@ -1,0 +1,25 @@
+{
+  "brc-and-secret-guard": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command|execute_command|Bash|view_file|replace_file_content|write_to_file|Edit|Write|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./hooks/brc-guard.ps1",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "causal-telemetry-append": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./hooks/telemetry-append.ps1",
+        "timeout": 5
+      }
+    ]
+  }
+}

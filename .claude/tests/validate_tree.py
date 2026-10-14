@@ -191,6 +191,60 @@ def extract_hook_refs(command):
     return refs
 
 
+INVISIBLE_UNICODE_RANGES = (
+    (0x200B, 0x200D),
+    (0x202A, 0x202E),
+    (0x2060, 0x2060),
+    (0x2066, 0x2069),
+    (0xFEFF, 0xFEFF),
+    (0xE0000, 0xE007F),
+)
+
+SKILL_SECURITY_PATTERNS = (
+    (
+        "prompt-injection override directive",
+        re.compile(
+            r"\b(?:ignore|disregard)\s+(?:all\s+|any\s+)?(?:previous|prior|above|system)\s+"
+            r"(?:instructions|prompts|rules|directives)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "outbound secret exfiltration command",
+        re.compile(
+            r"\b(?:curl|wget|Invoke-WebRequest|Invoke-RestMethod|iwr|irm)\b[^\n]*"
+            r"(?:\$\{?[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)|\.env\b|id_rsa)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "encoded shell payload in skill",
+        re.compile(
+            r"\b(?:powershell|pwsh)\b[^\n]*\s-(?:e|enc|encodedcommand)\s+[A-Za-z0-9+/=]{16,}",
+            re.IGNORECASE,
+        ),
+    ),
+)
+
+
+def scan_skill_security(text, label):
+    """Scan skill markdown text for invisible Unicode smuggling and injection."""
+    violations = []
+    for idx, ch in enumerate(text):
+        cp = ord(ch)
+        for lo, hi in INVISIBLE_UNICODE_RANGES:
+            if lo <= cp <= hi:
+                violations.append(
+                    "%s: invisible Unicode codepoint U+%04X at char %d"
+                    % (label, cp, idx)
+                )
+                break
+    for desc, pattern in SKILL_SECURITY_PATTERNS:
+        if pattern.search(text):
+            violations.append("%s: suspicious %s" % (label, desc))
+    return violations
+
+
 # --------------------------------------------------------------------------
 # CHECKS (each: root -> list of violation strings)
 # --------------------------------------------------------------------------
@@ -406,6 +460,22 @@ def check_inv8_vocabulary(root):
     return violations
 
 
+def check_inv10_skill_security(root):
+    violations = []
+    skills_dir = root / ".claude" / "skills"
+    targets = list(skills_dir.rglob("SKILL.md")) + list(
+        skills_dir.rglob("*-edge-cases.md")
+    )
+    for path in sorted(set(targets)):
+        if not path.is_file():
+            continue
+        label = _rel(root, path)
+        text = path.read_bytes().decode("utf-8", errors="replace")
+        for err in scan_skill_security(text, label):
+            violations.append("INV-10: %s" % err)
+    return violations
+
+
 CHECKS = (
     ("INV-9", check_inv9_junction),
     ("INV-1", check_inv1_frontmatter),
@@ -416,6 +486,7 @@ CHECKS = (
     ("INV-6", check_inv6_encoding),
     ("INV-7", check_inv7_edge_cases),
     ("INV-8", check_inv8_vocabulary),
+    ("INV-10", check_inv10_skill_security),
 )
 
 

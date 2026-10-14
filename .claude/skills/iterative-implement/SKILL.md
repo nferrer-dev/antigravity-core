@@ -27,7 +27,7 @@ For complex business logic, features, or complex bug fixes, enter this workflow 
 Spawn the following reviewers concurrently as parallel Task calls (parallel Tasks are natively context-isolated — Zero Shared Context). Pass each one the explicit code diff (or patch file path), the absolute file paths, and the pre-flight output.
 
 1. **Language-Specific Style Expert** (always invoked for code): instruct it to select and Read the style skill matching the file extension from `.claude/skills/style-*` (e.g., `style-python`, `style-go`, `style-js`, `style-cpp`, `style-java`, `style-rust`), AND to proactively Read that skill's `[skillname]-edge-cases.md` file if it exists, then verify the diff against both.
-2. **Security Auditor** (only invoked for auth/crypto/inputs/network domains).
+2. **Security Auditor** (only invoked for auth/crypto/inputs/network/hooks domains): instruct it to Read `.claude/skills/security-auditor/SKILL.md` (and `.claude/skills/security-auditor/security-auditor-edge-cases.md` if it exists) and verify the diff against its Two-Pass Hunter-Verifier rubric.
 3. **Performance Profiler** (only invoked for data-pipelines/loops domains).
 4. **Markdown Style Expert** (only invoked for documentation/Markdown files): instruct it to Read `.claude/skills/markdown-style-expert/SKILL.md`.
 5. **Code Health Agent** (always invoked):
@@ -41,7 +41,7 @@ Spawn the following reviewers concurrently as parallel Task calls (parallel Task
 
 ## 6. Adjudication & Resubmission
 
-- Every reviewer MUST end its review with a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]` followed by a one-paragraph causal justification citing evidence, per `.claude/rules/consensus.md`. Wait for ALL invoked reviewers to return a verdict; set a 3-minute absolute deadline with Monitor.
+- Every reviewer MUST end its review with a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]` followed by a one-paragraph causal justification citing evidence, per `.claude/rules/consensus.md`. Every `[VERDICT: REJECT]` MUST also include a `<REJECTION_EVIDENCE>` block (`FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, `FALSIFIABLE_FIX`); rejections lacking `<REJECTION_EVIDENCE>` are discarded as non-actionable speculation. Wait for ALL invoked reviewers to return a verdict; set a 3-minute absolute deadline with Monitor.
 - If any reviewer rejects the patch, revise it and resubmit ONLY the new diff to the ENTIRE committee via SendMessage, instructing a diff-only review of the fix. Reviewers retain the mandate to Read the file to verify the localized fix in broader context. If agent-team messaging is unavailable, re-spawn a fresh reviewer Task with the diff and the prior objections.
 - Cap loops at a maximum of 5 rounds. If two consecutive rounds return materially identical objections (stagnation), halt immediately regardless of round number. On stagnation or cap exhaustion, escalate to arbitration via the `technical-debate` skill with a Hostile Adjudicator whose verdict is terminal. If arbitration cannot produce a clear ruling, yield to the USER with the final proposed diff and a summary of the dissenting arguments.
 - Log every `[VERDICT: REJECT]` and every arbitration ruling as a causal trace line in `.claude/telemetry/agentic_telemetry.md`, in the single-line format defined in `.claude/rules/telemetry.md`.

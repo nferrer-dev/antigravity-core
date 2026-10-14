@@ -19,7 +19,7 @@ When you execute or finalize code changes (or when evaluating a branch/patch), y
 ## 3. The Linear Expert Roster
 Spawn the following subagents concurrently via `invoke_subagent`. Pass them the explicit code diffs (or patch file paths) and absolute file paths.
 1. **Language-Specific Style Expert:** (Always invoked). Explicitly instruct them to read the relevant style skill (e.g., `style-python`, `style-go`) based on the file extension and verify the code against it.
-2. **Security Auditor:** (Only invoked for auth/crypto/inputs/network domains).
+2. **Security Auditor:** (Only invoked for auth/crypto/inputs/network/hooks domains). Explicitly instruct them to read `.agents/skills/security-auditor/SKILL.md` (and `.agents/skills/security-auditor/security-auditor-edge-cases.md` if present) and execute its Two-Pass Hunter-Verifier rubric.
 3. **Performance Profiler:** (Only invoked for data-pipelines/loops domains).
 4. **Code Health Agent:** (Always invoked). 
    - **Strict Bounds:** You MUST constrain this agent strictly to the following two questions against the localized diff:
@@ -29,11 +29,12 @@ Spawn the following subagents concurrently via `invoke_subagent`. Pass them the 
 
 ## 4. Bounded Quality Constraints & SkillOpt
 - **Diff-Only Constraints:** Subagents must explicitly check the localized code diff for newly introduced bugs and redundancies. They are strictly prohibited from blocking the loop over pre-existing technical debt.
-- **SkillOpt Self-Evolution:** If the Style Expert detects a codebase-specific style or architectural anti-pattern that the linter missed, it MUST use `multi_replace_file_content` to append that heuristic to the respective style skill artifact (e.g., `style-python/SKILL.md`).
+- **SkillOpt Self-Evolution:** If the Style Expert detects a codebase-specific style or architectural anti-pattern that the linter missed, it MUST NOT edit `SKILL.md` directly. Instead, it must read and execute `.agents/skills/skill-evolve/SKILL.md`, which validates the drafted heuristic, requires explicit human approval, and uses `replace_file_content` (or `write_to_file` if the file does not exist) to append it to the style skill's `[skillname]-edge-cases.md` quarantine file.
 
 ## 5. Adjudication & Resubmission
 - You MUST wait for ALL invoked subagents to return an explicit `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Set a 3-minute absolute timeout using `schedule`.
-- If a subagent rejects the patch, use `send_message` to resubmit the revised artifact to the ENTIRE committee, instructing them to perform a diff-only review on the fix.
+- **Execution-Grounded Rejection Gate (VeriHarness):** Every `[VERDICT: REJECT]` MUST include a structured `<REJECTION_EVIDENCE>` block containing `FILE_AND_LINE` (`path:start-end`), `REPRODUCIBLE_CHECK` (exact command or deterministic rule check), and `FALSIFIABLE_FIX`. Any `[VERDICT: REJECT]` lacking `<REJECTION_EVIDENCE>` is discarded as non-actionable speculation without consuming a consensus round.
+- If a subagent rejects the patch with valid `<REJECTION_EVIDENCE>`, use `send_message` to resubmit the revised artifact to the ENTIRE committee, instructing them to perform a diff-only review on the fix.
 - Cap loops at a maximum of 5 rounds. If stagnation occurs, yield to the USER.
 
 ## 6. Resource Cleanup (Anti-Leak Protocol)

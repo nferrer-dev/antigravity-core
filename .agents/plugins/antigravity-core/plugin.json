@@ -1,0 +1,12 @@
+{
+  "name": "antigravity-core",
+  "displayName": "Antigravity Core Harness",
+  "description": "Stage 0-4 epistemic engineering harness, consensus committees, BRC runtime guards, and language style skills for Google Antigravity.",
+  "version": "2026.10.0",
+  "disabled": true,
+  "suggestedPrompts": [
+    "Run the Stage 0 comprehend-problem router on this task",
+    "Validate the current implementation plan with the design-validate committee",
+    "Audit the staged changes with the iterative-implement committee and secret scanner"
+  ]
+}

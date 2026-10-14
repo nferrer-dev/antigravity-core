@@ -38,7 +38,7 @@ Debaters are read-only by default. Each debater's role prompt MUST require it to
 
 1. Tag every claim as **empirically testable** (names the exact command, compile check, or PoC spike that would prove it) or **analytic** (argument from structure alone).
 2. Cite concrete evidence: file paths, line references, observed symbols.
-3. End its report with a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]` followed by a one-paragraph causal justification citing that evidence.
+3. End its report with a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]` followed by a one-paragraph causal justification citing that evidence (and, for `[VERDICT: REJECT]`, a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`).
 
 ### Phase 3: Deterministic Empirical Survival Gate
 

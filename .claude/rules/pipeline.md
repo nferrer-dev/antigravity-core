@@ -2,12 +2,18 @@
 
 The pipeline exists to catch consequential mistakes, not to tax trivial ones. Match process weight to change weight.
 
-## Proportional Triggering (Anti-Sledgehammer)
+## Proportional Triggering (Anti-Sledgehammer & 3-Tier Routing Matrix)
 
-1. **Triviality Exemption (authoritative statement)**: If a change is non-functional (typos, formatting, comments) or highly isolated (basic CSS alignment, standard variable renames), you MUST bypass the heavyweight machinery entirely — Stage 0 comprehension, technical debate, design artifacts, and consensus loops — log a 'Triviality Exemption', and proceed directly to the Agentic TDD Protocol or standard execution.
-   - **Anti-Loophole**: Modifying execution paths (e.g., shell scripts, CI mocks, build scripts, pipeline mocks) or altering global state boundaries (e.g., gitignore mutations, `CLAUDE.md`, `.claude\` configuration, MCP configuration) is explicitly defined as functional and is strictly forbidden from using this exemption, regardless of how small the text delta is.
+1. **Triviality Exemption — Tier 0 (authoritative statement)**: If a change is non-functional (typos, formatting, comments) or highly isolated (basic CSS alignment, standard variable renames), you MUST bypass the heavyweight machinery entirely — Stage 0 comprehension, technical debate, design artifacts, and consensus loops — log a 'Triviality Exemption', and proceed directly to the Agentic TDD Protocol or standard execution.
+   - **Anti-Loophole**: Modifying execution paths (e.g., shell scripts, hooks, CI mocks, build scripts, pipeline mocks) or altering global state boundaries (e.g., gitignore mutations, `CLAUDE.md`, `.claude\` configuration, MCP configuration) is explicitly defined as functional and is strictly forbidden from using this exemption, routing instead to **Tier 2** regardless of how small the text delta is.
    - This exemption and its Anti-Loophole are defined ONCE, here. Every stage below that says "non-trivial" or "trivial" refers to this definition; no stage restates or reinterprets it.
-2. **Targeted Review**: When a committee reviews a plan or diff, explicitly instruct each subagent to restrict its review strictly to its assigned domain.
+2. **3-Tier Proportional Routing Table**:
+   | Tier | Classification | Trigger Criteria | Required Pipeline Path |
+   |------|----------------|------------------|------------------------|
+   | **Tier 0** | Trivial | Purely cosmetic, non-functional, or isolated local renames (respecting the Anti-Loophole above) | Direct edit (log `Triviality Exemption`) |
+   | **Tier 1** | Standard Bounded Feature | Non-trivial change with clear requirements, bounded module scope, and no new external dependencies, security boundary changes, or architectural ambiguity | `Stage 0 -> implementation_plan.md -> Agentic TDD -> Stage 4` (skips Stage 1 swarms and Stage 2/3 debates) |
+   | **Tier 2** | High-Risk / Architectural / Security / Global State | Complex/open-ended tasks, cross-cutting refactors, new external dependencies, auth/crypto/network/hook security boundaries, or global harness config | Full `Stage 0 -> Stage 1 -> Stage 2 -> Stage 3 -> Agentic TDD -> Stage 4` |
+3. **Targeted Review**: When a committee reviews a plan or diff, explicitly instruct each subagent to restrict its review strictly to its assigned domain.
 
 ## Stage 0: Epistemic Comprehension Router
 
