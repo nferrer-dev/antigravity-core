@@ -48,6 +48,29 @@ class TestPackagePlugin(unittest.TestCase):
             self.assertTrue(
                 (out_dir / "skills" / "security-auditor" / "SKILL.md").is_file()
             )
+            for script_name in ("secret_scan.py", "mcp_keyring_launcher.py"):
+                script_path = out_dir / "scripts" / script_name
+                self.assertTrue(
+                    script_path.is_file(), f"Missing bundled script: {script_name}"
+                )
+                self.assertNotIn(b"\r\n", script_path.read_bytes())
+            scaffold_scanner = (
+                out_dir / "skills" / "harness-scaffold" / "scripts" / "secret_scan.py"
+            )
+            self.assertTrue(
+                scaffold_scanner.is_file(),
+                "Missing skills/harness-scaffold/scripts/secret_scan.py",
+            )
+            self.assertNotIn(b"\r\n", scaffold_scanner.read_bytes())
+            for excluded in (
+                "package_plugin.py",
+                "sync_global_config.py",
+                "remediate_legacy_mcp.py",
+            ):
+                self.assertFalse(
+                    (out_dir / "scripts" / excluded).exists(),
+                    f"Repo-only script must not be bundled: {excluded}",
+                )
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ ALLOWED_PLUGIN_FIELDS = {
     "version",
     "disabled",
 }
+BUNDLED_RUNTIME_SCRIPTS = ("secret_scan.py", "mcp_keyring_launcher.py")
 KEBAB_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
@@ -131,6 +132,22 @@ def build_plugin_bundle(repo_root, output_dir, enable=True):
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
 
+    scripts_src_dir = agents_dir / "scripts"
+    scripts_dst = output_dir / "scripts"
+    scripts_dst.mkdir(parents=True, exist_ok=True)
+    for script_name in BUNDLED_RUNTIME_SCRIPTS:
+        script_src = scripts_src_dir / script_name
+        if not script_src.is_file():
+            return 1, ["Missing required runtime script: %s" % script_src]
+        normalized = script_src.read_bytes().replace(b"\r\n", b"\n")
+        (scripts_dst / script_name).write_bytes(normalized)
+
+    scaffold_scripts_dst = skills_dst / "harness-scaffold" / "scripts"
+    scaffold_scripts_dst.mkdir(parents=True, exist_ok=True)
+    (scaffold_scripts_dst / "secret_scan.py").write_bytes(
+        (scripts_dst / "secret_scan.py").read_bytes()
+    )
+
     return 0, ["Packaged antigravity-core plugin bundle at %s" % output_dir]
 
 
@@ -151,6 +168,19 @@ def run_self_test(repo_root):
             return 1, ["Self-test failed: rules/AGENTS.md still starts with '---'"]
         if not (target / "hooks" / "brc-guard.ps1").is_file():
             return 1, ["Self-test failed: missing hooks/brc-guard.ps1"]
+        for script_name in BUNDLED_RUNTIME_SCRIPTS:
+            if not (target / "scripts" / script_name).is_file():
+                return 1, ["Self-test failed: missing scripts/%s" % script_name]
+        if not (
+            target / "skills" / "harness-scaffold" / "scripts" / "secret_scan.py"
+        ).is_file():
+            return 1, [
+                "Self-test failed: missing skills/harness-scaffold/scripts/secret_scan.py"
+            ]
+        if (target / "scripts" / "package_plugin.py").exists():
+            return 1, [
+                "Self-test failed: repo-only package_plugin.py must not be bundled"
+            ]
     return 0, ["package_plugin.py self-test: PASS"]
 
 
