@@ -1,6 +1,7 @@
 ---
 name: style-cpp
-description: The authoritative style guide and mechanical linter for C++ code.
+description: The authoritative Google C++ style guide and mechanical linter rubric for C++ code. Use when invoked as the C++ Style Expert during Stage 4 iterative-implement reviews. Do not invoke directly as a user slash workflow.
+disable-slash-command: true
 ---
 
 # C++ Style Guide
@@ -16,7 +17,9 @@ Do not manually guess style violations. You must rely on automated tooling to en
 - **Command**: Run `clang-format -n <file_path>`
 - *Note: If the linter is not installed in the environment, you are authorized to install it or flag it to the user.*
 
-## 3. Learned Edge Cases
-*(This section acts as the trainable state. When the Iterative-Implement loop catches a C++-specific anti-pattern that the mechanical enforcer misses, the Style Expert MUST append the new rule here.)*
+## 3. Quarantined Edge Cases & SkillOpt Protocol
+1. Read companion [style-cpp-edge-cases.md](./style-cpp-edge-cases.md) via `view_file` and verify the localized diff against all recorded heuristics.
+2. **Immutable `SKILL.md` Mandate**: Never append new rules directly to `SKILL.md`. If you detect a recurring C++-specific anti-pattern missed by the mechanical linter, read and execute `.agents/skills/skill-evolve/SKILL.md` to propose appending a 1-2 sentence heuristic to `style-cpp-edge-cases.md`.
 
-- (No learned rules yet.)
+## 4. Output Contract (VeriHarness Gate)
+Conclude your review with `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Every `[VERDICT: REJECT]` MUST include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`.

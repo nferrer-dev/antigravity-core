@@ -18,6 +18,7 @@ import tempfile
 from pathlib import Path
 
 ALLOWED_PLUGIN_FIELDS = {
+    "$schema",
     "name",
     "description",
     "logo",
@@ -26,8 +27,12 @@ ALLOWED_PLUGIN_FIELDS = {
     "version",
     "disabled",
 }
+PLUGIN_SCHEMA_URL = "https://antigravity.google/schemas/v1/plugin.json"
 BUNDLED_RUNTIME_SCRIPTS = ("secret_scan.py", "mcp_keyring_launcher.py")
 KEBAB_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+FORBIDDEN_CONTROL_BYTES = (
+    set(range(0x00, 0x09)) | {0x0B, 0x0C, 0x0D} | set(range(0x0E, 0x20))
+)
 
 
 def validate_plugin_manifest(data):
@@ -40,6 +45,10 @@ def validate_plugin_manifest(data):
         violations.append(
             "plugin.json contains unsupported top-level fields: %s" % unknown
         )
+    if "$schema" in data and data["$schema"] != PLUGIN_SCHEMA_URL:
+        violations.append(
+            "plugin.json '$schema' must be %r" % PLUGIN_SCHEMA_URL
+        )
     name = data.get("name", "")
     if not isinstance(name, str) or not KEBAB_NAME_RE.fullmatch(name):
         violations.append("plugin.json 'name' must be lowercase kebab-case")
@@ -50,6 +59,7 @@ def validate_plugin_manifest(data):
     if prompts is not None:
         if (
             not isinstance(prompts, list)
+            or len(prompts) == 0
             or len(prompts) > 3
             or not all(isinstance(p, str) and p.strip() for p in prompts)
         ):
@@ -62,10 +72,21 @@ def validate_plugin_manifest(data):
 
 
 def strip_leading_frontmatter_fence(raw_bytes):
-    """Remove a leading '---\\n' marker so rules/AGENTS.md is plain Markdown."""
+    """Remove a leading YAML frontmatter block or bare '---\\n' fence from rules/AGENTS.md."""
     cleaned = raw_bytes.replace(b"\r\n", b"\n")
+    if cleaned.startswith(b"\xef\xbb\xbf"):
+        cleaned = cleaned[3:]
     if cleaned.startswith(b"---\n"):
-        cleaned = cleaned[4:]
+        lines = cleaned.split(b"\n")
+        closing_idx = None
+        for idx in range(1, min(len(lines), 35)):
+            if lines[idx].strip() == b"---":
+                closing_idx = idx
+                break
+        if closing_idx is not None:
+            cleaned = b"\n".join(lines[closing_idx + 1 :])
+        else:
+            cleaned = cleaned[4:]
     return cleaned
 
 
@@ -75,8 +96,22 @@ def build_plugin_bundle(repo_root, output_dir, enable=True):
     output_dir = Path(output_dir)
     agents_dir = repo_root / ".agents"
     plugin_src_dir = agents_dir / "plugins" / "antigravity-core"
-    manifest_src = plugin_src_dir / "plugin.json"
 
+    repo_resolved = repo_root.resolve()
+    agents_resolved = agents_dir.resolve()
+    src_resolved = plugin_src_dir.resolve()
+    out_resolved = output_dir.resolve()
+    if (
+        out_resolved in {repo_resolved, agents_resolved, src_resolved}
+        or out_resolved in repo_resolved.parents
+        or src_resolved in out_resolved.parents
+    ):
+        return 1, [
+            "Refusing to overwrite repository, ancestor, or in-repo source manifest directory: %s"
+            % output_dir
+        ]
+
+    manifest_src = plugin_src_dir / "plugin.json"
     if not manifest_src.is_file():
         return 1, ["Missing source manifest: %s" % manifest_src]
 
@@ -102,6 +137,19 @@ def build_plugin_bundle(repo_root, output_dir, enable=True):
             readme_src.read_bytes().replace(b"\r\n", b"\n")
         )
 
+    assets_src = plugin_src_dir / "assets"
+    if assets_src.is_dir():
+        shutil.copytree(assets_src, output_dir / "assets")
+
+    for sidecars_candidate in (plugin_src_dir / "sidecars", agents_dir / "sidecars"):
+        if sidecars_candidate.is_dir():
+            shutil.copytree(
+                sidecars_candidate,
+                output_dir / "sidecars",
+                dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            )
+
     for json_name in ("hooks.json", "mcp_config.json"):
         src = agents_dir / json_name
         if not src.is_file():
@@ -123,6 +171,12 @@ def build_plugin_bundle(repo_root, output_dir, enable=True):
     (rules_dst / "AGENTS.md").write_bytes(
         strip_leading_frontmatter_fence(agents_md_src.read_bytes())
     )
+    rules_src_dir = agents_dir / "rules"
+    if rules_src_dir.is_dir():
+        for rule_path in sorted(rules_src_dir.glob("*.md")):
+            (rules_dst / rule_path.name).write_bytes(
+                rule_path.read_bytes().replace(b"\r\n", b"\n")
+            )
 
     skills_src = agents_dir / "skills"
     skills_dst = output_dir / "skills"
@@ -154,6 +208,18 @@ def build_plugin_bundle(repo_root, output_dir, enable=True):
 def run_self_test(repo_root):
     """Run an in-memory/tempdir self-test of the plugin bundler."""
     with tempfile.TemporaryDirectory() as tmp:
+        for forbidden in (
+            Path(repo_root),
+            Path(repo_root) / ".agents",
+            Path(repo_root) / ".agents" / "plugins" / "antigravity-core",
+        ):
+            f_code, _ = build_plugin_bundle(repo_root, forbidden, enable=True)
+            if f_code == 0:
+                return 1, [
+                    "Self-test failed: bundler did not reject forbidden target %s"
+                    % forbidden
+                ]
+
         target = Path(tmp) / "antigravity-core"
         code, messages = build_plugin_bundle(repo_root, target, enable=True)
         if code != 0:
@@ -161,11 +227,35 @@ def run_self_test(repo_root):
         built_manifest = json.loads(
             (target / "plugin.json").read_bytes().decode("utf-8")
         )
+        if built_manifest.get("$schema") != PLUGIN_SCHEMA_URL:
+            return 1, [
+                "Self-test failed: expected $schema=%r in bundled plugin.json"
+                % PLUGIN_SCHEMA_URL
+            ]
         if built_manifest.get("disabled") is not False:
             return 1, ["Self-test failed: expected disabled=false in enabled bundle"]
         rules_bytes = (target / "rules" / "AGENTS.md").read_bytes()
         if rules_bytes.startswith(b"---"):
             return 1, ["Self-test failed: rules/AGENTS.md still starts with '---'"]
+        if len(rules_bytes) > 18000:
+            return 1, [
+                "Self-test failed: rules/AGENTS.md exceeds 18000 bytes (%d)"
+                % len(rules_bytes)
+            ]
+        rules_src_dir = Path(repo_root) / ".agents" / "rules"
+        if rules_src_dir.is_dir():
+            for rule_src in sorted(rules_src_dir.glob("*.md")):
+                bundled_rule = target / "rules" / rule_src.name
+                if not bundled_rule.is_file():
+                    return 1, [
+                        "Self-test failed: missing bundled modular rule rules/%s"
+                        % rule_src.name
+                    ]
+                if not bundled_rule.read_bytes().startswith(b"---\n"):
+                    return 1, [
+                        "Self-test failed: modular rule rules/%s lost YAML frontmatter"
+                        % rule_src.name
+                    ]
         if not (target / "hooks" / "brc-guard.ps1").is_file():
             return 1, ["Self-test failed: missing hooks/brc-guard.ps1"]
         for script_name in BUNDLED_RUNTIME_SCRIPTS:
@@ -181,6 +271,19 @@ def run_self_test(repo_root):
             return 1, [
                 "Self-test failed: repo-only package_plugin.py must not be bundled"
             ]
+        for bundled_file in sorted(target.rglob("*")):
+            if not bundled_file.is_file():
+                continue
+            if bundled_file.suffix in {".md", ".json", ".ps1", ".py"}:
+                raw = bundled_file.read_bytes()
+                if raw.startswith(b"\xef\xbb\xbf"):
+                    return 1, [
+                        "Self-test failed: UTF-8 BOM in %s" % bundled_file
+                    ]
+                if any(b in FORBIDDEN_CONTROL_BYTES for b in raw):
+                    return 1, [
+                        "Self-test failed: control/CR byte in %s" % bundled_file
+                    ]
     return 0, ["package_plugin.py self-test: PASS"]
 
 

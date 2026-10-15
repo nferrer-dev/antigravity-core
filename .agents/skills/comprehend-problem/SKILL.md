@@ -1,6 +1,6 @@
 ---
 name: comprehend-problem
-description: The Stage 0 Epistemic Router to deterministically comprehend ambiguous problems via structural, logical, or exploratory modeling.
+description: The Stage 0 Epistemic Router to deterministically comprehend non-trivial or ambiguous problems via structural, logical, or exploratory modeling. Use before planning or coding Tier 1 and Tier 2 tasks. Do not use for Tier 0 trivial or cosmetic edits.
 ---
 # Stage 0: Comprehend Problem
 
@@ -27,8 +27,9 @@ Execute the chosen path using the designated tooling:
 3. **Graceful Degradation (Polyfill)**: If the `chiasmus` server is unavailable, you MUST fallback to executing the local Python Z3 polyfill script located at `.agents/skills/comprehend-problem/scripts/logical_z3_polyfill.py` via `run_command` (`python .agents/skills/comprehend-problem/scripts/logical_z3_polyfill.py <spec_json_path> <output_json_path>`).
 
 ### C. Exploratory (Blackboard)
-1. Use `invoke_subagent` to spawn multiple decoupled research subagents.
-2. Instruct them to map the dead-ends and vectors of the problem space and report back.
+1. Use `invoke_subagent` (`TypeName: "research"`, `Workspace: "inherit"`, `Model: "inherit"`) to spawn multiple decoupled research subagents under a 3-minute `schedule` timeout (`DurationSeconds=180`, `TimerCondition="never"`).
+2. Assign each subagent a disjoint output file in `scratch/` (if output exceeds 200 lines) and explicitly forbid `run_command` and `read_url_content` in their prompt to prevent non-interactive permission or redirect hangs.
+3. Instruct them to map the dead-ends and vectors of the problem space and report back via `send_message`, then terminate the timer (`manage_task(Action="kill")`) and subagents (`manage_subagents(Action="kill")`).
 
 ## 3. The MVC "Pull" Mandate (CRITICAL)
 You are strictly forbidden from dumping the raw graphs or SMT proofs directly into the prompt of downstream Stage 1 subagents. Token bloat causes catastrophic hallucination.

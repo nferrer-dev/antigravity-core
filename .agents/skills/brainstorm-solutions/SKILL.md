@@ -1,6 +1,6 @@
 ---
 name: brainstorm-solutions
-description: Formal Stage 1 Divergent Brainstorming skill. Enforces the ADHD (Parallel Divergent Ideation) and ReDNA frameworks to generate mutually exclusive candidate solutions via zero shared context subagent swarms.
+description: Formal Stage 1 Divergent Brainstorming skill enforcing the ADHD and ReDNA frameworks to generate mutually exclusive candidate solutions via zero-shared-context subagent swarms. Use for open-ended Tier 2 architectural problems after Stage 0. Do not use for bounded Tier 0 or Tier 1 tasks.
 ---
 
 # Stage 1: Divergent Brainstorming (ADHD Framework)
@@ -12,7 +12,7 @@ Your objective is to generate multiple, radically different candidate solutions 
 Premature consensus leads to Degeneration of Thought (DoT). You are strictly forbidden from attempting to brainstorm multiple solutions linearly within a single context window. You MUST spawn a decoupled swarm of specialized subagents to generate the ideas in parallel.
 
 ## 2. Swarm Orchestration Mechanics
-You must use the `invoke_subagent` tool to spawn exactly **three (3)** parallel subagents. 
+You must use the `invoke_subagent` tool (`TypeName: "research"`, `Workspace: "inherit"`, `Model: "inherit"`) to spawn exactly **three (3)** parallel subagents under a 3-minute `schedule` timeout (`DurationSeconds=180`, `TimerCondition="never"`). Explicitly forbid `run_command` and `read_url_content` in each subagent's prompt to prevent non-interactive permission or redirect hangs.
 
 ### A. Cognitive Framing
 To guarantee true divergence, you must assign each subagent a radically different, biased persona in their `Prompt`.
@@ -30,9 +30,9 @@ You MUST pass the absolute file path of the Stage 0 Epistemic Context (e.g., the
 You must explicitly instruct the subagents in their prompt that they are **strictly forbidden from writing their solutions to disk directly**. 
 Instead, they MUST transmit their final candidate solution back to you (the Parent Orchestrator) using the `send_message` tool.
 
-## 4. Sequential Compilation (MVC Pull)
+## 4. Sequential Compilation (MVC Pull) & Teardown
 As the Parent Orchestrator, you must wait for all three subagents to respond.
-Once you have received all three candidate solutions, you must sequentially compile them into a single temporary text file strictly isolated within the `scratch/` directory (e.g., `scratch/candidate_solutions.md`).
+Once you have received all three candidate solutions, cancel the timeout timer via `manage_task(Action="kill")`, terminate the brainstorming swarm via `manage_subagents(Action="kill")`, and sequentially compile their responses into a single temporary text file strictly isolated within the `scratch/` directory (e.g., `scratch/candidate_solutions.md`).
 
 ## 5. Handoff to Stage 2
 Once the `scratch/candidate_solutions.md` file is compiled, your Stage 1 execution is complete. You must pass the absolute path of this file downstream to trigger the Stage 2 `technical-debate` workflow.

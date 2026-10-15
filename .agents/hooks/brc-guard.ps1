@@ -107,8 +107,9 @@ function Test-SecretFilePath {
     if ($norm -match '\.env\.(example|sample|template|dist|schema)$') { return $false }
     if ($norm -match '\.deprecated-redacted$') { return $false }
     if ($norm -match '(^|\\)\.env(\.[A-Za-z0-9_-]+)?$') { return $true }
-    if ($norm -match '\.(pem|key|p12|pfx)$') { return $true }
-    if ($norm -match '(^|\\)(id_rsa|id_ed25519|\.npmrc|\.pypirc|\.netrc)$') { return $true }
+    if ($norm -match '\.(pem|key|p12|pfx|p8|keystore|jks)$') { return $true }
+    if ($norm -match '(^|\\)(id_rsa|id_ed25519|id_ecdsa|id_dsa|\.npmrc|\.pypirc|\.netrc|\.git-credentials)$') { return $true }
+    if ($norm -match '(\.aws\\credentials|\.kube\\config|\.docker\\config\.json)$') { return $true }
     if ($norm -match 'antigravity\\mcp_config\.json$') { return $true }
     return $false
 }
@@ -117,13 +118,13 @@ function Test-TamperFilePath {
     param([string]$PathStr)
     if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
     $norm = $PathStr.Replace('/', '\')
-    if ($norm -match '(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json)$') {
+    if ($norm -match '(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|plugin\.json)$') {
         return $true
     }
     return $false
 }
 
-$isWriteTool = $toolName -match '^(write_to_file|replace_file_content|Edit|Write|MultiEdit)$'
+$isWriteTool = $toolName -match '^(write_to_file|(?:multi_)?replace_file_content|(?:Multi)?Edit|Write)$'
 $isReadOrWriteTool = $isWriteTool -or ($toolName -match '^(view_file|Read)$')
 
 if ($isReadOrWriteTool -and (Test-SecretFilePath $filePath)) {
@@ -151,10 +152,10 @@ $candidates.Add($cmd)
 $canon = Get-CanonicalCommand $cmd
 if ($canon -ne $cmd) { $candidates.Add($canon) }
 
-# Detect -EncodedCommand / -enc / -e with Base64 payload
+# Detect -EncodedCommand / -encoded / -enco / -enc / -en / -e with Base64 payload
 foreach ($checkStr in @($cmd, $canon)) {
-    if ($checkStr -match '(^|\s)-(EncodedCommand|enc|e)\s+([A-Za-z0-9+/=]{8,})') {
-        $b64 = $Matches[3]
+    if ($checkStr -match '(^|\s)-(?:e|en|enc|enco|encoded|encodedcommand)\s+([A-Za-z0-9+/=]{8,})') {
+        $b64 = $Matches[2]
         try {
             $bytes = [System.Convert]::FromBase64String($b64)
             $decUtf16 = [System.Text.Encoding]::Unicode.GetString($bytes)
@@ -186,10 +187,15 @@ foreach ($evalCmd in $candidates) {
         Emit-Deny 'inline-secret-token' 'Inline API token detected in command'
     }
 
-    # Shell access to legacy antigravity/mcp_config.json or .env
+    # Shell access to legacy antigravity/mcp_config.json, .env, or cloud/SSH credentials
     if (($evalCmd -match 'antigravity[/\\]mcp_config\.json(?!\.deprecated-redacted)') -or
-        ($evalCmd -match '(^|\s)(cat|type|Get-Content|more|less|head|tail)\s+[^\r\n]*?(^|[/\\"\s])\.env(?!\.(example|sample|template))(["\s]|$)')) {
+        ($evalCmd -match '(^|\s)(cat|type|Get-Content|more|less|head|tail)\s+[^\r\n]*?(^|[/\\"\s])(\.env(?!\.(example|sample|template))|\.aws[/\\]credentials|\.kube[/\\]config|\.docker[/\\]config\.json|\.git-credentials|id_rsa|id_ed25519|id_ecdsa|id_dsa)(["\s]|$)')) {
         Emit-Deny 'secret-file-shell-read' $evalCmd
+    }
+
+    # Shell self-tampering writes/redirects targeting governance configs
+    if ($evalCmd -match '(>|>>|\bOut-File\b|\bSet-Content\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bcp\b|\bmv\b|\btee\b)[^\r\n]*?(hooks\.json|brc-guard\.ps1|telemetry-append\.ps1|mcp_config\.json|plugin\.json)') {
+        Emit-ForceAsk 'harness-config-self-tampering' $evalCmd
     }
 
     # Rule 1: recursive force delete outside temp/scratch

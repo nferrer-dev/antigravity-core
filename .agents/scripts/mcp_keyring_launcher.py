@@ -17,11 +17,17 @@ Usage:
 """
 import argparse
 import getpass
+import hashlib
 import os
 import subprocess
 import sys
 
 DEFAULT_SERVICE = "antigravity-mcp"
+
+
+def _sha256_prefix(val):
+    """Return an 8-hex-char SHA-256 prefix without exposing secret plaintext."""
+    return hashlib.sha256(val.encode("utf-8")).hexdigest()[:8]
 
 
 def get_secret(service, key_name):
@@ -55,6 +61,19 @@ def build_injected_env(service, env_keys, base_env=None):
     return env
 
 
+def check_secrets(service, check_keys):
+    """Verify whether check_keys exist in the OS keyring without printing values."""
+    missing = 0
+    for key_name in check_keys:
+        val = get_secret(service, key_name)
+        if val:
+            print("%s: PRESENT (sha256:%s)" % (key_name, _sha256_prefix(val)))
+        else:
+            print("%s: MISSING" % key_name)
+            missing += 1
+    return 0 if missing == 0 else 1
+
+
 def run_with_keyring(service, env_keys, command, base_env=None):
     """Inject secrets from keyring and execute command with direct stdio inheritance."""
     if not command:
@@ -69,6 +88,36 @@ def run_with_keyring(service, env_keys, command, base_env=None):
         check=False,
     )
     return completed.returncode
+
+
+def run_self_test():
+    """Run deterministic in-memory self-tests for keyring injection and fail-closed checks."""
+    from unittest import mock
+
+    vault = {("antigravity-mcp", "SELF_TEST_KEY"): "self-test-secret-value-99"}
+    with mock.patch(
+        __name__ + ".get_secret", side_effect=lambda s, k: vault.get((s, k))
+    ):
+        env = build_injected_env(
+            service="antigravity-mcp",
+            env_keys=["SELF_TEST_KEY"],
+            base_env={"BASE": "1"},
+        )
+        if env.get("SELF_TEST_KEY") != "self-test-secret-value-99":
+            sys.stderr.write("SELF-TEST FAILED: secret injection mismatch\n")
+            return 1
+        try:
+            build_injected_env(
+                service="antigravity-mcp",
+                env_keys=["MISSING_KEY"],
+                base_env={},
+            )
+            sys.stderr.write("SELF-TEST FAILED: missing key did not raise RuntimeError\n")
+            return 1
+        except RuntimeError:
+            pass
+    print("mcp_keyring_launcher.py self-test: PASS")
+    return 0
 
 
 def main(argv=None):
@@ -94,6 +143,19 @@ def main(argv=None):
         help="Interactively store a secret in the OS keyring.",
     )
     parser.add_argument(
+        "--check",
+        dest="check_keys",
+        action="append",
+        default=[],
+        metavar="KEY_NAME",
+        help="Verify secret readiness in the OS keyring (prints sha256 prefix only).",
+    )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Run built-in deterministic self-test.",
+    )
+    parser.add_argument(
         "--env",
         dest="env_keys",
         action="append",
@@ -102,6 +164,12 @@ def main(argv=None):
         help="Environment variable name to inject from the OS keyring (repeatable).",
     )
     args = parser.parse_args(raw_args)
+
+    if args.self_test:
+        return run_self_test()
+
+    if args.check_keys:
+        return check_secrets(args.service, args.check_keys)
 
     if args.set_key:
         val = getpass.getpass("Enter secret value for %s (%s): " % (args.set_key, args.service))

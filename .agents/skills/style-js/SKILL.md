@@ -1,6 +1,7 @@
 ---
 name: style-js
-description: The authoritative style guide and mechanical linter for JavaScript/TypeScript code.
+description: The authoritative Airbnb style guide and mechanical linter rubric for JavaScript/TypeScript code. Use when invoked as the JS/TS Style Expert during Stage 4 iterative-implement reviews. Do not invoke directly as a user slash workflow.
+disable-slash-command: true
 ---
 
 # JavaScript/TypeScript Style Guide
@@ -16,7 +17,9 @@ Do not manually guess style violations. You must rely on automated tooling to en
 - **Command**: Run `eslint <file_path>` or `prettier --check <file_path>`
 - *Note: If the linter is not installed in the environment, you are authorized to run it via `npx eslint <file_path>` or flag it to the user.*
 
-## 3. Learned Edge Cases
-*(This section acts as the trainable state. When the Iterative-Implement loop catches a JS/TS-specific anti-pattern that the mechanical enforcer misses, the Style Expert MUST append the new rule here.)*
+## 3. Quarantined Edge Cases & SkillOpt Protocol
+1. Read companion [style-js-edge-cases.md](./style-js-edge-cases.md) via `view_file` and verify the localized diff against all recorded heuristics.
+2. **Immutable `SKILL.md` Mandate**: Never append new rules directly to `SKILL.md`. If you detect a recurring JS/TS-specific anti-pattern missed by the mechanical linter, read and execute `.agents/skills/skill-evolve/SKILL.md` to propose appending a 1-2 sentence heuristic to `style-js-edge-cases.md`.
 
-- (No learned rules yet.)
+## 4. Output Contract (VeriHarness Gate)
+Conclude your review with `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Every `[VERDICT: REJECT]` MUST include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`.

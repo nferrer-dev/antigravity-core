@@ -1,81 +1,179 @@
+"""Local pure-Python structural dependency graph polyfill for Stage 0 comprehend-problem.
+
+Builds a deterministic JSON AST dependency and symbol graph for Python files when
+the code-graph-context MCP server is unavailable.
+
+Usage:
+    python structural_graph_polyfill.py <target_directory> <output_json_path>
+    python structural_graph_polyfill.py --self-test
+"""
+import argparse
 import ast
 import json
 import os
 import sys
+import tempfile
+from pathlib import Path
+
 
 def parse_file(filepath):
-    """Parse a single python file and return its imports and function definitions."""
+    """Parse a single Python file and return its imports, classes, and functions."""
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
     except UnicodeDecodeError:
         try:
-            with open(filepath, 'r', encoding='utf-16') as f:
+            with open(filepath, "r", encoding="utf-16") as f:
                 content = f.read()
         except UnicodeDecodeError:
-            return {"imports": [], "functions": [], "error": "UnicodeDecodeError"}
-    
+            return {
+                "imports": [],
+                "classes": [],
+                "functions": [],
+                "error": "UnicodeDecodeError",
+            }
+
     try:
         tree = ast.parse(content)
     except SyntaxError:
-        return {"imports": [], "functions": [], "error": "SyntaxError"}
-    
-    imports = []
+        return {
+            "imports": [],
+            "classes": [],
+            "functions": [],
+            "error": "SyntaxError",
+        }
+
+    imports = set()
+    classes = []
     functions = []
-    
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                imports.append(alias.name)
+                imports.add(alias.name)
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                imports.append(node.module)
-        elif isinstance(node, ast.FunctionDef):
+                imports.add(node.module)
+        elif isinstance(node, ast.ClassDef):
+            classes.append(node.name)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             functions.append(node.name)
-            
-    return {"imports": list(set(imports)), "functions": functions}
+
+    return {
+        "imports": sorted(imports),
+        "classes": sorted(classes),
+        "functions": sorted(functions),
+    }
+
 
 def build_graph(directory):
-    """Build a structural dependency graph for a directory."""
+    """Build a deterministic structural dependency graph for a directory."""
     graph = {"nodes": [], "edges": []}
-    
-    for root, _, files in os.walk(directory):
-        for file in files:
-            if file.endswith('.py'):
-                filepath = os.path.join(root, file)
-                rel_path = os.path.relpath(filepath, directory)
-                
-                data = parse_file(filepath)
-                if "error" in data:
-                    continue
-                    
-                graph["nodes"].append({
+
+    for root, dirnames, files in os.walk(directory):
+        dirnames[:] = sorted(d for d in dirnames if d not in {"__pycache__", ".git"})
+        for file in sorted(files):
+            if not file.endswith(".py"):
+                continue
+            filepath = os.path.join(root, file)
+            rel_path = os.path.relpath(filepath, directory).replace("\\", "/")
+
+            data = parse_file(filepath)
+            if "error" in data:
+                continue
+
+            graph["nodes"].append(
+                {
                     "id": rel_path,
                     "type": "file",
-                    "functions": data["functions"]
-                })
-                
-                for imp in data["imports"]:
-                    graph["edges"].append({
+                    "classes": data["classes"],
+                    "functions": data["functions"],
+                }
+            )
+
+            for imp in data["imports"]:
+                graph["edges"].append(
+                    {
                         "source": rel_path,
                         "target": imp,
-                        "relation": "imports"
-                    })
-                    
+                        "relation": "imports",
+                    }
+                )
+
     return graph
 
+
+def run_self_test():
+    """Verify AST parsing, deterministic graph generation, and LF UTF-8 output."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        sample_py = tmp_dir / "sample.py"
+        sample_py.write_text(
+            "import json\nfrom pathlib import Path\n\n"
+            "class Widget:\n    pass\n\n"
+            "def sync_fn():\n    return 1\n\n"
+            "async def async_fn():\n    return 2\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        out_json = tmp_dir / "graph.json"
+        graph = build_graph(str(tmp_dir))
+        out_json.write_text(
+            json.dumps(graph, indent=2) + "\n", encoding="utf-8", newline="\n"
+        )
+        raw = out_json.read_bytes()
+        if b"\r" in raw:
+            print("SELF-TEST FAIL: CRLF detected in output JSON", file=sys.stderr)
+            return 1
+        loaded = json.loads(raw.decode("utf-8"))
+        nodes = loaded.get("nodes", [])
+        if len(nodes) != 1 or nodes[0]["id"] != "sample.py":
+            print("SELF-TEST FAIL: unexpected nodes %r" % nodes, file=sys.stderr)
+            return 1
+        if nodes[0]["classes"] != ["Widget"]:
+            print("SELF-TEST FAIL: missing ClassDef Widget", file=sys.stderr)
+            return 1
+        if nodes[0]["functions"] != ["async_fn", "sync_fn"]:
+            print("SELF-TEST FAIL: missing functions %r" % nodes[0]["functions"], file=sys.stderr)
+            return 1
+    print("structural_graph_polyfill.py self-test: PASS")
+    return 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Build a deterministic AST dependency graph JSON for a directory."
+    )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Run built-in deterministic self-test and exit.",
+    )
+    parser.add_argument(
+        "target_directory",
+        nargs="?",
+        help="Target directory to scan for Python files.",
+    )
+    parser.add_argument(
+        "output_json_path",
+        nargs="?",
+        help="Destination path for the output JSON graph.",
+    )
+    args = parser.parse_args(argv)
+
+    if args.self_test:
+        return run_self_test()
+    if not args.target_directory or not args.output_json_path:
+        parser.print_usage(sys.stderr)
+        return 1
+
+    graph = build_graph(args.target_directory)
+    Path(args.output_json_path).write_text(
+        json.dumps(graph, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+    print("Success! Graph written to %s" % args.output_json_path)
+    return 0
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python structural_graph_polyfill.py <target_directory> <output_json_path>")
-        sys.exit(1)
-        
-    target_dir = sys.argv[1]
-    output_path = sys.argv[2]
-    
-    print(f"Building structural graph for {target_dir}...")
-    graph = build_graph(target_dir)
-    
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(graph, f, indent=2)
-        
-    print(f"Success! Graph written to {output_path}")
+    sys.exit(main())

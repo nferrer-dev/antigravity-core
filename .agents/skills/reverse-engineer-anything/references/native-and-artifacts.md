@@ -1,5 +1,14 @@
 # Native, managed, and packaged artifacts
 
+## Contents
+- [Recorded Linux crashes](#recorded-linux-crashes)
+- [Offline ELF layout](#offline-elf-layout)
+- [Native targets](#native-targets)
+- [DOS MZ with Ghidra](#dos-mz-with-ghidra)
+- [Managed PE/CLI and .NET NativeAOT](#managed-pecli)
+- [Packages and extraction](#packages-and-extraction)
+- [Offline PE resource inventory](#offline-pe-resource-inventory)
+
 ## Recorded Linux crashes
 
 Use `inspect_recorded_crash` with an explicit Linux x86-64 ELF core path to

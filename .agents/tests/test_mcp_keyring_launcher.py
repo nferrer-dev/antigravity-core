@@ -59,6 +59,71 @@ class TestMcpKeyringLauncher(unittest.TestCase):
             )
             self.assertEqual(code, 0)
 
+    def test_check_flag_reports_fingerprint_without_leaking_secret(self):
+        import io
+        import mcp_keyring_launcher as mkl
+
+        vault = {("antigravity-mcp", "TEST_API_KEY"): "sk-proj-secret1234567890abcdef"}
+        buf = io.StringIO()
+        with mock.patch.object(
+            mkl, "get_secret", side_effect=lambda s, k: vault.get((s, k))
+        ), mock.patch("sys.stdout", buf):
+            code_ok = mkl.main(["--check", "TEST_API_KEY"])
+            code_missing = mkl.main(["--check", "MISSING_KEY"])
+        out = buf.getvalue()
+        self.assertEqual(code_ok, 0)
+        self.assertEqual(code_missing, 1)
+        self.assertIn("PRESENT (sha256:", out)
+        self.assertIn("MISSING", out)
+        self.assertNotIn("sk-proj-secret1234567890abcdef", out)
+
+    def test_self_test_cli_flag(self):
+        import subprocess
+
+        script = SCRIPTS_DIR / "mcp_keyring_launcher.py"
+        res = subprocess.run(
+            [sys.executable, str(script), "--self-test"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+
+    def test_sync_global_config_checks_global_mcp_config(self):
+        import sync_global_config as sgc
+
+        with tempfile.TemporaryDirectory() as tmp:
+            global_dir = Path(tmp)
+            clean_mcp = {
+                "mcpServers": {
+                    "code-graph-context": {"command": "cgc", "args": ["mcp", "start"]}
+                }
+            }
+            (global_dir / "mcp_config.json").write_bytes(
+                (json.dumps(clean_mcp, indent=2) + "\n").encode("utf-8")
+            )
+            errs_clean, msgs_clean = sgc.check_global_mcp_config(REPO_ROOT, global_dir)
+            self.assertEqual(errs_clean, [])
+            self.assertTrue(any("mcp_config.json OK" in m for m in msgs_clean))
+
+            dirty_mcp = {
+                "mcpServers": {
+                    "code-graph-context": {
+                        "command": "cgc",
+                        "args": ["mcp", "start"],
+                        "env": {"OPENAI_API_KEY": "sk-proj-secretvalue1234567890abcdef"},
+                    }
+                }
+            }
+            (global_dir / "mcp_config.json").write_bytes(
+                (json.dumps(dirty_mcp, indent=2) + "\n").encode("utf-8")
+            )
+            errs_dirty, _ = sgc.check_global_mcp_config(REPO_ROOT, global_dir)
+            self.assertTrue(
+                any("plaintext secret" in e for e in errs_dirty),
+                "Expected plaintext secret error, got %r" % errs_dirty,
+            )
+
 
 class TestRemediateLegacyMcp(unittest.TestCase):
     def test_scrubs_and_migrates_without_leaking_values(self):

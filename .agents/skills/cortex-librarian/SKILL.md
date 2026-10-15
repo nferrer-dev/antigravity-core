@@ -1,6 +1,7 @@
 ---
 name: cortex-librarian
-description: Queries the local Cortex vector database to retrieve cited architectural best practices.
+description: Queries the local Cortex vector database to retrieve cited architectural best practices and learned heuristics. Use when invoked as the read-only Cortex Librarian subagent during Stage 2/3 debates. Do not use to mutate code or Cortex state.
+disable-slash-command: true
 ---
 
 # Cortex Librarian

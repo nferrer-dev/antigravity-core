@@ -1,6 +1,7 @@
 ---
 name: style-java
-description: The authoritative style guide and mechanical linter for Java code.
+description: The authoritative Google Java style guide and mechanical linter rubric for Java code. Use when invoked as the Java Style Expert during Stage 4 iterative-implement reviews. Do not invoke directly as a user slash workflow.
+disable-slash-command: true
 ---
 
 # Java Style Guide
@@ -16,7 +17,9 @@ Do not manually guess style violations. You must rely on automated tooling to en
 - **Command**: Run `checkstyle -c google_checks.xml <file_path>` (or standard Maven/Gradle checkstyle plugins).
 - *Note: If the linter is not installed in the environment, you are authorized to install it or flag it to the user.*
 
-## 3. Learned Edge Cases
-*(This section acts as the trainable state. When the Iterative-Implement loop catches a Java-specific anti-pattern that the mechanical enforcer misses, the Style Expert MUST append the new rule here.)*
+## 3. Quarantined Edge Cases & SkillOpt Protocol
+1. Read companion [style-java-edge-cases.md](./style-java-edge-cases.md) via `view_file` and verify the localized diff against all recorded heuristics.
+2. **Immutable `SKILL.md` Mandate**: Never append new rules directly to `SKILL.md`. If you detect a recurring Java-specific anti-pattern missed by the mechanical linter, read and execute `.agents/skills/skill-evolve/SKILL.md` to propose appending a 1-2 sentence heuristic to `style-java-edge-cases.md`.
 
-- (No learned rules yet.)
+## 4. Output Contract (VeriHarness Gate)
+Conclude your review with `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Every `[VERDICT: REJECT]` MUST include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`.

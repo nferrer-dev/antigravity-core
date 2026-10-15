@@ -41,16 +41,19 @@ FORBIDDEN_PS1_CALL = "Invoke-" + "Expression"
 SCAN_EXTENSIONS = {".md", ".json", ".ps1", ".py"}
 INV8_EXCLUDED_DIRS = {"tests", "__pycache__"}
 
-NAME_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
+NAME_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 XML_TAG_RE = re.compile(r"<\s*[A-Za-z/!][^>]*>")
 FM_LINE_RE = re.compile(r"([a-z][a-z0-9_-]*):(?:\s+(.*))?")
 HOOK_SCRIPT_RE = re.compile(r"(?:\./hooks|\.agents/hooks)/([A-Za-z0-9._-]+\.ps1)")
 CONCRETE_PATH_RE = re.compile(
     r"(?:^|[\s(`\"'])(?:(\.agents/[A-Za-z0-9._/-]+)|file:///C:/Projects/antigravity-core/(\.agents/[A-Za-z0-9._/-]+))"
 )
+RELATIVE_MD_LINK_RE = re.compile(
+    r"\[[^\]]+\]\((?!https?:|mailto:|file:|sidecar:|customization:|conversation:|#)([^)#\s]+)"
+)
 
 GROUPED_HOOK_EVENTS = {"PreToolUse", "PostToolUse"}
-FLAT_HOOK_EVENTS = {"PreInvocation", "PostInvocation", "Stop"}
+FLAT_HOOK_EVENTS = {"SessionStart", "PreInvocation", "PostInvocation", "Stop"}
 VALID_HOOK_EVENTS = GROUPED_HOOK_EVENTS | FLAT_HOOK_EVENTS
 
 FORBIDDEN_CONTROL_BYTES = (
@@ -73,9 +76,43 @@ EXPECTED_AGENTS_SKILLS = (
     "style-java",
     "style-rust",
     "markdown-style-expert",
+    "harness-scaffold",
+    "reverse-engineer-anything",
+    "restart-phone-ui",
+    "cortex-librarian",
 )
 
+AGENTS_MD_MAX_BYTES = 18000
+RULE_FILE_MAX_BYTES = 24000
+VALID_RULE_TRIGGERS = {"always_on", "model_decision", "glob", "manual"}
+REQUIRED_RULE_FM_KEYS = {"trigger"}
+OPTIONAL_RULE_FM_KEYS = {"description", "globs", "glob"}
+
+INTERNAL_COMMITTEE_SKILLS = (
+    "style-python",
+    "style-go",
+    "style-js",
+    "style-cpp",
+    "style-java",
+    "style-rust",
+    "markdown-style-expert",
+    "security-auditor",
+    "skill-evolve",
+    "cortex-librarian",
+)
+
+REQUIRED_FM_KEYS = {"name", "description"}
+OPTIONAL_FM_KEYS = {
+    "disable-slash-command",
+    "metadata",
+    "compatibility",
+    "license",
+    "allowed-tools",
+}
+
+
 ALLOWED_PLUGIN_FIELDS = {
+    "$schema",
     "name",
     "description",
     "logo",
@@ -84,6 +121,7 @@ ALLOWED_PLUGIN_FIELDS = {
     "version",
     "disabled",
 }
+PLUGIN_SCHEMA_URL = "https://antigravity.google/schemas/v1/plugin.json"
 
 INVISIBLE_UNICODE_RANGES = (
     (0x200B, 0x200D),
@@ -189,13 +227,23 @@ def parse_frontmatter(data, label):
             violations.append("%s: duplicate frontmatter key %r" % (label, key))
         mapping[key] = value
     keys = set(mapping)
-    if keys != {"name", "description"}:
+    missing = REQUIRED_FM_KEYS - keys
+    unknown = keys - (REQUIRED_FM_KEYS | OPTIONAL_FM_KEYS)
+    if missing or unknown:
         violations.append(
-            "%s: frontmatter keys must be {name, description}, got %s"
+            "%s: frontmatter keys must be {name, description} (+ optional disable-slash-command), got %s"
             % (label, sorted(keys))
         )
+    if "disable-slash-command" in mapping and mapping["disable-slash-command"] not in {
+        "true",
+        "false",
+    }:
+        violations.append(
+            "%s: disable-slash-command must be 'true' or 'false', got %r"
+            % (label, mapping["disable-slash-command"])
+        )
     name = mapping.get("name", "")
-    if "name" in mapping and not NAME_RE.fullmatch(name):
+    if "name" in mapping and (len(name) > 64 or not NAME_RE.fullmatch(name)):
         violations.append("%s: invalid name %r" % (label, name))
     desc = mapping.get("description", "")
     if "description" in mapping:
@@ -205,6 +253,117 @@ def parse_frontmatter(data, label):
             violations.append("%s: description exceeds 1024 chars" % label)
         if XML_TAG_RE.search(desc):
             violations.append("%s: description contains an XML tag" % label)
+    return mapping, violations
+
+
+def check_skill_description_triggers(desc, label):
+    """Verify that a skill description includes positive and negative trigger clauses."""
+    violations = []
+    lower = (desc or "").lower()
+    has_positive = any(
+        phrase in lower
+        for phrase in ("use when", "use for", "use before", "use after")
+    )
+    has_negative = any(
+        phrase in lower
+        for phrase in ("do not use", "do not invoke", "skip ")
+    )
+    if not has_positive:
+        violations.append(
+            "%s: description missing positive trigger clause ('Use when/for/before/after...')"
+            % label
+        )
+    if not has_negative:
+        violations.append(
+            "%s: description missing negative boundary clause ('Do not use/invoke...')"
+            % label
+        )
+    return violations
+
+
+def parse_rule_frontmatter(data, label):
+    """Parse a modular .agents/rules/*.md byte payload. Returns (mapping_or_None, violations)."""
+    violations = []
+    kind = bom_kind(data)
+    if kind:
+        return None, ["%s: leading %s" % (label, kind)]
+    if b"\r" in data:
+        violations.append("%s: CRLF line endings (canonical form is LF)" % label)
+    if len(data) > RULE_FILE_MAX_BYTES:
+        violations.append(
+            "%s: size %d bytes exceeds %d-byte rule file cap"
+            % (label, len(data), RULE_FILE_MAX_BYTES)
+        )
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return None, ["%s: not strict UTF-8 (%s)" % (label, exc)]
+    lines = text.split("\n")
+    if not lines or lines[0].rstrip("\r") != "---":
+        return None, violations + ["%s: missing opening frontmatter fence" % label]
+    close = None
+    for i, line in enumerate(lines[1:], start=1):
+        if line.rstrip("\r") == "---":
+            close = i
+            break
+    if close is None:
+        return None, violations + ["%s: missing closing frontmatter fence" % label]
+    mapping = {}
+    for line in lines[1:close]:
+        stripped = line.rstrip("\r")
+        match = FM_LINE_RE.fullmatch(stripped)
+        if not match:
+            violations.append("%s: malformed frontmatter line %r" % (label, line))
+            continue
+        key, raw_value = match.group(1), (match.group(2) or "").strip()
+        if key in mapping:
+            violations.append("%s: duplicate frontmatter key %r" % (label, key))
+        if key in {"globs", "glob"} and raw_value.startswith("*"):
+            violations.append(
+                "%s: %s pattern starting with '*' must be quoted in YAML frontmatter, got %r"
+                % (label, key, raw_value)
+            )
+        if (
+            len(raw_value) >= 2
+            and raw_value[0] in {'"', "'"}
+            and raw_value[-1] == raw_value[0]
+        ):
+            raw_value = raw_value[1:-1]
+        mapping[key] = raw_value
+
+    keys = set(mapping)
+    missing = REQUIRED_RULE_FM_KEYS - keys
+    unknown = keys - (REQUIRED_RULE_FM_KEYS | OPTIONAL_RULE_FM_KEYS)
+    if missing or unknown:
+        violations.append(
+            "%s: rule frontmatter keys must include 'trigger' (+ optional description, globs, glob), got %s"
+            % (label, sorted(keys))
+        )
+    trigger = mapping.get("trigger", "")
+    if "trigger" in mapping and trigger not in VALID_RULE_TRIGGERS:
+        violations.append(
+            "%s: invalid trigger %r (must be one of %s)"
+            % (label, trigger, sorted(VALID_RULE_TRIGGERS))
+        )
+    desc = mapping.get("description", "")
+    if trigger == "model_decision" and not desc:
+        violations.append(
+            "%s: trigger 'model_decision' requires a non-empty description" % label
+        )
+    if "description" in mapping:
+        if not desc:
+            violations.append("%s: empty description" % label)
+        if len(desc) > 1024:
+            violations.append("%s: description exceeds 1024 chars" % label)
+        if XML_TAG_RE.search(desc):
+            violations.append("%s: description contains an XML tag" % label)
+    if trigger == "glob":
+        glob_val = mapping.get("globs") or mapping.get("glob") or ""
+        if not glob_val.strip():
+            violations.append(
+                "%s: trigger 'glob' requires a non-empty 'globs' or 'glob' pattern"
+                % label
+            )
     return mapping, violations
 
 
@@ -233,10 +392,349 @@ def extract_concrete_repo_paths(text):
         if candidate.endswith("/"):
             continue
         # Skip generic prose references like .agents/skills or .agents/hooks
-        if candidate in {".agents/skills", ".agents/hooks", ".agents/tests", ".agents/scripts"}:
+        if candidate in {
+            ".agents/skills",
+            ".agents/hooks",
+            ".agents/tests",
+            ".agents/scripts",
+            ".agents/rules",
+        }:
             continue
         results.append(candidate)
     return sorted(set(results))
+
+
+def extract_relative_md_links(text):
+    """Extract relative Markdown file links from skill documentation."""
+    links = []
+    for match in RELATIVE_MD_LINK_RE.finditer(text):
+        target = match.group(1).strip()
+        if not target or "<" in target or ">" in target or "[" in target:
+            continue
+        links.append(target)
+    return sorted(set(links))
+
+
+MCP_SECRET_KEY_RE = re.compile(
+    r"(?i)(?:api[_-]?key|secret|token|password|passwd|auth|credential)"
+)
+MCP_SECRET_VALUE_RE = re.compile(
+    r"(?:sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AIzaSy[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{16,}|fc-[a-f0-9]{20,}|tvly-[A-Za-z0-9_-]{16,})"
+)
+MCP_URL_SECRET_RE = re.compile(
+    r"(?i)[?&](?:[a-z0-9_]*(?:key|token|secret|password|auth)[a-z0-9_]*)=([^&#\s]+)"
+)
+MCP_USER_PATH_RE = re.compile(r"(?i)(?:[A-Z]:\\Users\\|/Users/|/home/)")
+
+
+def validate_mcp_config(data, label, allow_user_paths=False):
+    """Validate mcp_config.json schema, portability, and absence of plaintext secrets."""
+    violations = []
+    if not isinstance(data, dict):
+        return ["INV-2: %s: top-level JSON value must be an object" % label]
+    unknown_top = sorted(set(data.keys()) - {"mcpServers"})
+    if unknown_top:
+        violations.append(
+            "INV-2: %s: unsupported top-level keys %s" % (label, unknown_top)
+        )
+    servers = data.get("mcpServers")
+    if not isinstance(servers, dict) or not servers:
+        violations.append(
+            "INV-2: %s: 'mcpServers' must be a non-empty object" % label
+        )
+        return violations
+    if "chiasmus" in servers:
+        violations.append(
+            "INV-2: %s: contains broken 'chiasmus' MCP server entry" % label
+        )
+    for srv_name, cfg in servers.items():
+        if len(srv_name) > 64 or not NAME_RE.fullmatch(srv_name):
+            violations.append(
+                "INV-2: %s: invalid server name %r" % (label, srv_name)
+            )
+        if not isinstance(cfg, dict):
+            violations.append(
+                "INV-2: %s: server %r config must be an object" % (label, srv_name)
+            )
+            continue
+        has_cmd = isinstance(cfg.get("command"), str) and bool(cfg["command"].strip())
+        url_val = cfg.get("serverUrl") or cfg.get("url")
+        has_url = isinstance(url_val, str) and bool(url_val.strip())
+        if has_cmd == has_url:
+            violations.append(
+                "INV-2: %s: server %r must specify exactly one of 'command' or 'serverUrl'/'url'"
+                % (label, srv_name)
+            )
+        if has_cmd and not allow_user_paths and MCP_USER_PATH_RE.search(cfg["command"]):
+            violations.append(
+                "INV-2: %s: server %r command contains hardcoded user path"
+                % (label, srv_name)
+            )
+        if has_url:
+            if MCP_URL_SECRET_RE.search(url_val) or MCP_SECRET_VALUE_RE.search(url_val):
+                violations.append(
+                    "INV-2: %s: server %r URL contains plaintext secret"
+                    % (label, srv_name)
+                )
+        if "args" in cfg:
+            args_val = cfg["args"]
+            if not isinstance(args_val, list) or not all(
+                isinstance(a, str) for a in args_val
+            ):
+                violations.append(
+                    "INV-2: %s: server %r 'args' must be a list of strings"
+                    % (label, srv_name)
+                )
+            else:
+                for a in args_val:
+                    if not allow_user_paths and MCP_USER_PATH_RE.search(a):
+                        violations.append(
+                            "INV-2: %s: server %r arg contains hardcoded user path"
+                            % (label, srv_name)
+                        )
+                    if MCP_SECRET_VALUE_RE.search(a):
+                        violations.append(
+                            "INV-2: %s: server %r arg contains plaintext secret"
+                            % (label, srv_name)
+                        )
+        for map_key in ("env", "headers"):
+            if map_key not in cfg:
+                continue
+            env_map = cfg[map_key]
+            if not isinstance(env_map, dict) or not all(
+                isinstance(k, str) and isinstance(v, str) for k, v in env_map.items()
+            ):
+                violations.append(
+                    "INV-2: %s: server %r %r must map strings to strings"
+                    % (label, srv_name, map_key)
+                )
+                continue
+            for k, v in env_map.items():
+                if v == "__REDACTED_IN_WINVAULT__" or v.startswith("${") or v.startswith("{{"):
+                    continue
+                if not allow_user_paths and MCP_USER_PATH_RE.search(v):
+                    violations.append(
+                        "INV-2: %s: server %r %s[%r] contains hardcoded user path"
+                        % (label, srv_name, map_key, k)
+                    )
+                if MCP_SECRET_VALUE_RE.search(v) or (
+                    MCP_SECRET_KEY_RE.search(k) and len(v.strip()) >= 8
+                ):
+                    violations.append(
+                        "INV-2: %s: server %r %s[%r] contains plaintext secret"
+                        % (label, srv_name, map_key, k)
+                    )
+    return violations
+
+
+VALID_AGENT_MODELS = {"inherit", "flash", "flash_lite", "pro"}
+VALID_AGENT_EXEC_POLICIES = {"off", "auto", "eager", "sandbox"}
+KNOWN_AGENT_TOOLS = {
+    "view_file",
+    "write_to_file",
+    "replace_file_content",
+    "run_command",
+    "manage_task",
+    "send_message",
+    "invoke_subagent",
+    "define_subagent",
+    "manage_subagents",
+    "schedule",
+    "search_web",
+    "read_url_content",
+    "ask_question",
+    "call_mcp_tool",
+    "list_resources",
+    "read_resource",
+    "grep_search",
+    "find_by_name",
+}
+
+
+def validate_custom_agent_frontmatter(data, label, expected_name=None):
+    """Validate declarative .agents/agents/<name>.md YAML frontmatter against subagents.md."""
+    violations = []
+    if data.startswith(b"\xef\xbb\xbf"):
+        violations.append("%s: UTF-8 BOM detected" % label)
+    if b"\r\n" in data:
+        violations.append("%s: CRLF line endings detected" % label)
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return ["%s: invalid UTF-8 (%s)" % (label, exc)]
+    lines = text.split("\n")
+    if len(lines) < 3 or lines[0] != "---":
+        return ["%s: missing opening --- frontmatter fence" % label]
+    end_idx = None
+    for i in range(1, len(lines)):
+        if lines[i] == "---":
+            end_idx = i
+            break
+    if end_idx is None:
+        return ["%s: missing closing --- frontmatter fence" % label]
+
+    mapping = {}
+    for line in lines[1:end_idx]:
+        if not line.strip():
+            continue
+        m = re.match(r"([A-Za-z][A-Za-z0-9_-]*):(?:\s+(.*))?", line)
+        if not m:
+            violations.append("%s: malformed frontmatter line %r" % (label, line))
+            continue
+        k, v = m.group(1), (m.group(2) or "").strip()
+        if k in mapping:
+            violations.append("%s: duplicate frontmatter key %r" % (label, k))
+        mapping[k] = v
+
+    for req_k in ("name", "description"):
+        if not mapping.get(req_k):
+            violations.append("%s: missing required frontmatter key %r" % (label, req_k))
+
+    name_val = mapping.get("name", "")
+    if name_val:
+        if len(name_val) > 64 or not NAME_RE.fullmatch(name_val):
+            violations.append("%s: invalid agent name %r" % (label, name_val))
+        if expected_name and name_val != expected_name:
+            violations.append(
+                "%s: agent name %r != expected %r" % (label, name_val, expected_name)
+            )
+
+    if "model" in mapping and mapping["model"] not in VALID_AGENT_MODELS:
+        violations.append(
+            "%s: invalid model %r (must be one of %s)"
+            % (label, mapping["model"], sorted(VALID_AGENT_MODELS))
+        )
+
+    if (
+        "commandExecutionPolicy" in mapping
+        and mapping["commandExecutionPolicy"] not in VALID_AGENT_EXEC_POLICIES
+    ):
+        violations.append(
+            "%s: invalid commandExecutionPolicy %r (must be one of %s)"
+            % (
+                label,
+                mapping["commandExecutionPolicy"],
+                sorted(VALID_AGENT_EXEC_POLICIES),
+            )
+        )
+
+    if "tools" in mapping:
+        raw_tools = mapping["tools"].strip()
+        if raw_tools.startswith("[") and raw_tools.endswith("]"):
+            inner = raw_tools[1:-1].strip()
+            tool_items = (
+                [t.strip().strip("\"'") for t in inner.split(",") if t.strip()]
+                if inner
+                else []
+            )
+            for t_name in tool_items:
+                if t_name == "moma_search":
+                    violations.append(
+                        "%s: forbidden internal tool 'moma_search' in tools list"
+                        % label
+                    )
+                elif t_name not in KNOWN_AGENT_TOOLS:
+                    violations.append(
+                        "%s: unmapped tool %r in tools list (risks subagent hang per subagents.md)"
+                        % (label, t_name)
+                    )
+        else:
+            violations.append(
+                "%s: 'tools' must be an inline YAML list [...]" % label
+            )
+    return violations
+
+
+ALLOWED_SIDECAR_FIELDS = {
+    "command",
+    "builtin",
+    "args",
+    "restart_policy",
+    "display_name",
+    "description",
+    "env",
+    "agent_permissions",
+    "has_web_ui",
+    "ui_config",
+}
+VALID_SIDECAR_RESTART_POLICIES = {"always", "on-failure", "never"}
+FORBIDDEN_SIDECAR_GRANTS = {
+    "command(*)",
+    "read_file(*)",
+    "read_file(/)",
+    "write_file(*)",
+    "write_file(/)",
+    "mcp(*)",
+    "read_url(*)",
+    "allow(*)",
+}
+
+
+def validate_sidecar_manifest(data, label):
+    """Validate a sidecar.json manifest against Antigravity sidecar & automation specs."""
+    violations = []
+    if not isinstance(data, dict):
+        return ["INV-2: %s: sidecar.json root must be a JSON object" % label]
+    unknown = sorted(set(data.keys()) - ALLOWED_SIDECAR_FIELDS)
+    if unknown:
+        violations.append(
+            "INV-2: %s: unsupported or non-snake_case top-level fields %s"
+            % (label, unknown)
+        )
+    has_cmd = bool(data.get("command"))
+    has_builtin = bool(data.get("builtin"))
+    if has_cmd == has_builtin:
+        violations.append(
+            "INV-2: %s: 'command' and 'builtin' are mutually exclusive (specify exactly one)"
+            % label
+        )
+    if (
+        "restart_policy" in data
+        and data["restart_policy"] not in VALID_SIDECAR_RESTART_POLICIES
+    ):
+        violations.append(
+            "INV-2: %s: invalid restart_policy %r"
+            % (label, data["restart_policy"])
+        )
+    if data.get("builtin") == "schedule":
+        args = data.get("args")
+        if (
+            not isinstance(args, list)
+            or len(args) < 5
+            or not str(args[0]).startswith("CRON_TZ=")
+            or "--" not in args
+        ):
+            violations.append(
+                "INV-2: %s: builtin 'schedule' args must start with 'CRON_TZ=<IANA_Zone>' and include '--'"
+                % label
+            )
+    if "agent_permissions" in data:
+        perms = data["agent_permissions"]
+        grants = perms.get("access_grants", []) if isinstance(perms, dict) else []
+        for grant in grants:
+            g_str = str(grant).strip()
+            if (
+                g_str in FORBIDDEN_SIDECAR_GRANTS
+                or g_str.startswith("allow(")
+                or "(*)" in g_str
+            ):
+                violations.append(
+                    "INV-2: %s: forbidden wildcard or wrapper in access_grants: %r"
+                    % (label, grant)
+                )
+    if data.get("has_web_ui") is True:
+        ui_cfg = data.get("ui_config")
+        views = ui_cfg.get("views", []) if isinstance(ui_cfg, dict) else []
+        if not views or not all(
+            isinstance(v, dict)
+            and v.get("entrypoint") == "SIDECAR_UI_ENTRYPOINT_AUX_PANE"
+            for v in views
+        ):
+            violations.append(
+                "INV-2: %s: has_web_ui=true requires ui_config.views with entrypoint 'SIDECAR_UI_ENTRYPOINT_AUX_PANE'"
+                % label
+            )
+    return violations
 
 
 def scan_skill_security(text, label):
@@ -310,6 +808,26 @@ def check_inv1_frontmatter(root):
                 "INV-1: %s: name %r does not match directory %r"
                 % (label, mapping["name"], skill_file.parent.name)
             )
+        if mapping and "description" in mapping:
+            for trig_err in check_skill_description_triggers(mapping["description"], label):
+                violations.append("INV-1: %s" % trig_err)
+        if (
+            mapping
+            and skill_file.parent.name in INTERNAL_COMMITTEE_SKILLS
+            and mapping.get("disable-slash-command") != "true"
+        ):
+            violations.append(
+                "INV-1: %s: internal committee skill must set disable-slash-command: true"
+                % label
+            )
+    agents_dir = root / ".agents" / "agents"
+    if agents_dir.is_dir():
+        for agent_md in sorted(agents_dir.glob("*.md")):
+            label = _rel(root, agent_md)
+            for err in validate_custom_agent_frontmatter(
+                agent_md.read_bytes(), label, expected_name=agent_md.stem
+            ):
+                violations.append("INV-1: %s" % err)
     return violations
 
 
@@ -328,16 +846,42 @@ def check_inv2_json_and_paths(root):
         try:
             data = _load_json(path)
             if path.name == "mcp_config.json":
-                servers = data.get("mcpServers", {})
-                if "chiasmus" in servers:
-                    violations.append(
-                        "INV-2: %s: contains broken 'chiasmus' MCP server entry" % label
-                    )
+                violations.extend(
+                    validate_mcp_config(data, label, allow_user_paths=False)
+                )
             elif path.name == "plugin.json":
                 unknown = sorted(set(data.keys()) - ALLOWED_PLUGIN_FIELDS)
                 if unknown:
                     violations.append(
                         "INV-2: %s: unsupported top-level fields %s" % (label, unknown)
+                    )
+                if data.get("$schema") != PLUGIN_SCHEMA_URL:
+                    violations.append(
+                        "INV-2: %s: '$schema' must be %r"
+                        % (label, PLUGIN_SCHEMA_URL)
+                    )
+                name_val = data.get("name", "")
+                if not isinstance(name_val, str) or not NAME_RE.fullmatch(
+                    name_val
+                ):
+                    violations.append(
+                        "INV-2: %s: 'name' must be lowercase kebab-case" % label
+                    )
+                desc_val = data.get("description", "")
+                if not isinstance(desc_val, str) or not desc_val.strip():
+                    violations.append(
+                        "INV-2: %s: 'description' must be a non-empty string" % label
+                    )
+                prompts = data.get("suggestedPrompts")
+                if prompts is not None and (
+                    not isinstance(prompts, list)
+                    or len(prompts) == 0
+                    or len(prompts) > 3
+                    or not all(isinstance(p, str) and p.strip() for p in prompts)
+                ):
+                    violations.append(
+                        "INV-2: %s: 'suggestedPrompts' must be 1..3 non-empty strings"
+                        % label
                     )
                 if data.get("disabled") is not True:
                     violations.append(
@@ -347,8 +891,21 @@ def check_inv2_json_and_paths(root):
         except (ValueError, UnicodeDecodeError) as exc:
             violations.append("INV-2: %s: %s" % (label, exc))
 
-    md_targets = [root / ".agents" / "AGENTS.md"]
-    md_targets.extend(sorted((root / ".agents" / "skills").rglob("*.md")))
+    for sidecar_path in sorted((root / ".agents").rglob("sidecar.json")):
+        if not sidecar_path.is_file():
+            continue
+        s_label = _rel(root, sidecar_path)
+        try:
+            s_data = _load_json(sidecar_path)
+            violations.extend(validate_sidecar_manifest(s_data, s_label))
+        except (ValueError, UnicodeDecodeError) as exc:
+            violations.append("INV-2: %s: %s" % (s_label, exc))
+
+    skill_md_targets = sorted((root / ".agents" / "skills").rglob("*.md"))
+    md_targets = [root / ".agents" / "AGENTS.md"] + list(skill_md_targets)
+    rules_dir = root / ".agents" / "rules"
+    if rules_dir.is_dir():
+        md_targets.extend(sorted(rules_dir.glob("*.md")))
     for md_path in md_targets:
         if not md_path.is_file():
             continue
@@ -360,6 +917,14 @@ def check_inv2_json_and_paths(root):
                 violations.append(
                     "INV-2: %s: referenced path %r does not exist" % (label, ref_rel)
                 )
+        if md_path in skill_md_targets:
+            for rel_link in extract_relative_md_links(text):
+                resolved_target = (md_path.parent / rel_link).resolve()
+                if not resolved_target.exists():
+                    violations.append(
+                        "INV-2: %s: relative link %r does not exist"
+                        % (label, rel_link)
+                    )
     return violations
 
 
@@ -381,6 +946,13 @@ def check_inv3_hooks(root):
             violations.append("INV-3: %s: hook group %r must be an object" % (label, group_name))
             continue
         for event_name, entries in event_map.items():
+            if event_name == "enabled":
+                if not isinstance(entries, bool):
+                    violations.append(
+                        "INV-3: %s: hook group %r 'enabled' must be a boolean"
+                        % (label, group_name)
+                    )
+                continue
             if event_name not in VALID_HOOK_EVENTS:
                 violations.append(
                     "INV-3: %s: invalid Antigravity hook event %r" % (label, event_name)
@@ -400,7 +972,13 @@ def check_inv3_hooks(root):
                         )
                         continue
                     for h in entry["hooks"]:
-                        total_timeout += int(h.get("timeout", 0))
+                        t_val = int(h.get("timeout", 30))
+                        if t_val <= 0 or t_val > 5:
+                            violations.append(
+                                "INV-3: %s: hook handler timeout %ds must be between 1s and 5s"
+                                % (label, t_val)
+                            )
+                        total_timeout += t_val
                         cmd = h.get("command", "")
                         if '"' in cmd:
                             violations.append(
@@ -416,7 +994,13 @@ def check_inv3_hooks(root):
                             "INV-3: %s: Flat event %r must not contain 'matcher' or 'hooks' wrapper"
                             % (label, event_name)
                         )
-                    total_timeout += int(h.get("timeout", 0))
+                    t_val = int(h.get("timeout", 30))
+                    if t_val <= 0 or t_val > 5:
+                        violations.append(
+                            "INV-3: %s: hook handler timeout %ds must be between 1s and 5s"
+                            % (label, t_val)
+                        )
+                    total_timeout += t_val
                     cmd = h.get("command", "")
                     if '"' in cmd:
                         violations.append(
@@ -446,7 +1030,17 @@ def check_inv4_pipeline_skills(root):
     agents_md = root / ".agents" / "AGENTS.md"
     if not agents_md.is_file():
         return ["INV-4: .agents/AGENTS.md missing"]
-    text = agents_md.read_bytes().decode("utf-8", errors="replace").lower()
+    raw_bytes = agents_md.read_bytes()
+    if len(raw_bytes) > AGENTS_MD_MAX_BYTES:
+        violations.append(
+            "INV-4: .agents/AGENTS.md size %d bytes exceeds %d-byte non-truncation cap"
+            % (len(raw_bytes), AGENTS_MD_MAX_BYTES)
+        )
+    if raw_bytes.startswith(b"---"):
+        violations.append(
+            "INV-4: .agents/AGENTS.md must not start with a YAML frontmatter fence '---'"
+        )
+    text = raw_bytes.decode("utf-8", errors="replace").lower()
     for skill_name in EXPECTED_AGENTS_SKILLS:
         spaced = skill_name.replace("-", " ")
         if (skill_name not in text) and (spaced not in text):
@@ -458,6 +1052,20 @@ def check_inv4_pipeline_skills(root):
             violations.append(
                 "INV-4: .agents/skills/%s/SKILL.md is missing" % skill_name
             )
+
+    rules_dir = root / ".agents" / "rules"
+    if rules_dir.is_dir():
+        has_rules_json = (root / ".agents" / "rules.json").is_file()
+        for child in sorted(rules_dir.iterdir()):
+            if child.is_dir() and not has_rules_json:
+                violations.append(
+                    "INV-4: %s: nested subdirectory inside .agents/rules is ignored without .agents/rules.json"
+                    % _rel(root, child)
+                )
+        for rule_file in sorted(rules_dir.glob("*.md")):
+            label = _rel(root, rule_file)
+            _, errors = parse_rule_frontmatter(rule_file.read_bytes(), label)
+            violations.extend("INV-4: %s" % e for e in errors)
     return violations
 
 
@@ -521,8 +1129,24 @@ def check_inv7_edge_cases(root):
         if not (path.parent / "SKILL.md").is_file():
             violations.append("INV-7: %s: no sibling SKILL.md" % label)
         text = path.read_bytes().decode("utf-8", errors="replace").lstrip()
-        if not text.startswith("# "):
-            violations.append("INV-7: %s: must begin with a '# ' H1 heading" % label)
+        lines = text.splitlines()
+        expected_h1 = "# Edge Cases & Heuristics: %s" % stem
+        if not lines or lines[0].strip() != expected_h1:
+            violations.append(
+                "INV-7: %s: must begin with canonical H1 %r" % (label, expected_h1)
+            )
+        bullets = [ln for ln in lines[1:] if ln.startswith("- ")]
+        subheadings = [ln for ln in lines[1:] if ln.startswith("#")]
+        if subheadings:
+            violations.append(
+                "INV-7: %s: must use flat top-level bullets without H2/H3 subheadings"
+                % label
+            )
+        if len(bullets) > 10:
+            violations.append(
+                "INV-7: %s: contains %d heuristics (exceeds 10-heuristic cap; deduplicate first)"
+                % (label, len(bullets))
+            )
     return violations
 
 
@@ -550,6 +1174,9 @@ def check_inv10_skill_security(root):
     targets = list(skills_dir.rglob("SKILL.md")) + list(
         skills_dir.rglob("*-edge-cases.md")
     )
+    rules_dir = root / ".agents" / "rules"
+    if rules_dir.is_dir():
+        targets.extend(rules_dir.glob("*.md"))
     for path in sorted(set(targets)):
         if not path.is_file():
             continue

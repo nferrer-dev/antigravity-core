@@ -1,4 +1,5 @@
 {
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "antigravity-core",
   "displayName": "Antigravity Core Harness",
   "description": "Stage 0-4 epistemic engineering harness, consensus committees, BRC runtime guards, and language style skills for Google Antigravity.",

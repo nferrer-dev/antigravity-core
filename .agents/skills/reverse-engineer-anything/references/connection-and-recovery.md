@@ -1,5 +1,11 @@
 # Connection and task recovery
 
+## Contents
+- [Choose the remedy from the observed failure](#choose-the-remedy-from-the-observed-failure)
+- [Repair registration when needed](#repair-registration-when-needed)
+- [Codex tool approval is separate from REA readiness](#codex-tool-approval-is-separate-from-rea-readiness)
+- [Continue through an installed CLI](#continue-through-an-installed-cli)
+
 Read this guide only for an observed connection, command, approval or provider
 blocker. Keep the user's target and question in view. Explain what prevented the
 operation and the next useful step; after repair, continue the investigation.

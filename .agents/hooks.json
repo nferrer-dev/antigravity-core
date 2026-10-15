@@ -1,8 +1,9 @@
 {
   "brc-and-secret-guard": {
+    "enabled": true,
     "PreToolUse": [
       {
-        "matcher": "run_command|execute_command|Bash|view_file|replace_file_content|write_to_file|Edit|Write|Read",
+        "matcher": "run_command|execute_command|Bash|view_file|(?:multi_)?replace_file_content|write_to_file|(?:Multi)?Edit|Write|Read",
         "hooks": [
           {
             "type": "command",
@@ -14,6 +15,7 @@
     ]
   },
   "causal-telemetry-append": {
+    "enabled": true,
     "Stop": [
       {
         "type": "command",

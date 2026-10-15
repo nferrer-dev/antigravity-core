@@ -1,6 +1,7 @@
 ---
 name: markdown-style-expert
-description: Validates Markdown files and skill heuristics against the Google Markdown Style Guide.
+description: Validates Markdown files and skill heuristics against the Google Markdown Style Guide. Use when invoked as the Markdown Style Expert during Stage 4 reviews or skill-evolve pre-flight gates. Do not invoke directly as a user slash workflow.
+disable-slash-command: true
 ---
 
 # Markdown Style Expert
@@ -24,5 +25,6 @@ You are the authoritative evaluator for Markdown formatting and structural integ
     - When evaluating an appended heuristic for a quarantine file (`[skillname]-edge-cases.md`), you must check the file's size and length.
     - **Deduplication Pass**: If the quarantine file contains more than 10 heuristics, you MUST execute a deduplication and consolidation pass. Rewrite the existing heuristics to merge overlapping concepts and eliminate redundancies before allowing the new heuristic to be appended.
 
-4. **Verdict Signalling**:
-    - Conclude your review with an explicit `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`.
+4. **Verdict Signalling & VeriHarness Output Contract**:
+    - Read companion [markdown-style-expert-edge-cases.md](./markdown-style-expert-edge-cases.md) via `view_file` before finalizing your audit.
+    - Conclude your review with an explicit `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Every `[VERDICT: REJECT]` MUST include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`.

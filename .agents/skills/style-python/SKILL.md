@@ -1,6 +1,7 @@
 ---
 name: style-python
-description: The authoritative style guide and mechanical linter for Python code.
+description: The authoritative PEP 8 style guide and mechanical linter rubric for Python code. Use when invoked as the Python Style Expert during Stage 4 iterative-implement reviews. Do not invoke directly as a user slash workflow.
+disable-slash-command: true
 ---
 
 # Python Style Guide
@@ -16,9 +17,9 @@ Do not manually guess style violations. You must rely on automated tooling to en
 - **Command**: Run `flake8 <file_path>` or `black --check <file_path>`
 - *Note: If the linter is not installed in the environment, you are authorized to install it into a temporary virtual environment or flag it to the user.*
 
-## 3. Learned Edge Cases
-*(This section acts as the trainable state. When the Iterative-Implement loop catches a Python-specific anti-pattern that the mechanical enforcer misses, the Style Expert MUST append the new rule here.)*
+## 3. Quarantined Edge Cases & SkillOpt Protocol
+1. Read companion [style-python-edge-cases.md](./style-python-edge-cases.md) via `view_file` and verify the localized diff against all recorded heuristics.
+2. **Immutable `SKILL.md` Mandate**: Never append new rules directly to `SKILL.md`. If you detect a recurring Python-specific anti-pattern missed by the mechanical linter, read and execute `.agents/skills/skill-evolve/SKILL.md` to propose appending a 1-2 sentence heuristic to `style-python-edge-cases.md`.
 
-- **N+1 Query Anti-Pattern**: Avoid executing `SELECT` queries iteratively inside a loop (e.g., `for` loop). This creates severe performance degradation. Consolidate into a single query using an `IN` clause to fetch relevant records in one batch.
-
-- **Numerical Anti-Pattern**: Avoid exact floating-point comparisons (e.g., `value == 0.0`). In numpy/numeric computing, use `np.isclose(value, 0.0)` or a small epsilon check instead due to floating-point imprecision.
+## 4. Output Contract (VeriHarness Gate)
+Conclude your review with `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Every `[VERDICT: REJECT]` MUST include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`.

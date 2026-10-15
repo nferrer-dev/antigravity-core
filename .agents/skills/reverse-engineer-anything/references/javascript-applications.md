@@ -1,5 +1,11 @@
 # JavaScript and Electron application artifacts
 
+## Contents
+- [Read a module without repeating analysis](#read-a-module-without-repeating-analysis)
+- [Trace only the remaining question](#trace-only-the-remaining-question)
+- [Recover an oversized display](#recover-an-oversized-display)
+- [Reusing application Evidence](#reusing-application-evidence)
+
 Use `analyze_javascript_application` directly on the operator-supplied ASAR or
 extracted tree. When size is unknown or large and the connected schema advertises
 `detail`, request `detail: "summary"`. This returns an `inspect_analysis_view`

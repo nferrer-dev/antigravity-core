@@ -20,6 +20,14 @@ try {
                 $isAntigravityStop = $true
             }
 
+            $fullyIdle = $true
+            $hasFullyIdle = $false
+            if ($payload.PSObject.Properties['fullyIdle'] -and $null -ne $payload.fullyIdle) {
+                $fullyIdle = [bool]$payload.fullyIdle
+                $hasFullyIdle = $true
+                $isAntigravityStop = $true
+            }
+
             $text = ''
             foreach ($field in @('last_assistant_message', 'lastAssistantMessage', 'last_message', 'message')) {
                 $prop = $payload.PSObject.Properties[$field]
@@ -33,7 +41,7 @@ try {
                 $tPath = [string]$payload.transcript_path
             }
 
-            if (-not $text -and $tPath -and (Test-Path -LiteralPath $tPath)) {
+            if (-not $text -and $fullyIdle -and $tPath -and (Test-Path -LiteralPath $tPath)) {
                 $tail = Get-Content -LiteralPath $tPath -Tail 40 -Encoding UTF8 -ErrorAction Stop
                 $text = $tail -join "`n"
             }
@@ -48,6 +56,9 @@ try {
                         $eventName = [string]$payload.terminationReason
                     } elseif ($payload.PSObject.Properties['hook_event_name'] -and $payload.hook_event_name) {
                         $eventName = [string]$payload.hook_event_name
+                    }
+                    if ($hasFullyIdle) {
+                        $eventName = "$eventName,idle=$fullyIdle"
                     }
 
                     $summary = ($text.Substring($idx) -replace '\s+', ' ').Trim()
@@ -65,10 +76,23 @@ try {
                         $telemetryFile = Join-Path $parentDir 'agentic_telemetry.md'
                     }
 
-                    $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-                    $line = "- [$stamp] | Hook Monitor ($eventName) | hook-detected marker | $summary`n"
-                    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-                    [System.IO.File]::AppendAllText($telemetryFile, $line, $utf8NoBom)
+                    $alreadyAppended = $false
+                    if (Test-Path -LiteralPath $telemetryFile) {
+                        $existingLines = @(Get-Content -LiteralPath $telemetryFile -Encoding UTF8 | Where-Object { $_ -and $_.Trim() -ne '' })
+                        if ($existingLines.Count -gt 0) {
+                            $lastLine = [string]$existingLines[$existingLines.Count - 1]
+                            if ($lastLine.EndsWith("| $summary", [System.StringComparison]::Ordinal)) {
+                                $alreadyAppended = $true
+                            }
+                        }
+                    }
+
+                    if (-not $alreadyAppended) {
+                        $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                        $line = "- [$stamp] | Hook Monitor ($eventName) | hook-detected marker | $summary`n"
+                        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                        [System.IO.File]::AppendAllText($telemetryFile, $line, $utf8NoBom)
+                    }
                     break
                 }
             }
