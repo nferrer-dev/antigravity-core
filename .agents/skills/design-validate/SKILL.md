@@ -19,4 +19,6 @@ When the user finalizes a draft of an implementation plan, design document, or a
 - As the Hostile Adjudicator, determine the final binary verdict (`[GLOBAL VERDICT: PROCEED]` or `[GLOBAL VERDICT: REJECT]`).
 - **Execution-Grounded Rejection Gate (VeriHarness)**: Any `[VERDICT: REJECT]` or `[GLOBAL VERDICT: REJECT]` must include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`.
 - You MUST explicitly present the retrieved empirical causal chain and the final verdict to the user.
+- **Stage 3 Consensus Receipt (`brc-guard.ps1` Premature Execution Lock)**: Upon unanimous `[VERDICT: APPROVE]` / `[GLOBAL VERDICT: PROCEED]` (or 5-round deadlock circuit-breaker yield), write a non-empty consensus receipt to `scratch/stage3_<topic>.md` or `scratch/stage3_<topic>.json` in your artifact directory before setting `RequestFeedback = true` on `implementation_plan.md`.
 - **Strict Gate**: Do NOT proceed to write code (Stage 4 Iterative-Implement) until this Stage 3 verdict is `PROCEED`.
+

@@ -31,7 +31,7 @@
 ---
 # Stage 0: Epistemic Comprehension Router
 
-Run `comprehend-problem` for all non-trivial tasks before Stage 1 or Stage 3: (1) **Epistemic Engine Routing** to CodeGraphContext (Structural), Chiasmus/Z3 polyfill (Logical), or Blackboard Swarms (Exploratory); (2) **MVC "Pull" Mandate** writing the rubric/graph to `scratch/` and passing only its absolute path; (3) **Triviality Exemption & Anti-Loophole** (Tier 0 bypasses Stage 0; Section 1.1 Anti-Loophole edits never bypass).
+Run `comprehend-problem` for all non-trivial tasks before Stage 1 or Stage 3: (1) **Epistemic Engine Routing** to CodeGraphContext (Structural), Chiasmus/Z3 polyfill (Logical), or Blackboard Swarms (Exploratory); (2) **MVC "Pull" Mandate** writing the rubric/graph to `scratch/stage0_*` and passing only its absolute path; (3) **Triviality Exemption & Anti-Loophole** (Tier 0 bypasses Stage 0; Section 1.1 Anti-Loophole edits never bypass).
 
 ---
 # Stage 1: Divergent Brainstorming

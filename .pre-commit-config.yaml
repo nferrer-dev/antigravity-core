@@ -16,3 +16,9 @@ repos:
         entry: python .claude/tests/validate_tree.py
         language: system
         pass_filenames: false
+      - id: antigravity-sync-global-config-check
+        name: Verify Global Config Sync (.agents -> ~/.gemini/config)
+        entry: python .agents/scripts/sync_global_config.py --check
+        language: system
+        pass_filenames: false
+

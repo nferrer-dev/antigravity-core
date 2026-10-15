@@ -124,6 +124,60 @@ function Test-TamperFilePath {
     return $false
 }
 
+function Test-MissingStageArtifact {
+    param([string]$PathStr, $PayloadObj, [string]$StageFilter)
+    if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
+    $norm = $PathStr.Replace('/', '\')
+    if ($norm -notmatch '(?i)(^|\\)implementation_plan\.md$') { return $false }
+    $searchDirs = New-Object System.Collections.Generic.List[string]
+    if ($null -ne $PayloadObj -and $PayloadObj.PSObject.Properties['artifactDirectoryPath']) {
+        $artDir = [string]$PayloadObj.artifactDirectoryPath
+        if (-not [string]::IsNullOrWhiteSpace($artDir)) {
+            $searchDirs.Add($artDir.Replace('/', '\'))
+        }
+    }
+    $parentDir = Split-Path -Parent $norm
+    if (-not [string]::IsNullOrWhiteSpace($parentDir) -and -not $searchDirs.Contains($parentDir)) {
+        $searchDirs.Add($parentDir)
+    }
+    if ($searchDirs.Count -eq 0) { return $false }
+    foreach ($dir in $searchDirs) {
+        $scratchDir = Join-Path $dir 'scratch'
+        if (Test-Path -LiteralPath $scratchDir) {
+            $hits = @(Get-ChildItem -LiteralPath $scratchDir -Filter $StageFilter -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })
+            if ($hits.Count -gt 0) { return $false }
+        }
+        if (Test-Path -LiteralPath $dir) {
+            $rootHits = @(Get-ChildItem -LiteralPath $dir -Filter $StageFilter -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })
+            if ($rootHits.Count -gt 0) { return $false }
+        }
+    }
+    return $true
+}
+
+function Test-MissingStage0Artifact {
+    param([string]$PathStr, $PayloadObj)
+    return (Test-MissingStageArtifact -PathStr $PathStr -PayloadObj $PayloadObj -StageFilter 'stage0*')
+}
+
+function Test-PrematureExecutionLock {
+    param([string]$PathStr, $ArgsObj, $PayloadObj)
+    if ($null -eq $ArgsObj) { return $false }
+    if (-not $ArgsObj.PSObject.Properties['ArtifactMetadata'] -or $null -eq $ArgsObj.ArtifactMetadata) { return $false }
+    $meta = $ArgsObj.ArtifactMetadata
+    if (-not $meta.PSObject.Properties['RequestFeedback'] -or $meta.RequestFeedback -ne $true) { return $false }
+    return (Test-MissingStageArtifact -PathStr $PathStr -PayloadObj $PayloadObj -StageFilter 'stage3*')
+}
+
+function Test-GeneratedOutputPath {
+    param([string]$PathStr)
+    if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
+    $norm = $PathStr.Replace('/', '\')
+    if ($norm -match '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') { return $false }
+    if ($norm -match '(?i)(^|\\)(dist|build)(\\|$)') { return $true }
+    return $false
+}
+
 $isWriteTool = $toolName -match '^(write_to_file|(?:multi_)?replace_file_content|(?:Multi)?Edit|Write)$'
 $isReadOrWriteTool = $isWriteTool -or ($toolName -match '^(view_file|Read)$')
 
@@ -133,6 +187,35 @@ if ($isReadOrWriteTool -and (Test-SecretFilePath $filePath)) {
 
 if ($isWriteTool -and (Test-TamperFilePath $filePath)) {
     Emit-ForceAsk 'harness-config-self-tampering' $filePath
+}
+
+if ($isWriteTool -and (Test-GeneratedOutputPath $filePath)) {
+    Emit-Deny 'generated-output-write-guard' 'Edit source files instead of /dist or /build output directories'
+}
+
+if ($isWriteTool -and (Test-MissingStage0Artifact $filePath $payload)) {
+    Emit-Deny 'stage0-comprehend-problem-gate' 'Run comprehend-problem (.agents/skills/comprehend-problem/SKILL.md) and write non-empty scratch/stage0_<topic>.md or .json before writing implementation_plan.md'
+}
+
+if ($isWriteTool -and (Test-PrematureExecutionLock $filePath $argsObj $payload)) {
+    Emit-Deny 'stage3-premature-execution-lock' 'Complete Stage 3 design-validate and write non-empty scratch/stage3_<topic>.md or .json before setting RequestFeedback=true on implementation_plan.md'
+}
+
+if ($toolName -eq 'invoke_subagent' -and $null -ne $argsObj -and $argsObj.PSObject.Properties['Subagents'] -and $null -ne $argsObj.Subagents) {
+    foreach ($sub in @($argsObj.Subagents)) {
+        if ($null -ne $sub -and $sub.PSObject.Properties['Prompt'] -and $null -ne $sub.Prompt) {
+            $pLines = @(([string]$sub.Prompt) -split "\r?\n")
+            if ($pLines.Count -gt 200) {
+                Emit-Deny 'subagent-mvc-prompt-cap' 'Subagent Prompt exceeds 200-line MVC cap; write context to scratch/ and pass the file path'
+            }
+        }
+    }
+}
+
+if ($toolName -eq 'schedule' -and $null -ne $argsObj) {
+    if ($argsObj.PSObject.Properties['DurationSeconds'] -and $null -ne $argsObj.DurationSeconds -and $argsObj.PSObject.Properties['TimerCondition'] -and ([string]$argsObj.TimerCondition) -match '^(?i)any$') {
+        Emit-Deny 'schedule-patience-timer-condition' 'One-shot schedule timers must use TimerCondition="never" (or a specific sender ID) per Asynchronous Patience Protocol'
+    }
 }
 
 if ([string]::IsNullOrWhiteSpace($cmd)) {
@@ -240,6 +323,11 @@ foreach ($evalCmd in $candidates) {
         Emit-Deny 'sql-drop' $evalCmd
     }
 
+    # Rule 4b: git config mutation guard (allow read-only --get / --list / -l)
+    if (-not $searchOnly -and ($evalCmd -match '(^|[\s;|&(])git(\.exe)?\s+config\b') -and ($evalCmd -notmatch '\s(--get|--get-all|--get-regexp|--list|-l)(\s|$)')) {
+        Emit-Deny 'git-config-mutation-guard' $evalCmd
+    }
+
     # Rule 5: filesystem creation (mkfs)
     if ($evalCmd -match '(^|[\s;&|])mkfs(\.\S+)?\b') {
         Emit-Deny 'mkfs' $evalCmd
@@ -260,3 +348,4 @@ foreach ($evalCmd in $candidates) {
 }
 
 Emit-Allow
+

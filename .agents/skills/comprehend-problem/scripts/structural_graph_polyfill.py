@@ -136,6 +136,10 @@ def run_self_test():
         if nodes[0]["functions"] != ["async_fn", "sync_fn"]:
             print("SELF-TEST FAIL: missing functions %r" % nodes[0]["functions"], file=sys.stderr)
             return 1
+        out_flag_target = tmp_dir / "scratch" / "stage0_graph.json"
+        if main([str(tmp_dir), "--out", str(out_flag_target)]) != 0 or not out_flag_target.is_file():
+            print("SELF-TEST FAIL: --out flag failed", file=sys.stderr)
+            return 1
     print("structural_graph_polyfill.py self-test: PASS")
     return 0
 
@@ -148,6 +152,11 @@ def main(argv=None):
         "--self-test",
         action="store_true",
         help="Run built-in deterministic self-test and exit.",
+    )
+    parser.add_argument(
+        "--out",
+        dest="out_flag",
+        help="Destination path for the output JSON graph (Stage 0 receipt).",
     )
     parser.add_argument(
         "target_directory",
@@ -163,17 +172,21 @@ def main(argv=None):
 
     if args.self_test:
         return run_self_test()
-    if not args.target_directory or not args.output_json_path:
+    dest_str = args.out_flag or args.output_json_path
+    if not args.target_directory or not dest_str:
         parser.print_usage(sys.stderr)
         return 1
 
     graph = build_graph(args.target_directory)
-    Path(args.output_json_path).write_text(
+    output_path = Path(dest_str)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
         json.dumps(graph, indent=2) + "\n", encoding="utf-8", newline="\n"
     )
-    print("Success! Graph written to %s" % args.output_json_path)
+    print("Success! Graph written to %s" % output_path)
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
+

@@ -147,15 +147,60 @@ def run_self_test():
     return 0
 
 
-def main():
-    if len(sys.argv) == 2 and sys.argv[1] == "--self-test":
-        return run_self_test()
-    if len(sys.argv) < 3:
-        print("Usage: python logical_z3_polyfill.py <spec_json_path> <output_json_path>")
+def main(argv=None):
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Solve a Stage 0 logical constraint specification deterministically."
+    )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Run built-in deterministic self-test and exit.",
+    )
+    parser.add_argument(
+        "--out",
+        dest="out_flag",
+        help="Destination path for the output JSON proof (Stage 0 receipt).",
+    )
+    parser.add_argument(
+        "spec_json_path",
+        nargs="?",
+        help="Input JSON constraint specification path.",
+    )
+    parser.add_argument(
+        "output_json_path",
+        nargs="?",
+        help="Destination path for the output JSON proof.",
+    )
+    args = parser.parse_args(argv)
+
+    if args.self_test:
+        import tempfile
+
+        rc = run_self_test()
+        if rc != 0:
+            return rc
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            spec_p = tmp_dir / "spec.json"
+            out_p = tmp_dir / "scratch" / "stage0_test.json"
+            spec_p.write_text(
+                json.dumps({"variables": {"x": [1, 2]}, "constraints": ["x == 2"]}),
+                encoding="utf-8",
+            )
+            if main([str(spec_p), "--out", str(out_p)]) != 0 or not out_p.is_file():
+                print("Self-test --out flag failed", file=sys.stderr)
+                return 1
+        return 0
+
+    dest_str = args.out_flag or args.output_json_path
+    if not args.spec_json_path or not dest_str:
+        print("Usage: python logical_z3_polyfill.py <spec_json_path> [--out] <output_json_path>")
         return 1
 
-    spec_path = Path(sys.argv[1])
-    output_path = Path(sys.argv[2])
+    spec_path = Path(args.spec_json_path)
+    output_path = Path(dest_str)
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     result = solve_spec(spec)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,3 +211,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

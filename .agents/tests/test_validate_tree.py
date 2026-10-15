@@ -10,6 +10,7 @@ import base64
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -619,6 +620,256 @@ class LiveTree(unittest.TestCase):
         self.assertEqual(
             json.loads(res_plugin_tamper.stdout.strip())["decision"], "force_ask"
         )
+
+        # 13. Stage 0 comprehend-problem gate on implementation_plan.md
+        with tempfile.TemporaryDirectory() as tmp:
+            art_dir = Path(tmp)
+            plan_target = str(art_dir / "implementation_plan.md")
+            res_no_stage0 = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "write_to_file",
+                        "args": {"TargetFile": plan_target},
+                    },
+                }
+            )
+            self.assertEqual(res_no_stage0.returncode, 0)
+            out_no_stage0 = json.loads(res_no_stage0.stdout.strip())
+            self.assertEqual(out_no_stage0["decision"], "deny")
+            self.assertIn("stage0-comprehend-problem-gate", out_no_stage0["reason"])
+
+            scratch_dir = art_dir / "scratch"
+            scratch_dir.mkdir(parents=True, exist_ok=True)
+            # G4: 0-byte stage0 file must still be rejected
+            empty_stage0 = scratch_dir / "stage0_empty.md"
+            empty_stage0.write_text("", encoding="utf-8")
+            res_empty_stage0 = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "write_to_file",
+                        "args": {"TargetFile": plan_target},
+                    },
+                }
+            )
+            self.assertEqual(res_empty_stage0.returncode, 0)
+            self.assertEqual(
+                json.loads(res_empty_stage0.stdout.strip())["decision"], "deny"
+            )
+            empty_stage0.unlink()
+
+            (scratch_dir / "stage0_comprehension.md").write_text(
+                "# Stage 0\n", encoding="utf-8"
+            )
+            res_with_stage0 = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "write_to_file",
+                        "args": {"TargetFile": plan_target},
+                    },
+                }
+            )
+            self.assertEqual(res_with_stage0.returncode, 0)
+            self.assertEqual(
+                json.loads(res_with_stage0.stdout.strip())["decision"], "allow"
+            )
+
+            # 14. G1: Stage 3 premature execution lock (RequestFeedback=True on implementation_plan.md)
+            res_req_fb_no_stage3 = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "write_to_file",
+                        "args": {
+                            "TargetFile": plan_target,
+                            "ArtifactMetadata": {"RequestFeedback": True},
+                        },
+                    },
+                }
+            )
+            self.assertEqual(res_req_fb_no_stage3.returncode, 0)
+            out_no_stage3 = json.loads(res_req_fb_no_stage3.stdout.strip())
+            self.assertEqual(out_no_stage3["decision"], "deny")
+            self.assertIn("stage3-premature-execution-lock", out_no_stage3["reason"])
+
+            (scratch_dir / "stage3_approved.md").write_text(
+                "# Stage 3 Approved\n", encoding="utf-8"
+            )
+            res_req_fb_with_stage3 = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "write_to_file",
+                        "args": {
+                            "TargetFile": plan_target,
+                            "ArtifactMetadata": {"RequestFeedback": True},
+                        },
+                    },
+                }
+            )
+            self.assertEqual(res_req_fb_with_stage3.returncode, 0)
+            self.assertEqual(
+                json.loads(res_req_fb_with_stage3.stdout.strip())["decision"], "allow"
+            )
+
+        # 15. G2: Subagent MVC prompt cap (<=200 lines) & schedule patience guard (TimerCondition != 'any')
+        self.assertIsNotNone(
+            _re.search(pre_matcher, "invoke_subagent"),
+            "PreToolUse matcher must match invoke_subagent",
+        )
+        self.assertIsNotNone(
+            _re.search(pre_matcher, "schedule"),
+            "PreToolUse matcher must match schedule",
+        )
+        bloated_prompt = "\n".join("line %d" % i for i in range(205))
+        res_mvc_deny = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "invoke_subagent",
+                    "args": {
+                        "Subagents": [
+                            {
+                                "TypeName": "research",
+                                "Role": "Reviewer",
+                                "Prompt": bloated_prompt,
+                            }
+                        ]
+                    },
+                }
+            }
+        )
+        self.assertEqual(res_mvc_deny.returncode, 0)
+        out_mvc_deny = json.loads(res_mvc_deny.stdout.strip())
+        self.assertEqual(out_mvc_deny["decision"], "deny")
+        self.assertIn("subagent-mvc-prompt-cap", out_mvc_deny["reason"])
+
+        res_mvc_allow = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "invoke_subagent",
+                    "args": {
+                        "Subagents": [
+                            {
+                                "TypeName": "research",
+                                "Role": "Reviewer",
+                                "Prompt": "Read scratch/context.md and report.",
+                            }
+                        ]
+                    },
+                }
+            }
+        )
+        self.assertEqual(res_mvc_allow.returncode, 0)
+        self.assertEqual(json.loads(res_mvc_allow.stdout.strip())["decision"], "allow")
+
+        res_sched_deny = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "schedule",
+                    "args": {
+                        "DurationSeconds": 180,
+                        "TimerCondition": "any",
+                        "Prompt": "Wait for subagents",
+                    },
+                }
+            }
+        )
+        self.assertEqual(res_sched_deny.returncode, 0)
+        out_sched_deny = json.loads(res_sched_deny.stdout.strip())
+        self.assertEqual(out_sched_deny["decision"], "deny")
+        self.assertIn("schedule-patience-timer-condition", out_sched_deny["reason"])
+
+        res_sched_allow = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "schedule",
+                    "args": {
+                        "DurationSeconds": 180,
+                        "TimerCondition": "never",
+                        "Prompt": "Wait for subagents",
+                    },
+                }
+            }
+        )
+        self.assertEqual(res_sched_allow.returncode, 0)
+        self.assertEqual(
+            json.loads(res_sched_allow.stdout.strip())["decision"], "allow"
+        )
+
+        # 16. G3: Generated output (/dist, /build) write guard & git config mutation guard
+        res_dist_deny = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "write_to_file",
+                    "args": {
+                        "TargetFile": "C:\\Projects\\antigravity-core\\dist\\bundle.js"
+                    },
+                }
+            }
+        )
+        self.assertEqual(res_dist_deny.returncode, 0)
+        out_dist_deny = json.loads(res_dist_deny.stdout.strip())
+        self.assertEqual(out_dist_deny["decision"], "deny")
+        self.assertIn("generated-output-write-guard", out_dist_deny["reason"])
+
+        res_dist_scratch_allow = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "write_to_file",
+                    "args": {
+                        "TargetFile": "C:\\Users\\nferr\\scratch\\dist\\bundle.js"
+                    },
+                }
+            }
+        )
+        self.assertEqual(res_dist_scratch_allow.returncode, 0)
+        self.assertEqual(
+            json.loads(res_dist_scratch_allow.stdout.strip())["decision"], "allow"
+        )
+
+        res_git_cfg_deny = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "run_command",
+                    "args": {"CommandLine": "git config user.name 'Bot'"},
+                }
+            }
+        )
+        self.assertEqual(res_git_cfg_deny.returncode, 0)
+        out_git_cfg_deny = json.loads(res_git_cfg_deny.stdout.strip())
+        self.assertEqual(out_git_cfg_deny["decision"], "deny")
+        self.assertIn("git-config-mutation-guard", out_git_cfg_deny["reason"])
+
+        res_git_cfg_get = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "run_command",
+                    "args": {"CommandLine": "git config --get user.name"},
+                }
+            }
+        )
+        self.assertEqual(res_git_cfg_get.returncode, 0)
+        self.assertEqual(
+            json.loads(res_git_cfg_get.stdout.strip())["decision"], "allow"
+        )
+
+        cp_skill = (
+            REPO_ROOT / ".agents" / "skills" / "comprehend-problem" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("scratch/stage0_", cp_skill)
+        dv_skill = (
+            REPO_ROOT / ".agents" / "skills" / "design-validate" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("scratch/stage3_", dv_skill)
+        agents_md = (REPO_ROOT / ".agents" / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("scratch/stage0_", agents_md)
+        pre_commit_cfg = (REPO_ROOT / ".pre-commit-config.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("antigravity-sync-global-config-check", pre_commit_cfg)
+        self.assertIn("sync_global_config.py --check", pre_commit_cfg)
 
     def test_telemetry_append_antigravity_stop_outputs_allow(self):
         script = REPO_ROOT / ".agents" / "hooks" / "telemetry-append.ps1"
