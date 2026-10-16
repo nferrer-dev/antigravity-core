@@ -12,10 +12,55 @@
 
 $ErrorActionPreference = 'Stop'
 
+$script:PayloadObj = $null
+
+function Get-TelemetryChainTag {
+    param([string]$FilePath, [string]$EntryBody)
+    $prevChain = '00000000'
+    if (Test-Path -LiteralPath $FilePath) {
+        $lines = @(Get-Content -LiteralPath $FilePath -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -and $_.Trim() -ne '' })
+        if ($lines.Count -gt 0) {
+            $last = [string]$lines[$lines.Count - 1]
+            if ($last -match '\[chain:([0-9a-fA-F]{8})\]') {
+                $prevChain = $Matches[1].ToLowerInvariant()
+            }
+        }
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes("$prevChain|$EntryBody")
+        $hash = $sha.ComputeHash($bytes)
+        return ([System.BitConverter]::ToString($hash).Replace('-', '').ToLowerInvariant()).Substring(0, 8)
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Write-GuardTelemetry {
+    param([string]$Decision, [string]$Rule, [string]$Excerpt)
+    try {
+        if ($null -ne $script:PayloadObj -and $script:PayloadObj.PSObject.Properties['artifactDirectoryPath']) {
+            $artDir = [string]$script:PayloadObj.artifactDirectoryPath
+            if (-not [string]::IsNullOrWhiteSpace($artDir) -and (Test-Path -LiteralPath $artDir)) {
+                $telPath = Join-Path $artDir 'agentic_telemetry.md'
+                $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                $entryBody = "- [$stamp] | PreToolUse Guard ($Rule) | $Decision | $Excerpt"
+                $chainTag = Get-TelemetryChainTag -FilePath $telPath -EntryBody $entryBody
+                $line = "$entryBody [chain:$chainTag]`n"
+                $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                [System.IO.File]::AppendAllText($telPath, $line, $utf8NoBom)
+            }
+        }
+    } catch {
+        # Never block guard execution on telemetry write failure.
+    }
+}
+
 function Deny {
     param([string]$Rule, [string]$Cmd)
     $excerpt = $Cmd -replace '\s+', ' '
     if ($excerpt.Length -gt 160) { $excerpt = $excerpt.Substring(0, 160) + '...' }
+    Write-GuardTelemetry -Decision 'deny' -Rule $Rule -Excerpt $excerpt
     $lines = @(
         "BLOCKED by BRC guard [$Rule]: $excerpt",
         "This command is high blast radius. Do NOT retry it or attempt a workaround.",
@@ -37,6 +82,7 @@ try {
 }
 
 if ($null -eq $payload) { exit 0 }
+$script:PayloadObj = $payload
 
 $toolName = ''
 if ($payload.PSObject.Properties['tool_name'] -and $null -ne $payload.tool_name) {
@@ -48,6 +94,25 @@ if ($payload.PSObject.Properties['tool_input'] -and $null -ne $payload.tool_inpu
     $toolInput = $payload.tool_input
 } else {
     exit 0
+}
+
+function Get-WriteContentString {
+    param($ArgsObj)
+    if ($null -eq $ArgsObj) { return '' }
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($cf in @('CodeContent', 'ReplacementContent', 'new_string', 'content')) {
+        if ($ArgsObj.PSObject.Properties[$cf] -and $null -ne $ArgsObj.$cf) {
+            $parts.Add([string]$ArgsObj.$cf)
+        }
+    }
+    if ($ArgsObj.PSObject.Properties['edits'] -and $null -ne $ArgsObj.edits) {
+        foreach ($ed in @($ArgsObj.edits)) {
+            if ($null -ne $ed -and $ed.PSObject.Properties['new_string'] -and $null -ne $ed.new_string) {
+                $parts.Add([string]$ed.new_string)
+            }
+        }
+    }
+    return ($parts -join "`n")
 }
 
 # ---- Check file-access tools (Read, Edit, Write, MultiEdit) ----
@@ -121,12 +186,21 @@ if ($filePath -ne '') {
     }
     if ($toolName -match '^(Edit|Write|MultiEdit)$') {
         if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
-            ($norm -match '(?i)(^|\\)(settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|\.mcp\.json|CLAUDE\.md|AGENTS\.md|agentic_telemetry\.md)$')) {
+            ($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|CLAUDE\.md|AGENTS\.md|agentic_telemetry\.md)$')) {
             Deny 'harness-config-self-tampering' $filePath
         }
         if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
             ($norm -match '(?i)(^|\\)(dist|build)(\\|$)')) {
             Deny 'generated-output-write-guard' $filePath
+        }
+        if (($filePath -match '(?i)\.md$') -and $payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
+            $taintMdPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
+            if (Test-Path -LiteralPath $taintMdPath) {
+                $mdBody = Get-WriteContentString $toolInput
+                if ($mdBody -match '!\[[^\]]*\]\(\s*https?://') {
+                    Deny 'untrusted-web-markdown-image-exfil' 'Writing external Markdown image URL while session is web-tainted'
+                }
+            }
         }
     }
 }
@@ -136,6 +210,12 @@ if ($toolName -match '^mcp__cortex__(store_memory|upsert_entity|create_relation|
     if (($mcpPayloadStr -match '(sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AIzaSy[A-Za-z0-9_-]{33}|fc-[a-f0-9]{32}|tvly-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,})') -or
         ($mcpPayloadStr -match '(?i)(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)|<\s*system\s*>|\[VERDICT:\s*APPROVE\])')) {
         Deny 'cortex-memory-poisoning-guard' 'Blocked attempt to persist secret or prompt-injection directive into Cortex long-term memory'
+    }
+    if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
+        $taintCheckPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
+        if (Test-Path -LiteralPath $taintCheckPath) {
+            Deny 'untrusted-web-memory-taint' 'Cortex write blocked while session is tainted by external web content'
+        }
     }
     exit 0
 }
@@ -152,6 +232,26 @@ if ($toolName -eq 'WebFetch') {
         if (Test-UnsafeFetchUrl $targetUrl) {
             Deny 'ssrf-local-metadata-url' $targetUrl
         }
+        try {
+            if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
+                $artDir = [string]$payload.artifactDirectoryPath
+                if (Test-Path -LiteralPath $artDir) {
+                    $scratchDir = Join-Path $artDir 'scratch'
+                    if (-not (Test-Path -LiteralPath $scratchDir)) {
+                        New-Item -ItemType Directory -Path $scratchDir -Force | Out-Null
+                    }
+                    $taintFile = Join-Path $scratchDir '.untrusted_web_taint.json'
+                    $taintObj = @{
+                        url = $targetUrl
+                        timestamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                    } | ConvertTo-Json -Compress
+                    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                    [System.IO.File]::WriteAllText($taintFile, $taintObj, $utf8NoBom)
+                }
+            }
+        } catch {
+            # Ignore taint write failure on read-only paths.
+        }
     }
     exit 0
 }
@@ -165,7 +265,10 @@ if ([string]::IsNullOrWhiteSpace($cmd)) { exit 0 }
 # ---- Anti-Obfuscation Canonicalization ----
 function Get-CanonicalCommand {
     param([string]$RawCmd)
-    return ($RawCmd -replace '`', '' -replace '\^', '')
+    $deobf = $RawCmd -replace '`', '' -replace '\^', ''
+    $deobf = $deobf -replace '(?<=[A-Za-z0-9_-])(?:''''|"")|(?:''''|"")(?=[A-Za-z0-9_-])', ''
+    $deobf = $deobf -replace '(?<=[A-Za-z0-9_-])["'']([A-Za-z0-9_-]+)["'']|["'']([A-Za-z0-9_-]+)["''](?=[A-Za-z0-9_-])', '$1$2'
+    return $deobf
 }
 
 $candidates = New-Object System.Collections.Generic.List[string]
@@ -198,6 +301,14 @@ foreach ($checkStr in @($cmd, $canon)) {
 $exempt = '(^|[\s"'';=/\\])(scratch|tmp|temp|node_modules|dist|build|target|\.venv|__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache|\.tox|coverage|htmlcov)([\s"'';/\\]|$)'
 
 foreach ($evalCmd in $candidates) {
+    if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
+        $taintCheckPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
+        if ((Test-Path -LiteralPath $taintCheckPath) -and
+            ($evalCmd -match '(^|[\s;|&(])(curl(\.exe)?|wget(\.exe)?|Invoke-WebRequest|Invoke-RestMethod|iwr|irm|Start-BitsTransfer|scp(\.exe)?|ftp(\.exe)?)\b')) {
+            Deny 'untrusted-web-egress-taint' $evalCmd
+        }
+    }
+
     if ($evalCmd -match '(^|[\s;|&(])(Invoke-[E]xpression|iex|\[ScriptBlock\]::Create)\b') {
         Deny 'dynamic-code-evaluation' $evalCmd
     }
@@ -207,11 +318,13 @@ foreach ($evalCmd in $candidates) {
     }
 
     if (($evalCmd -match 'antigravity[/\\]mcp_config\.json(?!\.deprecated-redacted)') -or
-        ($evalCmd -match '(^|\s)(cat|type|Get-Content|more|less|head|tail)\s+[^\r\n]*?(^|[/\\"\s])(\.env(?!\.(example|sample|template))|\.aws[/\\]credentials|\.kube[/\\]config|\.docker[/\\]config\.json|\.git-credentials|id_rsa|id_ed25519|id_ecdsa|id_dsa)(["\s]|$)')) {
+        ($evalCmd -match '(^|\s)(cat|type|Get-Content|more|less|head|tail)\s+[^\r\n]*?(^|[/\\"\s])(\.env(?!\.(example|sample|template|dist|schema))|\.aws[/\\]credentials|\.kube[/\\]config|\.docker[/\\]config\.json|\.git-credentials|id_rsa|id_ed25519|id_ecdsa|id_dsa)(["\s]|$)') -or
+        ($evalCmd -match '(^|[\s;|&(])(python[0-9.]*|py|node|ruby|perl|php|powershell|pwsh)\b[^\r\n]*?(\.env(?!\.(example|sample|template|dist|schema))|\.aws[/\\]credentials|\.kube[/\\]config|\.docker[/\\]config\.json|\.git-credentials|id_rsa|id_ed25519|id_ecdsa|id_dsa)')) {
         Deny 'secret-file-shell-read' $evalCmd
     }
 
-    if ($evalCmd -match '(>|>>|\bOut-File\b|\bSet-Content\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bcp\b|\bmv\b|\btee\b)[^\r\n]*?(settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|\.mcp\.json)') {
+    if (($evalCmd -notmatch '(?i)[/\\](scratch|tmp|temp)[/\\]') -and
+        ($evalCmd -match '(>|>>|\bOut-File\b|\bSet-Content\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bRemove-Item\b|\bcp\b|\bmv\b|\brm\b|\bdel\b|\btee\b|WriteAllText|WriteAllLines|AppendAllText)[^\r\n]*?(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|agentic_telemetry\.md)')) {
         Deny 'harness-config-self-tampering' $evalCmd
     }
 

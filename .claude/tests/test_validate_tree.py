@@ -331,6 +331,30 @@ class LiveTree(unittest.TestCase):
             )
         )
 
+        # 11. Wave 3 RB-15 through RB-21 Claude parity
+        for obf_cmd in (
+            'r""m -rf C:/Users/important',
+            "g''it push --force origin master",
+            "python -c \"print(open('.env').read())\"",
+        ):
+            res_obf = self._run_claude_brc_guard(
+                {"tool_name": "Bash", "tool_input": {"command": obf_cmd}}
+            )
+            self.assertEqual(res_obf.returncode, 2, "Expected exit 2 for %r" % obf_cmd)
+
+        swallowed_src = (
+            "import unittest\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_swallowed(self):\n"
+            "        try:\n"
+            "            self.assertEqual(1, 2)\n"
+            "        except Exception:\n"
+            "            pass\n"
+        )
+        self.assertTrue(vt.scan_test_integrity(swallowed_src, "test_swallow.py"))
+        self.assertTrue(vt.verify_telemetry_chain("- [2026-10-16T00:00:00Z] | Hook | m | s [chain:deadbeef]\n", "tel.md"))
+        self.assertIn("untrusted-web-markdown-image-exfil", vt.REQUIRED_BRC_GUARD_RULES)
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

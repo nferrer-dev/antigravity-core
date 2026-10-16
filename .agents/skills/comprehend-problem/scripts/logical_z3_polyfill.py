@@ -175,11 +175,51 @@ def _find_satisfying_assignment(variables, constraints):
     return backtrack(0, {})
 
 
+def _extract_referenced_vars(exprs):
+    """Return the set of variable identifiers referenced across a list of expressions."""
+    refs = set()
+    for expr in exprs:
+        tree = ast.parse(expr, mode="eval")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id not in _ALLOWED_CALLS and node.id not in {"True", "False"}:
+                refs.add(node.id)
+    return refs
+
+
+def _extract_implies_antecedent(inv_expr):
+    """If inv_expr is Implies(P, Q), return the source string of P; otherwise None."""
+    tree = ast.parse(inv_expr, mode="eval")
+    body = tree.body
+    if (
+        isinstance(body, ast.Call)
+        and isinstance(body.func, ast.Name)
+        and body.func.id == "Implies"
+        and len(body.args) == 2
+    ):
+        return ast.unparse(body.args[0])
+    return None
+
+
+def _extract_unsat_core_finite(variables, constraints):
+    """Compute a deterministic deletion-based Minimal Unsatisfiable Core (MUS)."""
+    core = list(constraints)
+    idx = 0
+    while idx < len(core):
+        candidate = core[:idx] + core[idx + 1 :]
+        if candidate and _find_satisfying_assignment(variables, candidate) is None:
+            core = candidate
+        else:
+            idx += 1
+    return core
+
+
 def solve_finite_domain(spec):
-    """Solve a finite-domain constraint specification deterministically with refutation checks."""
+    """Solve a finite-domain constraint specification deterministically with refutation and vacuity checks."""
     variables = spec.get("variables", {})
     constraints = spec.get("constraints", [])
     invariants = spec.get("invariants", [])
+    referenced = _extract_referenced_vars(list(constraints) + list(invariants))
+    unconstrained = sorted(set(variables.keys()) - referenced)
 
     model = _find_satisfying_assignment(variables, constraints)
     if model is None:
@@ -187,6 +227,8 @@ def solve_finite_domain(spec):
             "status": "UNSAT",
             "engine": "stdlib-finite-domain",
             "model": None,
+            "unsat_core": _extract_unsat_core_finite(variables, constraints),
+            "unconstrained_variables": unconstrained,
             "constraints_count": len(constraints),
         }
 
@@ -200,13 +242,28 @@ def solve_finite_domain(spec):
                 "model": model,
                 "refuted_invariant": inv,
                 "counterexample": counterexample,
+                "unconstrained_variables": unconstrained,
                 "constraints_count": len(constraints),
             }
+        antecedent = _extract_implies_antecedent(inv)
+        if antecedent is not None:
+            ant_model = _find_satisfying_assignment(variables, list(constraints) + [antecedent])
+            if ant_model is None:
+                return {
+                    "status": "VACUOUS",
+                    "engine": "stdlib-finite-domain",
+                    "model": model,
+                    "vacuous_invariant": inv,
+                    "vacuous_reason": "antecedent_unsat",
+                    "unconstrained_variables": unconstrained,
+                    "constraints_count": len(constraints),
+                }
 
     return {
         "status": "SAT",
         "engine": "stdlib-finite-domain",
         "model": model,
+        "unconstrained_variables": unconstrained,
         "constraints_count": len(constraints),
     }
 
@@ -264,6 +321,8 @@ def solve_spec(spec):
         variables = spec.get("variables", {})
         constraints = spec.get("constraints", [])
         invariants = spec.get("invariants", [])
+        referenced = _extract_referenced_vars(list(constraints) + list(invariants))
+        unconstrained = sorted(set(variables.keys()) - referenced)
         z3_vars = {}
         env = {
             "And": z3.And,
@@ -288,6 +347,8 @@ def solve_spec(spec):
                 "status": "UNSAT",
                 "engine": "z3-solver",
                 "model": None,
+                "unsat_core": _extract_unsat_core_finite(variables, constraints),
+                "unconstrained_variables": unconstrained,
                 "constraints_count": len(constraints),
             }
         m = solver.model()
@@ -306,13 +367,32 @@ def solve_spec(spec):
                     "model": model_dict,
                     "refuted_invariant": inv,
                     "counterexample": ce_dict,
+                    "unconstrained_variables": unconstrained,
                     "constraints_count": len(constraints),
                 }
             solver.pop()
+            antecedent = _extract_implies_antecedent(inv)
+            if antecedent is not None:
+                solver.push()
+                ant_tree = ast.parse(antecedent, mode="eval")
+                solver.add(_eval_z3_ast_node(ant_tree, env, z3))
+                is_ant_unsat = solver.check() != z3.sat
+                solver.pop()
+                if is_ant_unsat:
+                    return {
+                        "status": "VACUOUS",
+                        "engine": "z3-solver",
+                        "model": model_dict,
+                        "vacuous_invariant": inv,
+                        "vacuous_reason": "antecedent_unsat",
+                        "unconstrained_variables": unconstrained,
+                        "constraints_count": len(constraints),
+                    }
         return {
             "status": "SAT",
             "engine": "z3-solver",
             "model": model_dict,
+            "unconstrained_variables": unconstrained,
             "constraints_count": len(constraints),
         }
     except Exception:
@@ -320,7 +400,7 @@ def solve_spec(spec):
 
 
 def run_self_test():
-    """Verify SAT, UNSAT, REFUTED proofs and AST sandbox safety deterministically."""
+    """Verify SAT, UNSAT, REFUTED, VACUOUS proofs and AST sandbox safety deterministically."""
     try:
         _eval_expr("().__class__", {})
         print("Self-test AST safety failed: allowed attribute access", file=sys.stderr)
@@ -362,12 +442,26 @@ def run_self_test():
         return 1
 
     unsat_spec = {
-        "variables": {"a": [1, 2], "b": [1, 2]},
-        "constraints": ["a < b", "b < a"],
+        "variables": {"a": [1, 2], "b": [1, 2], "unused": [1, 2]},
+        "constraints": ["a == 1", "b == 2", "a == 2"],
     }
     unsat_res = solve_spec(unsat_spec)
-    if unsat_res["status"] != "UNSAT":
-        print("Self-test UNSAT failed: %r" % (unsat_res,))
+    if (
+        unsat_res["status"] != "UNSAT"
+        or unsat_res.get("unsat_core") != ["a == 1", "a == 2"]
+        or unsat_res.get("unconstrained_variables") != ["unused"]
+    ):
+        print("Self-test UNSAT/core failed: %r" % (unsat_res,))
+        return 1
+
+    vac_spec = {
+        "variables": {"x": [1, 2]},
+        "constraints": ["x == 1"],
+        "invariants": ["Implies(x == 2, x == 99)"],
+    }
+    vac_res = solve_spec(vac_spec)
+    if vac_res["status"] != "VACUOUS" or vac_res.get("vacuous_invariant") != "Implies(x == 2, x == 99)":
+        print("Self-test VACUOUS failed: %r" % (vac_res,))
         return 1
 
     print("logical_z3_polyfill self-test: PASS (%s)" % sat_res["engine"])

@@ -243,7 +243,7 @@ function Test-MissingStageArtifact {
                 if ($_.Length -le 0) { return $false }
                 if ($_.Extension -ieq '.json') {
                     $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
-                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED)"') { return $false }
+                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
                 }
                 return $true
             })
@@ -254,7 +254,7 @@ function Test-MissingStageArtifact {
                 if ($_.Length -le 0) { return $false }
                 if ($_.Extension -ieq '.json') {
                     $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
-                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED)"') { return $false }
+                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
                 }
                 return $true
             })
@@ -287,6 +287,39 @@ function Test-GeneratedOutputPath {
     return $false
 }
 
+function Get-WriteContentString {
+    param($ArgsObj)
+    if ($null -eq $ArgsObj) { return '' }
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($cf in @('CodeContent', 'ReplacementContent', 'new_string', 'content')) {
+        if ($ArgsObj.PSObject.Properties[$cf] -and $null -ne $ArgsObj.$cf) {
+            $parts.Add([string]$ArgsObj.$cf)
+        }
+    }
+    if ($ArgsObj.PSObject.Properties['edits'] -and $null -ne $ArgsObj.edits) {
+        foreach ($ed in @($ArgsObj.edits)) {
+            if ($null -ne $ed -and $ed.PSObject.Properties['new_string'] -and $null -ne $ed.new_string) {
+                $parts.Add([string]$ed.new_string)
+            }
+        }
+    }
+    return ($parts -join "`n")
+}
+
+function Test-Stage1CandidateSolutionsGate {
+    param([string]$PathStr, $ArgsObj)
+    if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
+    $norm = $PathStr.Replace('/', '\')
+    if ($norm -notmatch '(?i)(^|\\)candidate_solutions\.md$') { return $false }
+    $body = Get-WriteContentString $ArgsObj
+    if (($body -notmatch '(?i)Radical\s+Innovator') -or
+        ($body -notmatch '(?i)Enterprise\s+Minimalist') -or
+        ($body -notmatch '(?i)Security\s+Paranoiac')) {
+        return $true
+    }
+    return $false
+}
+
 $isWriteTool = $toolName -match '^(write_to_file|(?:multi_)?replace_file_content|(?:Multi)?Edit|Write)$'
 $isReadOrWriteTool = $isWriteTool -or ($toolName -match '^(view_file|Read)$')
 
@@ -308,6 +341,41 @@ if ($isWriteTool -and (Test-MissingStage0Artifact $filePath $payload)) {
 
 if ($isWriteTool -and (Test-PrematureExecutionLock $filePath $argsObj $payload)) {
     Emit-Deny 'stage3-premature-execution-lock' 'Complete Stage 3 design-validate and write non-empty scratch/stage3_<topic>.md or .json before setting RequestFeedback=true on implementation_plan.md'
+}
+
+if (($toolName -match '^(write_to_file|Write)$') -and (Test-Stage1CandidateSolutionsGate $filePath $argsObj)) {
+    Emit-Deny 'stage1-candidate-solutions-gate' 'candidate_solutions.md must include all 3 cognitive framing lenses (Radical Innovator, Enterprise Minimalist, Security Paranoiac)'
+}
+
+if ($isWriteTool -and ($filePath -match '(?i)\.md$') -and $payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
+    $taintMdPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
+    if (Test-Path -LiteralPath $taintMdPath) {
+        $mdBody = Get-WriteContentString $argsObj
+        if ($mdBody -match '!\[[^\]]*\]\(\s*https?://') {
+            Emit-ForceAsk 'untrusted-web-markdown-image-exfil' 'Writing external Markdown image URL while session is web-tainted requires confirmation'
+        }
+    }
+}
+
+if ($toolName -eq 'send_message' -and $null -ne $argsObj) {
+    $msgText = ''
+    foreach ($mf in @('Message', 'message', 'content')) {
+        if ($argsObj.PSObject.Properties[$mf] -and $null -ne $argsObj.$mf) {
+            $msgText = [string]$argsObj.$mf
+            break
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($msgText)) {
+        $mLines = @($msgText -split "\r?\n")
+        if ($mLines.Count -gt 200) {
+            Emit-Deny 'subagent-mvc-prompt-cap' 'send_message payload exceeds 200-line MVC cap; write context to scratch/ and pass the file path'
+        }
+        if (($msgText -match '(sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AIzaSy[A-Za-z0-9_-]{33}|fc-[a-f0-9]{32}|tvly-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,})') -or
+            ($msgText -match '(?i)(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)|<\s*system\s*>)')) {
+            Emit-Deny 'subagent-message-injection-guard' 'Blocked secret token or prompt-injection override directive in inter-agent send_message'
+        }
+    }
+    Emit-Allow
 }
 
 if ($toolName -eq 'invoke_subagent' -and $null -ne $argsObj -and $argsObj.PSObject.Properties['Subagents'] -and $null -ne $argsObj.Subagents) {
@@ -422,8 +490,10 @@ if ([string]::IsNullOrWhiteSpace($cmd)) {
 # ---- Anti-Obfuscation Canonicalization ----
 function Get-CanonicalCommand {
     param([string]$RawCmd)
-    # Strip PowerShell backticks and cmd carets used for token splitting
+    # Strip PowerShell backticks, cmd carets, and quote-splitting obfuscation
     $deobf = $RawCmd -replace '`', '' -replace '\^', ''
+    $deobf = $deobf -replace '(?<=[A-Za-z0-9_-])(?:''''|"")|(?:''''|"")(?=[A-Za-z0-9_-])', ''
+    $deobf = $deobf -replace '(?<=[A-Za-z0-9_-])["'']([A-Za-z0-9_-]+)["'']|["'']([A-Za-z0-9_-]+)["''](?=[A-Za-z0-9_-])', '$1$2'
     return $deobf
 }
 
@@ -478,12 +548,14 @@ foreach ($evalCmd in $candidates) {
 
     # Shell access to legacy antigravity/mcp_config.json, .env, or cloud/SSH credentials
     if (($evalCmd -match 'antigravity[/\\]mcp_config\.json(?!\.deprecated-redacted)') -or
-        ($evalCmd -match '(^|\s)(cat|type|Get-Content|more|less|head|tail)\s+[^\r\n]*?(^|[/\\"\s])(\.env(?!\.(example|sample|template))|\.aws[/\\]credentials|\.kube[/\\]config|\.docker[/\\]config\.json|\.git-credentials|id_rsa|id_ed25519|id_ecdsa|id_dsa)(["\s]|$)')) {
+        ($evalCmd -match '(^|\s)(cat|type|Get-Content|more|less|head|tail)\s+[^\r\n]*?(^|[/\\"\s])(\.env(?!\.(example|sample|template|dist|schema))|\.aws[/\\]credentials|\.kube[/\\]config|\.docker[/\\]config\.json|\.git-credentials|id_rsa|id_ed25519|id_ecdsa|id_dsa)(["\s]|$)') -or
+        ($evalCmd -match '(^|[\s;|&(])(python[0-9.]*|py|node|ruby|perl|php|powershell|pwsh)\b[^\r\n]*?(\.env(?!\.(example|sample|template|dist|schema))|\.aws[/\\]credentials|\.kube[/\\]config|\.docker[/\\]config\.json|\.git-credentials|id_rsa|id_ed25519|id_ecdsa|id_dsa)')) {
         Emit-Deny 'secret-file-shell-read' $evalCmd
     }
 
     # Shell self-tampering writes/redirects targeting governance configs
-    if ($evalCmd -match '(>|>>|\bOut-File\b|\bSet-Content\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bcp\b|\bmv\b|\btee\b)[^\r\n]*?(hooks\.json|brc-guard\.ps1|telemetry-append\.ps1|mcp_config\.json|plugin\.json)') {
+    if (($evalCmd -notmatch '(?i)[/\\](scratch|tmp|temp)[/\\]') -and
+        ($evalCmd -match '(>|>>|\bOut-File\b|\bSet-Content\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bRemove-Item\b|\bcp\b|\bmv\b|\brm\b|\bdel\b|\btee\b|WriteAllText|WriteAllLines|AppendAllText)[^\r\n]*?(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|agentic_telemetry\.md)')) {
         Emit-ForceAsk 'harness-config-self-tampering' $evalCmd
     }
 

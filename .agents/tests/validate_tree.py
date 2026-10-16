@@ -16,6 +16,7 @@ Exit code 0 when all invariants hold; 1 otherwise, one violation per line.
 Stdlib only; runnable from any cwd; never writes.
 """
 import ast
+import hashlib
 import json
 import os
 import re
@@ -51,6 +52,48 @@ CONCRETE_PATH_RE = re.compile(
 )
 RELATIVE_MD_LINK_RE = re.compile(
     r"\[[^\]]+\]\((?!https?:|mailto:|file:|sidecar:|customization:|conversation:|#)([^)#\s]+)"
+)
+TELEMETRY_CHAIN_RE = re.compile(r"^(.*)\s\[chain:([0-9a-fA-F]{8})\]$")
+
+REQUIRED_BRC_GUARD_RULES = (
+    "secret-file-access",
+    "harness-config-self-tampering",
+    "generated-output-write-guard",
+    "stage0-comprehend-problem-gate",
+    "stage3-premature-execution-lock",
+    "stage1-candidate-solutions-gate",
+    "untrusted-web-markdown-image-exfil",
+    "subagent-mvc-prompt-cap",
+    "subagent-message-injection-guard",
+    "subagent-role-least-privilege",
+    "subagent-taint-delegation-guard",
+    "schedule-patience-timer-condition",
+    "cortex-memory-poisoning-guard",
+    "untrusted-web-memory-taint",
+    "ssrf-local-metadata-url",
+    "obfuscated-encoded-command",
+    "untrusted-web-egress-taint",
+    "dynamic-code-evaluation",
+    "inline-secret-token",
+    "secret-file-shell-read",
+    "recursive-force-delete",
+    "git-push-force-protected-branch",
+    "git-reset-hard-protected-branch",
+    "sql-drop",
+    "git-config-mutation-guard",
+    "git-no-verify-bypass",
+    "mkfs",
+    "kill-all-processes",
+    "disk-format",
+    "destructive-infrastructure-command",
+)
+
+REQUIRED_TELEMETRY_MARKERS = (
+    "[VERDICT: REJECT]",
+    "[GLOBAL VERDICT: REJECT]",
+    "[GLOBAL VERDICT: PROCEED]",
+    "<BLAST_RADIUS>",
+    "BLOCKING:",
 )
 
 GROUPED_HOOK_EVENTS = {"PreToolUse", "PostToolUse"}
@@ -1049,6 +1092,34 @@ def check_inv3_hooks(root):
             violations.append(
                 "INV-3: .agents/hooks/%s: referenced hook script missing" % script_name
             )
+            continue
+        script_text = target.read_bytes().decode("utf-8", errors="replace")
+        if script_text.strip().startswith("# mock"):
+            continue
+        if script_name == "brc-guard.ps1":
+            for rule_id in REQUIRED_BRC_GUARD_RULES:
+                if rule_id not in script_text:
+                    violations.append(
+                        "INV-3: .agents/hooks/%s: missing required rule ID %r"
+                        % (script_name, rule_id)
+                    )
+            if "[chain:" not in script_text:
+                violations.append(
+                    "INV-3: .agents/hooks/%s: missing SHA-256 telemetry chain tag"
+                    % script_name
+                )
+        elif script_name == "telemetry-append.ps1":
+            for marker in REQUIRED_TELEMETRY_MARKERS:
+                if marker not in script_text:
+                    violations.append(
+                        "INV-3: .agents/hooks/%s: missing causal marker %r"
+                        % (script_name, marker)
+                    )
+            if "[chain:" not in script_text:
+                violations.append(
+                    "INV-3: .agents/hooks/%s: missing SHA-256 telemetry chain tag"
+                    % script_name
+                )
     return violations
 
 
@@ -1200,6 +1271,30 @@ def check_inv8_vocabulary(root):
     return violations
 
 
+def verify_telemetry_chain(text, label):
+    """Verify rolling SHA-256 hash chain on telemetry lines containing [chain:<8hex>]."""
+    violations = []
+    prev_chain = "00000000"
+    for line_no, raw_line in enumerate((text or "").splitlines(), start=1):
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        match = TELEMETRY_CHAIN_RE.match(stripped)
+        if not match:
+            continue
+        body, claimed = match.group(1), match.group(2).lower()
+        digest = hashlib.sha256(
+            ("%s|%s" % (prev_chain, body)).encode("utf-8")
+        ).hexdigest()[:8]
+        if digest != claimed:
+            violations.append(
+                "%s: line %d telemetry hash chain mismatch (expected [chain:%s], got [chain:%s])"
+                % (label, line_no, digest, claimed)
+            )
+        prev_chain = claimed
+    return violations
+
+
 def scan_test_integrity(source_text, label):
     """Verify test_*.py methods contain real assertions, zero skips, and no tautologies."""
     violations = []
@@ -1290,6 +1385,49 @@ def scan_test_integrity(source_text, label):
                         "%s: %s contains tautological assertIsNone(None)"
                         % (label, node.name)
                     )
+            elif isinstance(child, ast.Try):
+                body_has_assert = any(
+                    isinstance(stmt_node, ast.Assert)
+                    or (
+                        isinstance(stmt_node, ast.Call)
+                        and getattr(
+                            stmt_node.func,
+                            "attr",
+                            getattr(stmt_node.func, "id", ""),
+                        ).startswith("assert")
+                    )
+                    for stmt in child.body
+                    for stmt_node in ast.walk(stmt)
+                )
+                if body_has_assert:
+                    for handler in child.handlers:
+                        exc_name = ""
+                        if handler.type is None:
+                            exc_name = "bare"
+                        elif isinstance(handler.type, ast.Name):
+                            exc_name = handler.type.id
+                        elif isinstance(handler.type, ast.Tuple):
+                            names = [
+                                elt.id
+                                for elt in handler.type.elts
+                                if isinstance(elt, ast.Name)
+                            ]
+                            if any(
+                                n in {"Exception", "BaseException", "AssertionError"}
+                                for n in names
+                            ):
+                                exc_name = "broad"
+                        if exc_name in {
+                            "bare",
+                            "broad",
+                            "Exception",
+                            "BaseException",
+                            "AssertionError",
+                        } and all(isinstance(s, ast.Pass) for s in handler.body):
+                            violations.append(
+                                "%s: %s swallows assertion failure in bare/broad except-pass block (reward-hacking guard)"
+                                % (label, node.name)
+                            )
         if assert_count == 0:
             violations.append(
                 "%s: %s contains zero assertions (reward-hacking guard)"
@@ -1320,6 +1458,12 @@ def check_inv10_skill_security(root):
         t_text = test_py.read_bytes().decode("utf-8", errors="replace")
         for t_err in scan_test_integrity(t_text, t_label):
             violations.append("INV-10: %s" % t_err)
+    tel_file = root / ".agents" / "agentic_telemetry.md"
+    if tel_file.is_file():
+        tel_label = _rel(root, tel_file)
+        tel_text = tel_file.read_bytes().decode("utf-8", errors="replace")
+        for c_err in verify_telemetry_chain(tel_text, tel_label):
+            violations.append("INV-10: %s" % c_err)
     return violations
 
 

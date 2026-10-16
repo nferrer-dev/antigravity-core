@@ -18,8 +18,32 @@ import tempfile
 from pathlib import Path
 
 
+def compute_cyclomatic_complexity(func_node):
+    """Return the McCabe cyclomatic complexity of an AST FunctionDef/AsyncFunctionDef."""
+    complexity = 1
+    for child in ast.walk(func_node):
+        if isinstance(
+            child,
+            (
+                ast.If,
+                ast.For,
+                ast.AsyncFor,
+                ast.While,
+                ast.ExceptHandler,
+                ast.With,
+                ast.AsyncWith,
+                ast.IfExp,
+                ast.comprehension,
+            ),
+        ):
+            complexity += 1
+        elif isinstance(child, ast.BoolOp):
+            complexity += max(0, len(child.values) - 1)
+    return complexity
+
+
 def parse_file(filepath):
-    """Parse a single Python file and return its imports, classes, and functions."""
+    """Parse a single Python file and return its imports, classes, functions, calls, and complexities."""
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
@@ -32,6 +56,8 @@ def parse_file(filepath):
                 "imports": [],
                 "classes": [],
                 "functions": [],
+                "calls": [],
+                "function_complexities": {},
                 "error": "UnicodeDecodeError",
             }
 
@@ -42,12 +68,16 @@ def parse_file(filepath):
             "imports": [],
             "classes": [],
             "functions": [],
+            "calls": [],
+            "function_complexities": {},
             "error": "SyntaxError",
         }
 
     imports = set()
     classes = []
     functions = []
+    calls = set()
+    function_complexities = {}
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -60,17 +90,27 @@ def parse_file(filepath):
             classes.append(node.name)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             functions.append(node.name)
+            function_complexities[node.name] = compute_cyclomatic_complexity(node)
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                calls.add(node.func.id)
+            elif isinstance(node.func, ast.Attribute):
+                calls.add(node.func.attr)
 
     return {
         "imports": sorted(imports),
         "classes": sorted(classes),
         "functions": sorted(functions),
+        "calls": sorted(calls),
+        "function_complexities": dict(sorted(function_complexities.items())),
     }
 
 
 def build_graph(directory):
-    """Build a deterministic structural dependency graph for a directory."""
+    """Build a deterministic structural dependency and call graph for a directory."""
     graph = {"nodes": [], "edges": []}
+    file_records = []
+    symbol_to_files = {}
 
     for root, dirnames, files in os.walk(directory):
         dirnames[:] = sorted(d for d in dirnames if d not in {"__pycache__", ".git"})
@@ -84,12 +124,18 @@ def build_graph(directory):
             if "error" in data:
                 continue
 
+            file_records.append((rel_path, data))
+            for sym in list(data["functions"]) + list(data["classes"]):
+                symbol_to_files.setdefault(sym, set()).add(rel_path)
+
             graph["nodes"].append(
                 {
                     "id": rel_path,
                     "type": "file",
                     "classes": data["classes"],
                     "functions": data["functions"],
+                    "calls": data["calls"],
+                    "function_complexities": data["function_complexities"],
                 }
             )
 
@@ -99,8 +145,23 @@ def build_graph(directory):
                         "source": rel_path,
                         "target": imp,
                         "relation": "imports",
+                        "type": "IMPORTS",
                     }
                 )
+
+    for rel_path, data in file_records:
+        for called_sym in data["calls"]:
+            for target_file in sorted(symbol_to_files.get(called_sym, ())):
+                if target_file != rel_path:
+                    graph["edges"].append(
+                        {
+                            "source": rel_path,
+                            "target": target_file,
+                            "relation": "calls",
+                            "type": "CALLS",
+                            "symbol": called_sym,
+                        }
+                    )
 
     return graph
 
@@ -110,21 +171,22 @@ def _is_test_file(rel_path):
     return name.startswith("test_") or name.endswith("_test.py")
 
 
-def find_impacted_tests(directory, changed_files):
+def find_impacted_tests(directory_or_graph, changed_files):
     """Return sorted relative paths of test_*.py files transitively impacted by changed_files."""
-    graph = build_graph(directory)
+    graph = (
+        directory_or_graph
+        if isinstance(directory_or_graph, dict)
+        else build_graph(directory_or_graph)
+    )
     node_ids = [n["id"] for n in graph["nodes"]]
 
-    # Map module identifiers (stem and dotted path) to node relative paths
+    # Map module identifiers (stem, relative path, and dotted path) to node relative paths
     mod_to_nodes = {}
-    node_to_mods = {}
     for nid in node_ids:
         p = Path(nid)
         stem = p.stem
         dotted = ".".join(p.with_suffix("").parts)
-        mods = {stem, dotted}
-        node_to_mods[nid] = mods
-        for m in mods:
+        for m in (nid, stem, dotted):
             mod_to_nodes.setdefault(m, set()).add(nid)
 
     reverse_importers = {nid: set() for nid in node_ids}
@@ -241,15 +303,32 @@ def compute_ast_surface_diff(old_source, new_source):
     }
 
 
+def find_high_complexity_functions(directory_or_graph, threshold=10):
+    """Return a sorted list of functions whose McCabe cyclomatic complexity >= threshold."""
+    graph = (
+        directory_or_graph
+        if isinstance(directory_or_graph, dict)
+        else build_graph(directory_or_graph)
+    )
+    results = []
+    for node in graph.get("nodes", []):
+        for fn_name, comp in sorted(node.get("function_complexities", {}).items()):
+            if comp >= threshold:
+                results.append(
+                    {"file": node["id"], "function": fn_name, "complexity": comp}
+                )
+    return results
+
+
 def run_self_test():
-    """Verify AST parsing, deterministic graph generation, impacted-test selection, AST diff, and LF output."""
+    """Verify AST parsing, deterministic graph generation, CALLS edges, complexity, impacted-test selection, AST diff, and LF output."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         sample_py = tmp_dir / "sample.py"
         sample_py.write_text(
             "import json\nfrom pathlib import Path\n\n"
             "class Widget:\n    pass\n\n"
-            "def sync_fn():\n    return 1\n\n"
+            "def sync_fn(x=1):\n    if x > 0 and x < 10:\n        return 1\n    return 0\n\n"
             "async def async_fn():\n    return 2\n",
             encoding="utf-8",
             newline="\n",
@@ -282,6 +361,20 @@ def run_self_test():
                 "SELF-TEST FAIL: missing functions %r" % nodes["sample.py"]["functions"],
                 file=sys.stderr,
             )
+            return 1
+        if nodes["sample.py"]["function_complexities"].get("sync_fn") != 3:
+            print("SELF-TEST FAIL: expected sync_fn complexity 3", file=sys.stderr)
+            return 1
+        if not any(
+            e.get("type") == "CALLS"
+            and e.get("source") == "test_widget.py"
+            and e.get("target") == "sample.py"
+            for e in loaded.get("edges", [])
+        ):
+            print("SELF-TEST FAIL: missing CALLS edge in %r" % loaded.get("edges"), file=sys.stderr)
+            return 1
+        if not find_high_complexity_functions(loaded, threshold=3):
+            print("SELF-TEST FAIL: find_high_complexity_functions empty", file=sys.stderr)
             return 1
         impacted = find_impacted_tests(str(tmp_dir), ["sample.py"])
         if impacted != ["test_widget.py"]:
@@ -323,6 +416,14 @@ def main(argv=None):
         help="Return transitive test_*.py files impacted by the given changed files.",
     )
     parser.add_argument(
+        "--high-complexity",
+        nargs="?",
+        const=10,
+        type=int,
+        dest="high_complexity",
+        help="Return functions whose McCabe cyclomatic complexity >= threshold (default 10).",
+    )
+    parser.add_argument(
         "--ast-diff",
         nargs=2,
         metavar=("OLD_FILE", "NEW_FILE"),
@@ -349,6 +450,11 @@ def main(argv=None):
             old_p.read_text(encoding="utf-8"), new_p.read_text(encoding="utf-8")
         )
         print(json.dumps(diff, indent=2))
+        return 0
+    if args.high_complexity is not None:
+        target_dir = args.target_directory or "."
+        high = find_high_complexity_functions(target_dir, threshold=args.high_complexity)
+        print(json.dumps({"high_complexity_functions": high}, indent=2))
         return 0
     if args.impacted_tests:
         target_dir = args.target_directory or "."
