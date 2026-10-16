@@ -178,6 +178,15 @@ def build_plugin_bundle(repo_root, output_dir, enable=True):
                 rule_path.read_bytes().replace(b"\r\n", b"\n")
             )
 
+    custom_agents_src = agents_dir / "agents"
+    if custom_agents_src.is_dir():
+        custom_agents_dst = output_dir / "agents"
+        custom_agents_dst.mkdir(parents=True, exist_ok=True)
+        for agent_path in sorted(custom_agents_src.glob("*.md")):
+            (custom_agents_dst / agent_path.name).write_bytes(
+                agent_path.read_bytes().replace(b"\r\n", b"\n")
+            )
+
     skills_src = agents_dir / "skills"
     skills_dst = output_dir / "skills"
     shutil.copytree(
@@ -255,6 +264,15 @@ def run_self_test(repo_root):
                     return 1, [
                         "Self-test failed: modular rule rules/%s lost YAML frontmatter"
                         % rule_src.name
+                    ]
+        custom_agents_src = Path(repo_root) / ".agents" / "agents"
+        if custom_agents_src.is_dir():
+            for agent_src in sorted(custom_agents_src.glob("*.md")):
+                bundled_agent = target / "agents" / agent_src.name
+                if not bundled_agent.is_file():
+                    return 1, [
+                        "Self-test failed: missing bundled custom agent agents/%s"
+                        % agent_src.name
                     ]
         if not (target / "hooks" / "brc-guard.ps1").is_file():
             return 1, ["Self-test failed: missing hooks/brc-guard.ps1"]

@@ -222,6 +222,12 @@ def verify_or_sync(repo_root, global_config_dir, apply_changes=False, backup_dir
             sync_pairs.append(
                 (rule_src, global_config_dir / "rules" / rule_src.name)
             )
+    custom_agents_dir = repo_root / ".agents" / "agents"
+    if custom_agents_dir.is_dir():
+        for agent_src in sorted(custom_agents_dir.glob("*.md")):
+            sync_pairs.append(
+                (agent_src, global_config_dir / "agents" / agent_src.name)
+            )
     skills_link = global_config_dir / "skills"
     expected_skills = (repo_root / ".agents" / "skills").resolve()
 

@@ -1261,6 +1261,20 @@ class LiveTree(unittest.TestCase):
         self.assertIn('TypeName: "research"', ii_text)
         self.assertIn("read_url_content", ii_text)
 
+        # R5: Declarative custom subagent manifests in .agents/agents/
+        agents_dir = REPO_ROOT / ".agents" / "agents"
+        for agent_name in ("stage3-design-reviewer", "stage4-code-auditor"):
+            agent_file = agents_dir / ("%s.md" % agent_name)
+            self.assertTrue(agent_file.is_file(), "Missing declarative agent %s" % agent_file)
+            self.assertEqual(
+                vt.validate_custom_agent_frontmatter(
+                    agent_file.read_bytes(),
+                    ".agents/agents/%s.md" % agent_name,
+                    expected_name=agent_name,
+                ),
+                [],
+            )
+
     def test_package_plugin_and_sync_global_config_self_tests_and_readme(self):
         for script_name in ("package_plugin.py", "sync_global_config.py"):
             script = REPO_ROOT / ".agents" / "scripts" / script_name
@@ -1282,6 +1296,36 @@ class LiveTree(unittest.TestCase):
             "sync_global_config.py",
         ):
             self.assertIn(token, readme_text)
+
+        # R4: Root README.md LF normalization, Mermaid hygiene, and complete 19-skill / installation coverage
+        root_readme_bytes = (REPO_ROOT / "README.md").read_bytes()
+        self.assertNotIn(b"\r", root_readme_bytes, "Root README.md must use LF line endings")
+        root_readme_text = root_readme_bytes.decode("utf-8")
+        self.assertIn("flowchart TD", root_readme_text)
+        for token in (
+            "security-auditor",
+            "reverse-engineer-anything",
+            "package_plugin.py",
+            "sync_global_config.py",
+            "stage0-comprehend-problem-gate",
+        ):
+            self.assertIn(token, root_readme_text, "Root README.md missing %s" % token)
+
+        # R3: GitHub Actions CI workflow (.github/workflows/ci.yml)
+        ci_yml_path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+        self.assertTrue(ci_yml_path.is_file(), "Missing .github/workflows/ci.yml")
+        ci_bytes = ci_yml_path.read_bytes()
+        self.assertNotIn(b"\r", ci_bytes, "ci.yml must use LF line endings")
+        ci_text = ci_bytes.decode("utf-8")
+        for step_cmd in (
+            ".agents/tests/validate_tree.py",
+            TOKEN_CLAUDE_DIR + "tests/validate_tree.py",
+            "secret_scan.py --self-test",
+            "package_plugin.py --self-test",
+            "sync_global_config.py --self-test",
+        ):
+            self.assertIn(step_cmd, ci_text, "ci.yml missing %s" % step_cmd)
+
 
     def test_type7_automations_sidecars_and_generative_ui(self):
         agents_text = (REPO_ROOT / ".agents" / "AGENTS.md").read_text(encoding="utf-8")

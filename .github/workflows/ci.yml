@@ -1,0 +1,41 @@
+name: Antigravity Core CI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+
+jobs:
+  validate-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate .agents tree invariants
+        run: python .agents/tests/validate_tree.py
+
+      - name: Validate .claude tree invariants
+        run: python .claude/tests/validate_tree.py
+
+      - name: Run .agents unit test suite
+        run: python -m unittest discover -s .agents/tests -p "test_*.py" -v
+
+      - name: Run .claude unit test suite
+        run: python -m unittest discover -s .claude/tests -p "test_*.py" -v
+
+      - name: Run secret scanner self-test
+        run: python .agents/scripts/secret_scan.py --self-test
+
+      - name: Run standalone plugin bundler self-test
+        run: python .agents/scripts/package_plugin.py --self-test
+
+      - name: Run global config sync self-test
+        run: python .agents/scripts/sync_global_config.py --self-test

@@ -219,6 +219,59 @@ class LiveTree(unittest.TestCase):
         )
         self.assertEqual(res_tamper.returncode, 2)
 
+        # 5. Cloud credential read (.aws/credentials) & shell read blocked (exit 2)
+        res_aws = self._run_claude_brc_guard(
+            {"tool_name": "Read", "tool_input": {"file_path": "C:\\Users\\nferr\\.aws\\credentials"}}
+        )
+        self.assertEqual(res_aws.returncode, 2)
+        res_aws_sh = self._run_claude_brc_guard(
+            {"tool_name": "PowerShell", "tool_input": {"command": "Get-Content C:\\Users\\nferr\\.aws\\credentials"}}
+        )
+        self.assertEqual(res_aws_sh.returncode, 2)
+
+        # 6. -enco Base64 prefix abbreviation & shell self-tampering redirect blocked (exit 2)
+        res_enco = self._run_claude_brc_guard(
+            {"tool_name": "PowerShell", "tool_input": {"command": "powershell -enco " + enc}}
+        )
+        self.assertEqual(res_enco.returncode, 2)
+        res_sh_tamper = self._run_claude_brc_guard(
+            {"tool_name": "PowerShell", "tool_input": {"command": "Set-Content -Path .claude/settings.json -Value '{}'"}}
+        )
+        self.assertEqual(res_sh_tamper.returncode, 2)
+
+        # 7. Generated output (/dist, /build) write blocked (exit 2), scratch/dist allowed (exit 0)
+        res_dist = self._run_claude_brc_guard(
+            {"tool_name": "Write", "tool_input": {"file_path": "C:\\project\\dist\\bundle.js"}}
+        )
+        self.assertEqual(res_dist.returncode, 2)
+        res_dist_scratch = self._run_claude_brc_guard(
+            {"tool_name": "Write", "tool_input": {"file_path": "C:\\project\\scratch\\dist\\bundle.js"}}
+        )
+        self.assertEqual(res_dist_scratch.returncode, 0)
+
+        # 8. git config mutation & git --no-verify / commit -nm blocked (exit 2), read-only allowed (exit 0)
+        for bad_git in (
+            "git config user.name 'Bot'",
+            'git commit -m "msg" --no-verify',
+            'git commit -nm "msg"',
+            "git push origin master --no-verify",
+        ):
+            res_bad_git = self._run_claude_brc_guard(
+                {"tool_name": "Bash", "tool_input": {"command": bad_git}}
+            )
+            self.assertEqual(res_bad_git.returncode, 2, "Expected exit 2 for %r" % bad_git)
+
+        for ok_git in (
+            "git config --get user.name",
+            "git log -n 5 --oneline",
+            'git commit -m "fix -n and --no-verify"; git log -n 5',
+        ):
+            res_ok_git = self._run_claude_brc_guard(
+                {"tool_name": "Bash", "tool_input": {"command": ok_git}}
+            )
+            self.assertEqual(res_ok_git.returncode, 0, "Expected exit 0 for %r" % ok_git)
+
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

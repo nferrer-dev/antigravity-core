@@ -64,8 +64,9 @@ if ($filePath -ne '') {
     $isExample = ($norm -match '\.env\.(example|sample|template|dist|schema)$') -or ($norm -match '\.deprecated-redacted$')
     if (-not $isExample) {
         if (($norm -match '(^|\\)\.env(\.[A-Za-z0-9_-]+)?$') -or
-            ($norm -match '\.(pem|key|p12|pfx)$') -or
-            ($norm -match '(^|\\)(id_rsa|id_ed25519|\.npmrc|\.pypirc|\.netrc)$') -or
+            ($norm -match '\.(pem|key|p12|pfx|p8|keystore|jks)$') -or
+            ($norm -match '(^|\\)(id_rsa|id_ed25519|id_ecdsa|id_dsa|\.npmrc|\.pypirc|\.netrc|\.git-credentials)$') -or
+            ($norm -match '(\.aws\\credentials|\.kube\\config|\.docker\\config\.json)$') -or
             ($norm -match 'antigravity\\mcp_config\.json$')) {
             Deny 'secret-file-access' $filePath
         }
@@ -73,6 +74,10 @@ if ($filePath -ne '') {
     if ($toolName -match '^(Edit|Write|MultiEdit)$') {
         if ($norm -match '(^|\\)(settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|\.mcp\.json)$') {
             Deny 'harness-config-self-tampering' $filePath
+        }
+        if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
+            ($norm -match '(?i)(^|\\)(dist|build)(\\|$)')) {
+            Deny 'generated-output-write-guard' $filePath
         }
     }
 }
@@ -95,8 +100,8 @@ $canon = Get-CanonicalCommand $cmd
 if ($canon -ne $cmd) { $candidates.Add($canon) }
 
 foreach ($checkStr in @($cmd, $canon)) {
-    if ($checkStr -match '(^|\s)-(EncodedCommand|enc|e)\s+([A-Za-z0-9+/=]{8,})') {
-        $b64 = $Matches[3]
+    if ($checkStr -match '(^|\s)-(?:e|en|enc|enco|encoded|encodedcommand)\s+([A-Za-z0-9+/=]{8,})') {
+        $b64 = $Matches[2]
         try {
             $bytes = [System.Convert]::FromBase64String($b64)
             $decUtf16 = [System.Text.Encoding]::Unicode.GetString($bytes)
@@ -125,6 +130,15 @@ foreach ($evalCmd in $candidates) {
 
     if ($evalCmd -match '(sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AIzaSy[A-Za-z0-9_-]{33}|fc-[a-f0-9]{32}|tvly-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,})') {
         Deny 'inline-secret-token' 'Inline API token detected in command'
+    }
+
+    if (($evalCmd -match 'antigravity[/\\]mcp_config\.json(?!\.deprecated-redacted)') -or
+        ($evalCmd -match '(^|\s)(cat|type|Get-Content|more|less|head|tail)\s+[^\r\n]*?(^|[/\\"\s])(\.env(?!\.(example|sample|template))|\.aws[/\\]credentials|\.kube[/\\]config|\.docker[/\\]config\.json|\.git-credentials|id_rsa|id_ed25519|id_ecdsa|id_dsa)(["\s]|$)')) {
+        Deny 'secret-file-shell-read' $evalCmd
+    }
+
+    if ($evalCmd -match '(>|>>|\bOut-File\b|\bSet-Content\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bcp\b|\bmv\b|\btee\b)[^\r\n]*?(settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|\.mcp\.json)') {
+        Deny 'harness-config-self-tampering' $evalCmd
     }
 
     # ---- Rule 1: recursive force delete outside temp/scratch ----
@@ -163,10 +177,24 @@ foreach ($evalCmd in $candidates) {
         }
     }
 
-    # ---- Rule 4: SQL DROP TABLE / DROP DATABASE ----
+    # ---- Rule 4: SQL DROP TABLE / DROP DATABASE / TRUNCATE TABLE ----
     $searchOnly = $evalCmd -match '^\s*(grep|rg|git\s+grep|findstr|Select-String|echo|cat|type|Get-Content|less|head|tail)\b'
-    if (-not $searchOnly -and ($evalCmd -match '\bDROP\s+(TABLE|DATABASE)\b')) {
+    if (-not $searchOnly -and ($evalCmd -match '\b(DROP\s+(TABLE|DATABASE)|TRUNCATE\s+TABLE)\b')) {
         Deny 'sql-drop' $evalCmd
+    }
+
+    # ---- Rule 4b: git config mutation guard (allow read-only --get / --list / -l) ----
+    if (-not $searchOnly -and ($evalCmd -match '(^|[\s;|&(])git(\.exe)?\s+config\b') -and ($evalCmd -notmatch '\s(--get|--get-all|--get-regexp|--list|-l)(\s|$)')) {
+        Deny 'git-config-mutation-guard' $evalCmd
+    }
+
+    # ---- Rule 4c: git hook-bypass guard (--no-verify and git commit -n / -nm) ----
+    if (-not $searchOnly) {
+        $gitEval = $evalCmd -replace '(-[a-zA-Z]*m|--message)(?:=|\s*)(?:"[^"]*"|''[^'']*'')', '$1 ""'
+        if (($gitEval -match '(^|[\s;|&(])git(\.exe)?\b[^;\r\n|&]*?\s--no-verify(\s|$|[;"''|&])') -or
+            ($gitEval -match '(^|[\s;|&(])git(\.exe)?\s+(?:-\S+\s+)*commit\b[^;\r\n|&]*?\s-(?:[a-zA-Z]*n[a-zA-Z]*)\b')) {
+            Deny 'git-no-verify-bypass' $evalCmd
+        }
     }
 
     # ---- Rule 5: filesystem creation (mkfs) ----
@@ -179,9 +207,12 @@ foreach ($evalCmd in $candidates) {
         Deny 'kill-all-processes' $evalCmd
     }
 
-    # ---- Rule 7: disk-wide format ----
+    # ---- Rule 7: disk-wide format and extended destructive infra commands ----
     if (($evalCmd -match '(^|[\s;&|])format(\.com)?\s+[a-zA-Z]:') -or ($evalCmd -match '\bFormat-Volume\b')) {
         Deny 'disk-format' $evalCmd
+    }
+    if ($evalCmd -match '\b(git\s+clean\s+-[a-zA-Z]*f|docker\s+system\s+prune\s+-a|kubectl\s+delete\s+(namespace|node|--all)|terraform\s+destroy|diskpart|reg\s+delete)\b') {
+        Deny 'destructive-infrastructure-command' $evalCmd
     }
 }
 
