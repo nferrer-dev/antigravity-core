@@ -855,6 +855,49 @@ class LiveTree(unittest.TestCase):
             json.loads(res_git_cfg_get.stdout.strip())["decision"], "allow"
         )
 
+        # 17. Git hook-bypass guard (--no-verify and git commit -n / -nm)
+        for bypass_cmd in (
+            'git commit -m "msg" --no-verify',
+            'git commit -n -m "msg"',
+            'git commit -nm "msg"',
+            "git push origin master --no-verify",
+        ):
+            res_nv_deny = self._run_brc_guard(
+                {
+                    "toolCall": {
+                        "name": "run_command",
+                        "args": {"CommandLine": bypass_cmd},
+                    }
+                }
+            )
+            self.assertEqual(res_nv_deny.returncode, 0)
+            out_nv_deny = json.loads(res_nv_deny.stdout.strip())
+            self.assertEqual(
+                out_nv_deny["decision"],
+                "deny",
+                "Expected deny for %r" % bypass_cmd,
+            )
+            self.assertIn("git-no-verify-bypass", out_nv_deny["reason"])
+
+        for safe_git_cmd in (
+            "git log -n 5 --oneline",
+            'git commit -m "fix -n and --no-verify"; git log -n 5',
+        ):
+            res_nv_allow = self._run_brc_guard(
+                {
+                    "toolCall": {
+                        "name": "run_command",
+                        "args": {"CommandLine": safe_git_cmd},
+                    }
+                }
+            )
+            self.assertEqual(res_nv_allow.returncode, 0)
+            self.assertEqual(
+                json.loads(res_nv_allow.stdout.strip())["decision"],
+                "allow",
+                "Expected allow for %r" % safe_git_cmd,
+            )
+
         cp_skill = (
             REPO_ROOT / ".agents" / "skills" / "comprehend-problem" / "SKILL.md"
         ).read_text(encoding="utf-8")

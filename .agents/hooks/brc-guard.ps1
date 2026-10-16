@@ -328,6 +328,15 @@ foreach ($evalCmd in $candidates) {
         Emit-Deny 'git-config-mutation-guard' $evalCmd
     }
 
+    # Rule 4c: git hook-bypass guard (--no-verify and git commit -n / -nm)
+    if (-not $searchOnly) {
+        $gitEval = $evalCmd -replace '(-[a-zA-Z]*m|--message)(?:=|\s*)(?:"[^"]*"|''[^'']*'')', '$1 ""'
+        if (($gitEval -match '(^|[\s;|&(])git(\.exe)?\b[^;\r\n|&]*?\s--no-verify(\s|$|[;"''|&])') -or
+            ($gitEval -match '(^|[\s;|&(])git(\.exe)?\s+(?:-\S+\s+)*commit\b[^;\r\n|&]*?\s-(?:[a-zA-Z]*n[a-zA-Z]*)\b')) {
+            Emit-Deny 'git-no-verify-bypass' $evalCmd
+        }
+    }
+
     # Rule 5: filesystem creation (mkfs)
     if ($evalCmd -match '(^|[\s;&|])mkfs(\.\S+)?\b') {
         Emit-Deny 'mkfs' $evalCmd
