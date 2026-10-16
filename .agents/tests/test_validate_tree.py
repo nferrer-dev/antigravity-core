@@ -1996,6 +1996,55 @@ class LiveTree(unittest.TestCase):
         self.assertIn("stage1-candidate-solutions-gate", vt.REQUIRED_BRC_GUARD_RULES)
         self.assertIn("subagent-message-injection-guard", vt.REQUIRED_BRC_GUARD_RULES)
 
+    def test_global_claude_sync_and_hook_dedup(self):
+        import importlib.util
+
+        sync_path = REPO_ROOT / ".agents" / "scripts" / "sync_global_config.py"
+        spec = importlib.util.spec_from_file_location("sync_global_config", sync_path)
+        sync_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sync_mod)
+
+        self.assertTrue(hasattr(sync_mod, "verify_or_sync_claude"))
+        code, lines = sync_mod.run_self_test(REPO_ROOT)
+        self.assertEqual(code, 0, "\n".join(lines))
+
+        # Verify Write-GuardTelemetry deduplicates consecutive identical PreToolUse events
+        guard = REPO_ROOT / ".agents" / "hooks" / "brc-guard.ps1"
+        with tempfile.TemporaryDirectory() as tmp:
+            art_dir = Path(tmp)
+            payload = json.dumps(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "view_file",
+                        "args": {"AbsolutePath": "C:\\project\\.env"},
+                    },
+                }
+            )
+            for _ in range(2):
+                subprocess.run(
+                    [
+                        "powershell",
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        str(guard),
+                    ],
+                    input=payload,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+            tel_file = art_dir / "agentic_telemetry.md"
+            self.assertTrue(tel_file.is_file())
+            tel_lines = [
+                ln
+                for ln in tel_file.read_text(encoding="utf-8").splitlines()
+                if ln.strip()
+            ]
+            self.assertEqual(len(tel_lines), 1)
+            self.assertEqual(vt.verify_telemetry_chain("\n".join(tel_lines), "tel.md"), [])
 
 
 class Meta(unittest.TestCase):

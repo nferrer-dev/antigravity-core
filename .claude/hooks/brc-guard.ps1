@@ -43,8 +43,18 @@ function Write-GuardTelemetry {
             $artDir = [string]$script:PayloadObj.artifactDirectoryPath
             if (-not [string]::IsNullOrWhiteSpace($artDir) -and (Test-Path -LiteralPath $artDir)) {
                 $telPath = Join-Path $artDir 'agentic_telemetry.md'
+                $sig = "| PreToolUse Guard ($Rule) | $Decision | $Excerpt"
+                if (Test-Path -LiteralPath $telPath) {
+                    $existing = @(Get-Content -LiteralPath $telPath -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -and $_.Trim() -ne '' })
+                    if ($existing.Count -gt 0) {
+                        $last = [string]$existing[$existing.Count - 1]
+                        if ($last.IndexOf($sig, [System.StringComparison]::Ordinal) -ge 0) {
+                            return
+                        }
+                    }
+                }
                 $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-                $entryBody = "- [$stamp] | PreToolUse Guard ($Rule) | $Decision | $Excerpt"
+                $entryBody = "- [$stamp] $sig"
                 $chainTag = Get-TelemetryChainTag -FilePath $telPath -EntryBody $entryBody
                 $line = "$entryBody [chain:$chainTag]`n"
                 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)

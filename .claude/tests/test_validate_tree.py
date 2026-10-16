@@ -355,6 +355,53 @@ class LiveTree(unittest.TestCase):
         self.assertTrue(vt.verify_telemetry_chain("- [2026-10-16T00:00:00Z] | Hook | m | s [chain:deadbeef]\n", "tel.md"))
         self.assertIn("untrusted-web-markdown-image-exfil", vt.REQUIRED_BRC_GUARD_RULES)
 
+    def test_claude_global_parity_and_hook_dedup(self):
+        import os
+        import tempfile
+
+        for agent_name in ("cortex-librarian.md", "stage3-design-reviewer.md", "stage4-code-auditor.md"):
+            agent_path = REPO_ROOT / ".claude" / "agents" / agent_name
+            self.assertTrue(agent_path.is_file(), "Missing .claude/agents/%s" % agent_name)
+            text = agent_path.read_text(encoding="utf-8")
+            self.assertEqual(vt.scan_tokens(text), [])
+
+        stop_hook = REPO_ROOT / ".claude" / "hooks" / "telemetry-append.ps1"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            env = dict(os.environ, CLAUDE_PROJECT_DIR=str(tmp_path))
+            payload = json.dumps(
+                {
+                    "hook_event_name": "Stop",
+                    "last_assistant_message": "Audit failed [VERDICT: REJECT] due to missing check.",
+                }
+            )
+            for _ in range(2):
+                res = subprocess.run(
+                    [
+                        "powershell",
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        str(stop_hook),
+                    ],
+                    input=payload,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    timeout=10,
+                )
+                self.assertEqual(res.returncode, 0)
+            tel_file = tmp_path / ".claude" / "telemetry" / "agentic_telemetry.md"
+            self.assertTrue(tel_file.is_file())
+            tel_lines = [
+                ln
+                for ln in tel_file.read_text(encoding="utf-8").splitlines()
+                if ln.strip()
+            ]
+            self.assertEqual(len(tel_lines), 1)
+            self.assertEqual(vt.verify_telemetry_chain("\n".join(tel_lines), "tel.md"), [])
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):
