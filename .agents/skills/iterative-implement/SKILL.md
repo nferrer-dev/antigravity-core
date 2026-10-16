@@ -23,7 +23,7 @@ Spawn the following read-only review subagents concurrently via `invoke_subagent
 3. **Performance Profiler:** (Only invoked for data-pipelines/loops domains).
 4. **Code Health Agent:** (Always invoked). 
    - **Strict Bounds:** You MUST constrain this agent strictly to the following two questions against the localized diff:
-     - *Question 2: Are there any unintentional changes in your code change?*
+     - *Question 2: Are there any unintentional changes in your code change?* (For Python diffs, `python .agents/skills/comprehend-problem/scripts/structural_graph_polyfill.py --ast-diff <old_file> <new_file>` provides a deterministic AST symbol/signature diff per `PatchDiff`, `arXiv:2503.15223`.)
      - *Question 4: Are there any redundancies introduced in your code change?*
    - **Forbidden:** You MUST explicitly instruct the Code Health Agent that it is strictly prohibited from analyzing global up/downstream dependencies (MVC Violation) and evaluating subjective readability or "YAGNI" critiques (Bounded Quality Constraints Violation).
 5. **Markdown Style Expert:** (Only invoked for `.md` or documentation changes). Explicitly instruct them to read `.agents/skills/markdown-style-expert/SKILL.md` and `.agents/skills/markdown-style-expert/markdown-style-expert-edge-cases.md` and verify the localized diff against the Google Markdown Style Guide.

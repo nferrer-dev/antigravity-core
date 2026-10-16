@@ -59,6 +59,54 @@ foreach ($pf in @('file_path', 'path', 'notebook_path')) {
     }
 }
 
+function Test-UnsafeFetchUrl {
+    param([string]$UrlStr)
+    if ([string]::IsNullOrWhiteSpace($UrlStr)) { return $false }
+    $uri = $null
+    if (-not [System.Uri]::TryCreate($UrlStr.Trim(), [System.UriKind]::Absolute, [ref]$uri)) {
+        return $true
+    }
+    if ($uri.Scheme -notin @('http', 'https')) {
+        return $true
+    }
+    $hostStr = $uri.DnsSafeHost.ToLowerInvariant().Trim('[', ']')
+    if ([string]::IsNullOrWhiteSpace($hostStr)) { return $true }
+    if ($hostStr -in @('localhost', 'metadata.google.internal', 'instance-data', 'metadata') -or $hostStr.EndsWith('.localhost') -or $hostStr.EndsWith('.internal')) {
+        return $true
+    }
+    $ip = $null
+    if ([System.Net.IPAddress]::TryParse($hostStr, [ref]$ip)) {
+        if ($ip.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+            if ($ip.IsIPv6Loopback -or $ip.IsIPv6LinkLocal -or $ip.IsIPv6SiteLocal) { return $true }
+            $b6 = $ip.GetAddressBytes()
+            $allZero = $true
+            for ($i = 0; $i -lt 16; $i++) { if ($b6[$i] -ne 0) { $allZero = $false; break } }
+            if ($allZero) { return $true }
+            if (($b6[0] -band 0xFE) -eq 0xFC) { return $true }
+            $isV4Mapped = $true
+            for ($i = 0; $i -lt 10; $i++) { if ($b6[$i] -ne 0) { $isV4Mapped = $false; break } }
+            if ($isV4Mapped -and $b6[10] -eq 255 -and $b6[11] -eq 255) {
+                $b4 = @($b6[12], $b6[13], $b6[14], $b6[15])
+                if ($b4[0] -in @(0, 10, 127)) { return $true }
+                if ($b4[0] -eq 169 -and $b4[1] -eq 254) { return $true }
+                if ($b4[0] -eq 172 -and $b4[1] -ge 16 -and $b4[1] -le 31) { return $true }
+                if ($b4[0] -eq 192 -and $b4[1] -eq 168) { return $true }
+                if ($b4[0] -eq 100 -and $b4[1] -eq 100 -and $b4[2] -eq 100 -and $b4[3] -eq 200) { return $true }
+            }
+            return $false
+        }
+        if ($ip.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
+            $b4 = $ip.GetAddressBytes()
+            if ($b4[0] -in @(0, 10, 127)) { return $true }
+            if ($b4[0] -eq 169 -and $b4[1] -eq 254) { return $true }
+            if ($b4[0] -eq 172 -and $b4[1] -ge 16 -and $b4[1] -le 31) { return $true }
+            if ($b4[0] -eq 192 -and $b4[1] -eq 168) { return $true }
+            if ($b4[0] -eq 100 -and $b4[1] -eq 100 -and $b4[2] -eq 100 -and $b4[3] -eq 200) { return $true }
+        }
+    }
+    return $false
+}
+
 if ($filePath -ne '') {
     $norm = $filePath.Replace('/', '\')
     $isExample = ($norm -match '\.env\.(example|sample|template|dist|schema)$') -or ($norm -match '\.deprecated-redacted$')
@@ -72,7 +120,8 @@ if ($filePath -ne '') {
         }
     }
     if ($toolName -match '^(Edit|Write|MultiEdit)$') {
-        if ($norm -match '(^|\\)(settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|\.mcp\.json)$') {
+        if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
+            ($norm -match '(?i)(^|\\)(settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|\.mcp\.json|CLAUDE\.md|AGENTS\.md|agentic_telemetry\.md)$')) {
             Deny 'harness-config-self-tampering' $filePath
         }
         if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
@@ -80,6 +129,15 @@ if ($filePath -ne '') {
             Deny 'generated-output-write-guard' $filePath
         }
     }
+}
+
+if ($toolName -match '^mcp__cortex__(store_memory|upsert_entity|create_relation|store_procedure|import_memories)$') {
+    $mcpPayloadStr = $toolInput | ConvertTo-Json -Depth 6 -Compress
+    if (($mcpPayloadStr -match '(sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AIzaSy[A-Za-z0-9_-]{33}|fc-[a-f0-9]{32}|tvly-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,})') -or
+        ($mcpPayloadStr -match '(?i)(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)|<\s*system\s*>|\[VERDICT:\s*APPROVE\])')) {
+        Deny 'cortex-memory-poisoning-guard' 'Blocked attempt to persist secret or prompt-injection directive into Cortex long-term memory'
+    }
+    exit 0
 }
 
 if ($toolName -eq 'WebFetch') {
@@ -91,8 +149,7 @@ if ($toolName -eq 'WebFetch') {
         }
     }
     if (-not [string]::IsNullOrWhiteSpace($targetUrl)) {
-        if (($targetUrl -match '^(?i)file://') -or
-            ($targetUrl -match '(?i)(^|//|@)(169\.254\.169\.254|metadata\.google\.internal|localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])([:/]|$)')) {
+        if (Test-UnsafeFetchUrl $targetUrl) {
             Deny 'ssrf-local-metadata-url' $targetUrl
         }
     }

@@ -496,6 +496,20 @@ def scan_test_integrity(source_text, label):
         for child in ast.walk(node):
             if isinstance(child, ast.Assert):
                 assert_count += 1
+                if isinstance(child.test, ast.Constant) and bool(child.test.value) is True:
+                    violations.append(
+                        "%s: %s contains tautological assert True"
+                        % (label, node.name)
+                    )
+                elif (
+                    isinstance(child.test, ast.Compare)
+                    and len(child.test.comparators) == 1
+                    and ast.dump(child.test.left) == ast.dump(child.test.comparators[0])
+                ):
+                    violations.append(
+                        "%s: %s contains reflexive assert comparison on identical expressions"
+                        % (label, node.name)
+                    )
             elif isinstance(child, ast.Call):
                 func = child.func
                 attr_name = getattr(func, "attr", getattr(func, "id", ""))
@@ -512,14 +526,13 @@ def scan_test_integrity(source_text, label):
                 ):
                     assert_count += 1
                 if (
-                    attr_name == "assertEqual"
+                    attr_name in {"assertEqual", "assertIs"}
                     and len(child.args) >= 2
-                    and not isinstance(child.args[0], ast.Constant)
                     and ast.dump(child.args[0]) == ast.dump(child.args[1])
                 ):
                     violations.append(
-                        "%s: %s contains tautological assertEqual on identical expressions"
-                        % (label, node.name)
+                        "%s: %s contains tautological %s on identical expressions"
+                        % (label, node.name, attr_name)
                     )
                 if (
                     attr_name == "assertTrue"
@@ -531,12 +544,33 @@ def scan_test_integrity(source_text, label):
                         "%s: %s contains tautological assertTrue(True)"
                         % (label, node.name)
                     )
+                if (
+                    attr_name == "assertFalse"
+                    and len(child.args) >= 1
+                    and isinstance(child.args[0], ast.Constant)
+                    and child.args[0].value is False
+                ):
+                    violations.append(
+                        "%s: %s contains tautological assertFalse(False)"
+                        % (label, node.name)
+                    )
+                if (
+                    attr_name == "assertIsNone"
+                    and len(child.args) >= 1
+                    and isinstance(child.args[0], ast.Constant)
+                    and child.args[0].value is None
+                ):
+                    violations.append(
+                        "%s: %s contains tautological assertIsNone(None)"
+                        % (label, node.name)
+                    )
         if assert_count == 0:
             violations.append(
                 "%s: %s contains zero assertions (reward-hacking guard)"
                 % (label, node.name)
             )
     return violations
+
 
 
 def check_inv10_skill_security(root):

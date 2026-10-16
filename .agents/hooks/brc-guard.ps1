@@ -10,6 +10,28 @@ $ErrorActionPreference = 'Stop'
 $script:IsAntigravity = $false
 $script:PayloadObj = $null
 
+function Get-TelemetryChainTag {
+    param([string]$FilePath, [string]$EntryBody)
+    $prevChain = '00000000'
+    if (Test-Path -LiteralPath $FilePath) {
+        $lines = @(Get-Content -LiteralPath $FilePath -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -and $_.Trim() -ne '' })
+        if ($lines.Count -gt 0) {
+            $last = [string]$lines[$lines.Count - 1]
+            if ($last -match '\[chain:([0-9a-fA-F]{8})\]') {
+                $prevChain = $Matches[1].ToLowerInvariant()
+            }
+        }
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes("$prevChain|$EntryBody")
+        $hash = $sha.ComputeHash($bytes)
+        return ([System.BitConverter]::ToString($hash).Replace('-', '').ToLowerInvariant()).Substring(0, 8)
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 function Write-GuardTelemetry {
     param([string]$Decision, [string]$Rule, [string]$Excerpt)
     try {
@@ -18,7 +40,9 @@ function Write-GuardTelemetry {
             if (-not [string]::IsNullOrWhiteSpace($artDir) -and (Test-Path -LiteralPath $artDir)) {
                 $telPath = Join-Path $artDir 'agentic_telemetry.md'
                 $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-                $line = "- [$stamp] | PreToolUse Guard ($Rule) | $Decision | $Excerpt`n"
+                $entryBody = "- [$stamp] | PreToolUse Guard ($Rule) | $Decision | $Excerpt"
+                $chainTag = Get-TelemetryChainTag -FilePath $telPath -EntryBody $entryBody
+                $line = "$entryBody [chain:$chainTag]`n"
                 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
                 [System.IO.File]::AppendAllText($telPath, $line, $utf8NoBom)
             }
@@ -140,8 +164,57 @@ function Test-TamperFilePath {
     param([string]$PathStr)
     if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
     $norm = $PathStr.Replace('/', '\')
-    if ($norm -match '(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|plugin\.json)$') {
+    if ($norm -match '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') { return $false }
+    if ($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|agentic_telemetry\.md)$') {
         return $true
+    }
+    return $false
+}
+
+function Test-UnsafeFetchUrl {
+    param([string]$UrlStr)
+    if ([string]::IsNullOrWhiteSpace($UrlStr)) { return $false }
+    $uri = $null
+    if (-not [System.Uri]::TryCreate($UrlStr.Trim(), [System.UriKind]::Absolute, [ref]$uri)) {
+        return $true
+    }
+    if ($uri.Scheme -notin @('http', 'https')) {
+        return $true
+    }
+    $hostStr = $uri.DnsSafeHost.ToLowerInvariant().Trim('[', ']')
+    if ([string]::IsNullOrWhiteSpace($hostStr)) { return $true }
+    if ($hostStr -in @('localhost', 'metadata.google.internal', 'instance-data', 'metadata') -or $hostStr.EndsWith('.localhost') -or $hostStr.EndsWith('.internal')) {
+        return $true
+    }
+    $ip = $null
+    if ([System.Net.IPAddress]::TryParse($hostStr, [ref]$ip)) {
+        if ($ip.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+            if ($ip.IsIPv6Loopback -or $ip.IsIPv6LinkLocal -or $ip.IsIPv6SiteLocal) { return $true }
+            $b6 = $ip.GetAddressBytes()
+            $allZero = $true
+            for ($i = 0; $i -lt 16; $i++) { if ($b6[$i] -ne 0) { $allZero = $false; break } }
+            if ($allZero) { return $true }
+            if (($b6[0] -band 0xFE) -eq 0xFC) { return $true }
+            $isV4Mapped = $true
+            for ($i = 0; $i -lt 10; $i++) { if ($b6[$i] -ne 0) { $isV4Mapped = $false; break } }
+            if ($isV4Mapped -and $b6[10] -eq 255 -and $b6[11] -eq 255) {
+                $b4 = @($b6[12], $b6[13], $b6[14], $b6[15])
+                if ($b4[0] -in @(0, 10, 127)) { return $true }
+                if ($b4[0] -eq 169 -and $b4[1] -eq 254) { return $true }
+                if ($b4[0] -eq 172 -and $b4[1] -ge 16 -and $b4[1] -le 31) { return $true }
+                if ($b4[0] -eq 192 -and $b4[1] -eq 168) { return $true }
+                if ($b4[0] -eq 100 -and $b4[1] -eq 100 -and $b4[2] -eq 100 -and $b4[3] -eq 200) { return $true }
+            }
+            return $false
+        }
+        if ($ip.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
+            $b4 = $ip.GetAddressBytes()
+            if ($b4[0] -in @(0, 10, 127)) { return $true }
+            if ($b4[0] -eq 169 -and $b4[1] -eq 254) { return $true }
+            if ($b4[0] -eq 172 -and $b4[1] -ge 16 -and $b4[1] -le 31) { return $true }
+            if ($b4[0] -eq 192 -and $b4[1] -eq 168) { return $true }
+            if ($b4[0] -eq 100 -and $b4[1] -eq 100 -and $b4[2] -eq 100 -and $b4[3] -eq 200) { return $true }
+        }
     }
     return $false
 }
@@ -238,12 +311,28 @@ if ($isWriteTool -and (Test-PrematureExecutionLock $filePath $argsObj $payload))
 }
 
 if ($toolName -eq 'invoke_subagent' -and $null -ne $argsObj -and $argsObj.PSObject.Properties['Subagents'] -and $null -ne $argsObj.Subagents) {
+    $hasWebTaint = $false
+    if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
+        $taintSubPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
+        if (Test-Path -LiteralPath $taintSubPath) { $hasWebTaint = $true }
+    }
     foreach ($sub in @($argsObj.Subagents)) {
-        if ($null -ne $sub -and $sub.PSObject.Properties['Prompt'] -and $null -ne $sub.Prompt) {
+        if ($null -eq $sub) { continue }
+        if ($sub.PSObject.Properties['Prompt'] -and $null -ne $sub.Prompt) {
             $pLines = @(([string]$sub.Prompt) -split "\r?\n")
             if ($pLines.Count -gt 200) {
                 Emit-Deny 'subagent-mvc-prompt-cap' 'Subagent Prompt exceeds 200-line MVC cap; write context to scratch/ and pass the file path'
             }
+        }
+        $subRole = ''
+        if ($sub.PSObject.Properties['Role'] -and $null -ne $sub.Role) { $subRole = [string]$sub.Role }
+        $subType = ''
+        if ($sub.PSObject.Properties['TypeName'] -and $null -ne $sub.TypeName) { $subType = [string]$sub.TypeName }
+        if ($subType -ieq 'self' -and $subRole -match '(?i)(Style Expert|Security Auditor|Code Health Agent|Idea Skeptic|System Architect|Requirements Engineer|Scope Reviewer|Cortex Librarian|Codebase Explorer)') {
+            Emit-Deny 'subagent-role-least-privilege' "Read-only auditor/explorer role '$subRole' must not be spawned with write-capable TypeName='self'"
+        }
+        if ($hasWebTaint -and $subType -ieq 'self') {
+            Emit-ForceAsk 'subagent-taint-delegation-guard' "Spawning write-capable subagent '$subRole' (TypeName='self') while session is web-tainted requires confirmation"
         }
     }
 }
@@ -252,6 +341,42 @@ if ($toolName -eq 'schedule' -and $null -ne $argsObj) {
     if ($argsObj.PSObject.Properties['DurationSeconds'] -and $null -ne $argsObj.DurationSeconds -and $argsObj.PSObject.Properties['TimerCondition'] -and ([string]$argsObj.TimerCondition) -match '^(?i)any$') {
         Emit-Deny 'schedule-patience-timer-condition' 'One-shot schedule timers must use TimerCondition="never" (or a specific sender ID) per Asynchronous Patience Protocol'
     }
+}
+
+if (($toolName -eq 'call_mcp_tool' -or $toolName -match '^mcp__cortex__') -and $null -ne $argsObj) {
+    $srvName = ''
+    $mcpTool = ''
+    if ($toolName -match '^mcp__cortex__(.+)$') {
+        $srvName = 'cortex'
+        $mcpTool = $Matches[1]
+    } else {
+        foreach ($sf in @('ServerName', 'server_name', 'server')) {
+            if ($argsObj.PSObject.Properties[$sf] -and $null -ne $argsObj.$sf) {
+                $srvName = [string]$argsObj.$sf
+                break
+            }
+        }
+        foreach ($tf in @('ToolName', 'tool_name', 'tool')) {
+            if ($argsObj.PSObject.Properties[$tf] -and $null -ne $argsObj.$tf) {
+                $mcpTool = [string]$argsObj.$tf
+                break
+            }
+        }
+    }
+    if ($srvName -ieq 'cortex' -and $mcpTool -match '^(?i)(store_memory|upsert_entity|create_relation|store_procedure|import_memories)$') {
+        $mcpPayloadStr = $argsObj | ConvertTo-Json -Depth 6 -Compress
+        if (($mcpPayloadStr -match '(sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AIzaSy[A-Za-z0-9_-]{33}|fc-[a-f0-9]{32}|tvly-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,})') -or
+            ($mcpPayloadStr -match '(?i)(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)|<\s*system\s*>|\[VERDICT:\s*APPROVE\])')) {
+            Emit-Deny 'cortex-memory-poisoning-guard' 'Blocked attempt to persist secret or prompt-injection directive into Cortex long-term memory'
+        }
+        if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
+            $taintCheckPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
+            if (Test-Path -LiteralPath $taintCheckPath) {
+                Emit-ForceAsk 'untrusted-web-memory-taint' "Cortex $mcpTool requires confirmation while session is tainted by external web content"
+            }
+        }
+    }
+    Emit-Allow
 }
 
 if ($toolName -match '^(read_url_content|WebFetch)$' -and $null -ne $argsObj) {
@@ -263,8 +388,7 @@ if ($toolName -match '^(read_url_content|WebFetch)$' -and $null -ne $argsObj) {
         }
     }
     if (-not [string]::IsNullOrWhiteSpace($targetUrl)) {
-        if (($targetUrl -match '^(?i)file://') -or
-            ($targetUrl -match '(?i)(^|//|@)(169\.254\.169\.254|metadata\.google\.internal|localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])([:/]|$)')) {
+        if (Test-UnsafeFetchUrl $targetUrl) {
             Emit-Deny 'ssrf-local-metadata-url' $targetUrl
         }
         try {

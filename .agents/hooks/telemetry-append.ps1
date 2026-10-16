@@ -84,19 +84,31 @@ try {
                     }
 
                     $alreadyAppended = $false
+                    $prevChain = '00000000'
                     if (Test-Path -LiteralPath $telemetryFile) {
                         $existingLines = @(Get-Content -LiteralPath $telemetryFile -Encoding UTF8 | Where-Object { $_ -and $_.Trim() -ne '' })
                         if ($existingLines.Count -gt 0) {
                             $lastLine = [string]$existingLines[$existingLines.Count - 1]
-                            if ($lastLine.EndsWith("| $summary", [System.StringComparison]::Ordinal)) {
+                            if ($lastLine.IndexOf("| $summary", [System.StringComparison]::Ordinal) -ge 0) {
                                 $alreadyAppended = $true
+                            }
+                            if ($lastLine -match '\[chain:([0-9a-fA-F]{8})\]') {
+                                $prevChain = $Matches[1].ToLowerInvariant()
                             }
                         }
                     }
 
                     if (-not $alreadyAppended) {
                         $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-                        $line = "- [$stamp] | Hook Monitor ($eventName) | hook-detected marker | $summary`n"
+                        $entryBody = "- [$stamp] | Hook Monitor ($eventName) | hook-detected marker | $summary"
+                        $sha = [System.Security.Cryptography.SHA256]::Create()
+                        try {
+                            $hashBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes("$prevChain|$entryBody"))
+                            $chainTag = ([System.BitConverter]::ToString($hashBytes).Replace('-', '').ToLowerInvariant()).Substring(0, 8)
+                        } finally {
+                            $sha.Dispose()
+                        }
+                        $line = "$entryBody [chain:$chainTag]`n"
                         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
                         [System.IO.File]::AppendAllText($telemetryFile, $line, $utf8NoBom)
                     }

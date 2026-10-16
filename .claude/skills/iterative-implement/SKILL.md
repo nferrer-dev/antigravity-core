@@ -31,7 +31,7 @@ Spawn the following reviewers concurrently as parallel Task calls (parallel Task
 3. **Performance Profiler** (only invoked for data-pipelines/loops domains).
 4. **Markdown Style Expert** (only invoked for documentation/Markdown files): instruct it to Read `.claude/skills/markdown-style-expert/SKILL.md`.
 5. **Code Health Agent** (always invoked):
-   - **Strict Bounds:** constrain this agent strictly to two questions against the localized diff: *Are there any unintentional changes in your code change?* and *Are there any redundancies introduced in your code change?*
+   - **Strict Bounds:** constrain this agent strictly to two questions against the localized diff: *Are there any unintentional changes in your code change?* (verifiable against deterministic AST symbol/signature changes per `PatchDiff`, `arXiv:2503.15223`) and *Are there any redundancies introduced in your code change?*
    - **Forbidden:** it is strictly prohibited from analyzing global up/downstream dependencies (MVC violation) and from evaluating subjective readability or "YAGNI" critiques (Bounded Quality Constraints violation).
 
 ## 5. Bounded Quality Constraints & SkillOpt

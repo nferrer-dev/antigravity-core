@@ -10,6 +10,7 @@ Usage:
     python .agents/scripts/package_plugin.py --output-dir <dir> [--enable]
 """
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -88,6 +89,71 @@ def strip_leading_frontmatter_fence(raw_bytes):
         else:
             cleaned = cleaned[4:]
     return cleaned
+
+
+def generate_integrity_manifest(bundle_dir):
+    """Generate and write deterministic SHA-256 integrity_manifest.json for a plugin bundle."""
+    bundle_dir = Path(bundle_dir)
+    files_map = {}
+    for file_path in sorted(bundle_dir.rglob("*")):
+        if not file_path.is_file():
+            continue
+        rel = file_path.relative_to(bundle_dir).as_posix()
+        if rel == "integrity_manifest.json":
+            continue
+        raw = file_path.read_bytes()
+        files_map[rel] = {
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "bytes": len(raw),
+        }
+    manifest = {
+        "schema_version": 1,
+        "files": files_map,
+    }
+    (bundle_dir / "integrity_manifest.json").write_bytes(
+        (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
+    )
+    return manifest
+
+
+def verify_plugin_bundle(bundle_dir):
+    """Verify a packaged plugin bundle against its integrity_manifest.json."""
+    bundle_dir = Path(bundle_dir)
+    manifest_path = bundle_dir / "integrity_manifest.json"
+    if not manifest_path.is_file():
+        return 1, ["Missing integrity_manifest.json in %s" % bundle_dir]
+    try:
+        manifest = json.loads(manifest_path.read_bytes().decode("utf-8"))
+    except Exception as exc:
+        return 1, ["Unparseable integrity_manifest.json: %s" % exc]
+    expected_files = manifest.get("files")
+    if not isinstance(expected_files, dict) or not expected_files:
+        return 1, ["integrity_manifest.json 'files' must be a non-empty object"]
+
+    violations = []
+    actual_rels = set()
+    for file_path in sorted(bundle_dir.rglob("*")):
+        if not file_path.is_file():
+            continue
+        rel = file_path.relative_to(bundle_dir).as_posix()
+        if rel == "integrity_manifest.json":
+            continue
+        actual_rels.add(rel)
+        if rel not in expected_files:
+            violations.append("Untracked file in plugin bundle: %s" % rel)
+            continue
+        raw = file_path.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        rec = expected_files[rel]
+        if digest != rec.get("sha256") or len(raw) != rec.get("bytes"):
+            violations.append("SHA-256 / byte mismatch in bundled file: %s" % rel)
+    for missing in sorted(set(expected_files.keys()) - actual_rels):
+        violations.append("Missing bundled file listed in manifest: %s" % missing)
+    if violations:
+        return 1, violations
+    return 0, [
+        "Plugin bundle integrity OK (%d files verified)" % len(expected_files)
+    ]
 
 
 def build_plugin_bundle(repo_root, output_dir, enable=True):
@@ -211,6 +277,8 @@ def build_plugin_bundle(repo_root, output_dir, enable=True):
         (scripts_dst / "secret_scan.py").read_bytes()
     )
 
+    generate_integrity_manifest(output_dir)
+
     return 0, ["Packaged antigravity-core plugin bundle at %s" % output_dir]
 
 
@@ -302,6 +370,14 @@ def run_self_test(repo_root):
                     return 1, [
                         "Self-test failed: control/CR byte in %s" % bundled_file
                     ]
+        v_code, v_msgs = verify_plugin_bundle(target)
+        if v_code != 0:
+            return 1, ["Self-test failed: verify_plugin_bundle: %s" % v_msgs]
+        # Tamper test: mutating a bundled file must fail verification
+        (target / "README.md").write_bytes(b"tampered\n")
+        t_code, _ = verify_plugin_bundle(target)
+        if t_code == 0:
+            return 1, ["Self-test failed: verify_plugin_bundle missed tampered file"]
     return 0, ["package_plugin.py self-test: PASS"]
 
 
@@ -316,6 +392,11 @@ def main():
         "--output-dir", default=None, help="Target directory for the plugin bundle."
     )
     parser.add_argument(
+        "--verify-dir",
+        default=None,
+        help="Verify an existing plugin bundle against its integrity_manifest.json.",
+    )
+    parser.add_argument(
         "--enable",
         action="store_true",
         help="Set disabled=false in the packaged plugin.json.",
@@ -325,12 +406,14 @@ def main():
     repo_root = Path(__file__).resolve().parents[2]
     if args.self_test:
         code, lines = run_self_test(repo_root)
+    elif args.verify_dir:
+        code, lines = verify_plugin_bundle(Path(args.verify_dir))
     elif args.output_dir:
         code, lines = build_plugin_bundle(
             repo_root=repo_root, output_dir=Path(args.output_dir), enable=args.enable
         )
     else:
-        parser.error("Specify either --self-test or --output-dir <dir>")
+        parser.error("Specify --self-test, --verify-dir <dir>, or --output-dir <dir>")
         return 2
 
     for line in lines:
@@ -340,3 +423,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

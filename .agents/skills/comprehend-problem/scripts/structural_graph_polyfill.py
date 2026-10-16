@@ -166,8 +166,83 @@ def find_impacted_tests(directory, changed_files):
     return sorted(nid for nid in visited if _is_test_file(nid))
 
 
+def _format_signature(fn_node):
+    """Return a deterministic string representation of a function/method signature."""
+    args_obj = fn_node.args
+    parts = []
+    for a in getattr(args_obj, "posonlyargs", ()):
+        parts.append(a.arg + "/")
+    num_pos = len(args_obj.args)
+    num_defaults = len(args_obj.defaults)
+    default_start = num_pos - num_defaults
+    for i, a in enumerate(args_obj.args):
+        if i >= default_start:
+            def_node = args_obj.defaults[i - default_start]
+            parts.append("%s=%s" % (a.arg, ast.dump(def_node)))
+        else:
+            parts.append(a.arg)
+    if args_obj.vararg:
+        parts.append("*" + args_obj.vararg.arg)
+    for a, kw_def in zip(args_obj.kwonlyargs, args_obj.kw_defaults):
+        if kw_def is not None:
+            parts.append("%s=%s" % (a.arg, ast.dump(kw_def)))
+        else:
+            parts.append(a.arg)
+    if args_obj.kwarg:
+        parts.append("**" + args_obj.kwarg.arg)
+    prefix = "async def" if isinstance(fn_node, ast.AsyncFunctionDef) else "def"
+    return "%s(%s)" % (prefix, ", ".join(parts))
+
+
+def _extract_surface(source_text):
+    """Extract top-level symbols, class methods, signatures, and imports from Python source."""
+    tree = ast.parse(source_text)
+    symbols = {}
+    imports = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.add(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                imports.add(node.module)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            symbols[node.name] = _format_signature(node)
+        elif isinstance(node, ast.ClassDef):
+            symbols[node.name] = "class(%d bases)" % len(node.bases)
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    symbols["%s.%s" % (node.name, item.name)] = _format_signature(item)
+    return symbols, imports
+
+
+def compute_ast_surface_diff(old_source, new_source):
+    """Compute deterministic AST symbol, signature, and import differences (PatchDiff, arXiv:2503.15223)."""
+    old_syms, old_imps = _extract_surface(old_source)
+    new_syms, new_imps = _extract_surface(new_source)
+    old_keys = set(old_syms.keys())
+    new_keys = set(new_syms.keys())
+    added = sorted(new_keys - old_keys)
+    removed = sorted(old_keys - new_keys)
+    sig_changes = []
+    for sym in sorted(old_keys & new_keys):
+        if old_syms[sym] != new_syms[sym]:
+            sig_changes.append(
+                {"symbol": sym, "old": old_syms[sym], "new": new_syms[sym]}
+            )
+    return {
+        "added_symbols": added,
+        "removed_symbols": removed,
+        "signature_changes": sig_changes,
+        "import_changes": {
+            "added": sorted(new_imps - old_imps),
+            "removed": sorted(old_imps - new_imps),
+        },
+    }
+
+
 def run_self_test():
-    """Verify AST parsing, deterministic graph generation, impacted-test selection, and LF output."""
+    """Verify AST parsing, deterministic graph generation, impacted-test selection, AST diff, and LF output."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         sample_py = tmp_dir / "sample.py"
@@ -212,6 +287,13 @@ def run_self_test():
         if impacted != ["test_widget.py"]:
             print("SELF-TEST FAIL: expected ['test_widget.py'], got %r" % impacted, file=sys.stderr)
             return 1
+        surf_diff = compute_ast_surface_diff(
+            "import os\ndef f(a):\n    return a\n",
+            "import os\nimport sys\ndef f(a, b=1):\n    return a + b\ndef g():\n    return 0\n",
+        )
+        if surf_diff["added_symbols"] != ["g"] or not surf_diff["signature_changes"]:
+            print("SELF-TEST FAIL: compute_ast_surface_diff failed: %r" % surf_diff, file=sys.stderr)
+            return 1
         out_flag_target = tmp_dir / "scratch" / "stage0_graph.json"
         if main([str(tmp_dir), "--out", str(out_flag_target)]) != 0 or not out_flag_target.is_file():
             print("SELF-TEST FAIL: --out flag failed", file=sys.stderr)
@@ -241,6 +323,13 @@ def main(argv=None):
         help="Return transitive test_*.py files impacted by the given changed files.",
     )
     parser.add_argument(
+        "--ast-diff",
+        nargs=2,
+        metavar=("OLD_FILE", "NEW_FILE"),
+        dest="ast_diff",
+        help="Compute deterministic AST symbol, signature, and import diff between two Python files.",
+    )
+    parser.add_argument(
         "target_directory",
         nargs="?",
         help="Target directory to scan for Python files.",
@@ -254,6 +343,13 @@ def main(argv=None):
 
     if args.self_test:
         return run_self_test()
+    if args.ast_diff:
+        old_p, new_p = Path(args.ast_diff[0]), Path(args.ast_diff[1])
+        diff = compute_ast_surface_diff(
+            old_p.read_text(encoding="utf-8"), new_p.read_text(encoding="utf-8")
+        )
+        print(json.dumps(diff, indent=2))
+        return 0
     if args.impacted_tests:
         target_dir = args.target_directory or "."
         impacted = find_impacted_tests(target_dir, args.impacted_tests)
@@ -277,3 +373,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
