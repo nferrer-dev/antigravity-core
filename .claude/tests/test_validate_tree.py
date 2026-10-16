@@ -271,6 +271,28 @@ class LiveTree(unittest.TestCase):
             )
             self.assertEqual(res_ok_git.returncode, 0, "Expected exit 0 for %r" % ok_git)
 
+        # 9. RB-4 & RB-3 Claude parity: SSRF WebFetch blocked (exit 2) & scan_test_integrity
+        res_ssrf = self._run_claude_brc_guard(
+            {
+                "tool_name": "WebFetch",
+                "tool_input": {"url": "http://169.254.169.254/latest/meta-data/"},
+            }
+        )
+        self.assertEqual(res_ssrf.returncode, 2)
+
+        self.assertEqual(
+            vt.scan_test_integrity(
+                "import unittest\nclass T(unittest.TestCase):\n    def test_ok(self):\n        self.assertEqual(1, 1)\n",
+                "test_x.py",
+            ),
+            [],
+        )
+        self.assertTrue(
+            vt.scan_test_integrity(
+                "import unittest\nclass T(unittest.TestCase):\n    def test_empty(self):\n        x = 1\n",
+                "test_x.py",
+            )
+        )
 
 
 class Meta(unittest.TestCase):

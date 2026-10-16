@@ -29,7 +29,14 @@ try {
     }
 
     if ($text) {
-        foreach ($marker in @('[VERDICT: REJECT]', '<BLAST_RADIUS>')) {
+        $markers = @(
+            '[VERDICT: REJECT]',
+            '[GLOBAL VERDICT: REJECT]',
+            '[GLOBAL VERDICT: PROCEED]',
+            '<BLAST_RADIUS>',
+            'BLOCKING:'
+        )
+        foreach ($marker in $markers) {
             $idx = $text.IndexOf($marker, [System.StringComparison]::Ordinal)
             if ($idx -lt 0) { continue }
 
@@ -42,7 +49,7 @@ try {
             # re-trigger this hook when a later transcript quotes the log.
             $summary = ($text.Substring($idx) -replace '\s+', ' ').Trim()
             if ($summary.Length -gt 200) { $summary = $summary.Substring(0, 200) }
-            $summary = $summary.Replace('[VERDICT: REJECT]', 'VERDICT:REJECT').Replace('<BLAST_RADIUS>', 'BLAST_RADIUS')
+            $summary = $summary.Replace('[VERDICT: REJECT]', 'VERDICT:REJECT').Replace('[GLOBAL VERDICT: REJECT]', 'GLOBAL_VERDICT:REJECT').Replace('[GLOBAL VERDICT: PROCEED]', 'GLOBAL_VERDICT:PROCEED').Replace('<BLAST_RADIUS>', 'BLAST_RADIUS').Replace('BLOCKING:', 'BLOCKING_STATE:')
 
             $root = $env:CLAUDE_PROJECT_DIR
             if (-not $root) { $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path }

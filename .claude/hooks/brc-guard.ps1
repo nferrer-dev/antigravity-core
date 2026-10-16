@@ -82,6 +82,23 @@ if ($filePath -ne '') {
     }
 }
 
+if ($toolName -eq 'WebFetch') {
+    $targetUrl = ''
+    foreach ($uf in @('url', 'Url')) {
+        if ($toolInput.PSObject.Properties[$uf] -and $null -ne $toolInput.$uf) {
+            $targetUrl = [string]$toolInput.$uf
+            break
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($targetUrl)) {
+        if (($targetUrl -match '^(?i)file://') -or
+            ($targetUrl -match '(?i)(^|//|@)(169\.254\.169\.254|metadata\.google\.internal|localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])([:/]|$)')) {
+            Deny 'ssrf-local-metadata-url' $targetUrl
+        }
+    }
+    exit 0
+}
+
 $cmd = ''
 if ($toolInput.PSObject.Properties['command'] -and $null -ne $toolInput.command) {
     $cmd = [string]$toolInput.command

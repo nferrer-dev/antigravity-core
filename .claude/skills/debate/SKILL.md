@@ -55,6 +55,7 @@ Subjective LLM scoring is strictly banned to prevent infinite hallucination loop
 2. **Session-ID Namespace Bounding:** To prevent cross-talk between concurrent debates, every stored memory MUST be tagged with a unique session namespace (`debate-<artifact-slug>-<session-id>`), plus its shard name.
 3. **Synthesis via Retrieval:** The Hostile Adjudicator MUST NOT read a monolithic transcript. It queries `mcp__cortex__recall` scoped to the session namespace, shard by shard.
 4. **Graceful Degradation:** If the `cortex` MCP server is not configured, skip storage without failing the debate: write the survivors to `<scratchpad>\debate\<session-id>\survivors.md` (one section per shard) and hand the Adjudicator that path instead of the recall instruction.
+5. **Blind Argument Anonymization (`arXiv:2510.07517`):** Before ingesting shard arguments via `mcp__cortex__store_memory` or writing `survivors.md` for the Hostile Adjudicator, strip persona role labels (`Proponent`, `Critic`, `Radical Innovator`, `Enterprise Minimalist`, `Security Paranoiac`) and re-key each surviving claim as neutral `Claim_A` / `Claim_B` envelopes containing only `{claim_id, empirical_gate_command, exit_code, file_and_line_evidence}` so adjudication evaluates empirical survival rather than persona framing.
 
 ### Phase 5: Hostile Adjudicator (Terminal Verdict)
 

@@ -8,6 +8,25 @@
 $ErrorActionPreference = 'Stop'
 
 $script:IsAntigravity = $false
+$script:PayloadObj = $null
+
+function Write-GuardTelemetry {
+    param([string]$Decision, [string]$Rule, [string]$Excerpt)
+    try {
+        if ($null -ne $script:PayloadObj -and $script:PayloadObj.PSObject.Properties['artifactDirectoryPath']) {
+            $artDir = [string]$script:PayloadObj.artifactDirectoryPath
+            if (-not [string]::IsNullOrWhiteSpace($artDir) -and (Test-Path -LiteralPath $artDir)) {
+                $telPath = Join-Path $artDir 'agentic_telemetry.md'
+                $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                $line = "- [$stamp] | PreToolUse Guard ($Rule) | $Decision | $Excerpt`n"
+                $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                [System.IO.File]::AppendAllText($telPath, $line, $utf8NoBom)
+            }
+        }
+    } catch {
+        # Never block guard execution on telemetry write failure.
+    }
+}
 
 function Emit-Allow {
     if ($script:IsAntigravity) {
@@ -20,6 +39,7 @@ function Emit-Deny {
     param([string]$Rule, [string]$Detail)
     $excerpt = $Detail -replace '\s+', ' '
     if ($excerpt.Length -gt 160) { $excerpt = $excerpt.Substring(0, 160) + '...' }
+    Write-GuardTelemetry -Decision 'deny' -Rule $Rule -Excerpt $excerpt
     $reason = "BLOCKED by BRC/Secret guard [$Rule]: $excerpt. Emit a <BLAST_RADIUS> assessment and request human approval before proceeding."
     if ($script:IsAntigravity) {
         $out = @{ decision = 'deny'; reason = $reason } | ConvertTo-Json -Compress
@@ -35,6 +55,7 @@ function Emit-ForceAsk {
     param([string]$Rule, [string]$Detail)
     $excerpt = $Detail -replace '\s+', ' '
     if ($excerpt.Length -gt 160) { $excerpt = $excerpt.Substring(0, 160) + '...' }
+    Write-GuardTelemetry -Decision 'force_ask' -Rule $Rule -Excerpt $excerpt
     $reason = "PROTECTED HARNESS CONFIG [$Rule]: $excerpt requires explicit user confirmation."
     if ($script:IsAntigravity) {
         $out = @{ decision = 'force_ask'; reason = $reason } | ConvertTo-Json -Compress
@@ -56,6 +77,7 @@ try {
 }
 
 if ($null -eq $payload) { exit 0 }
+$script:PayloadObj = $payload
 
 $toolName = ''
 $argsObj = $null
@@ -144,11 +166,25 @@ function Test-MissingStageArtifact {
     foreach ($dir in $searchDirs) {
         $scratchDir = Join-Path $dir 'scratch'
         if (Test-Path -LiteralPath $scratchDir) {
-            $hits = @(Get-ChildItem -LiteralPath $scratchDir -Filter $StageFilter -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })
+            $hits = @(Get-ChildItem -LiteralPath $scratchDir -Filter $StageFilter -File -ErrorAction SilentlyContinue | Where-Object {
+                if ($_.Length -le 0) { return $false }
+                if ($_.Extension -ieq '.json') {
+                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED)"') { return $false }
+                }
+                return $true
+            })
             if ($hits.Count -gt 0) { return $false }
         }
         if (Test-Path -LiteralPath $dir) {
-            $rootHits = @(Get-ChildItem -LiteralPath $dir -Filter $StageFilter -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })
+            $rootHits = @(Get-ChildItem -LiteralPath $dir -Filter $StageFilter -File -ErrorAction SilentlyContinue | Where-Object {
+                if ($_.Length -le 0) { return $false }
+                if ($_.Extension -ieq '.json') {
+                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED)"') { return $false }
+                }
+                return $true
+            })
             if ($rootHits.Count -gt 0) { return $false }
         }
     }
@@ -194,7 +230,7 @@ if ($isWriteTool -and (Test-GeneratedOutputPath $filePath)) {
 }
 
 if ($isWriteTool -and (Test-MissingStage0Artifact $filePath $payload)) {
-    Emit-Deny 'stage0-comprehend-problem-gate' 'Run comprehend-problem (.agents/skills/comprehend-problem/SKILL.md) and write non-empty scratch/stage0_<topic>.md or .json before writing implementation_plan.md'
+    Emit-Deny 'stage0-comprehend-problem-gate' 'Run comprehend-problem (.agents/skills/comprehend-problem/SKILL.md) and write non-empty scratch/stage0_<topic>.md or .json (with SAT status) before writing implementation_plan.md'
 }
 
 if ($isWriteTool -and (Test-PrematureExecutionLock $filePath $argsObj $payload)) {
@@ -216,6 +252,43 @@ if ($toolName -eq 'schedule' -and $null -ne $argsObj) {
     if ($argsObj.PSObject.Properties['DurationSeconds'] -and $null -ne $argsObj.DurationSeconds -and $argsObj.PSObject.Properties['TimerCondition'] -and ([string]$argsObj.TimerCondition) -match '^(?i)any$') {
         Emit-Deny 'schedule-patience-timer-condition' 'One-shot schedule timers must use TimerCondition="never" (or a specific sender ID) per Asynchronous Patience Protocol'
     }
+}
+
+if ($toolName -match '^(read_url_content|WebFetch)$' -and $null -ne $argsObj) {
+    $targetUrl = ''
+    foreach ($uField in @('Url', 'url')) {
+        if ($argsObj.PSObject.Properties[$uField] -and $null -ne $argsObj.$uField) {
+            $targetUrl = [string]$argsObj.$uField
+            break
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($targetUrl)) {
+        if (($targetUrl -match '^(?i)file://') -or
+            ($targetUrl -match '(?i)(^|//|@)(169\.254\.169\.254|metadata\.google\.internal|localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])([:/]|$)')) {
+            Emit-Deny 'ssrf-local-metadata-url' $targetUrl
+        }
+        try {
+            if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
+                $artDir = [string]$payload.artifactDirectoryPath
+                if (Test-Path -LiteralPath $artDir) {
+                    $scratchDir = Join-Path $artDir 'scratch'
+                    if (-not (Test-Path -LiteralPath $scratchDir)) {
+                        New-Item -ItemType Directory -Path $scratchDir -Force | Out-Null
+                    }
+                    $taintFile = Join-Path $scratchDir '.untrusted_web_taint.json'
+                    $taintObj = @{
+                        url = $targetUrl
+                        timestamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                    } | ConvertTo-Json -Compress
+                    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                    [System.IO.File]::WriteAllText($taintFile, $taintObj, $utf8NoBom)
+                }
+            }
+        } catch {
+            # Ignore taint write failure on read-only paths.
+        }
+    }
+    Emit-Allow
 }
 
 if ([string]::IsNullOrWhiteSpace($cmd)) {
@@ -260,6 +333,15 @@ foreach ($checkStr in @($cmd, $canon)) {
 $exempt = '(^|[\s"'';=/\\])(scratch|tmp|temp|node_modules|dist|build|target|\.venv|__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache|\.tox|coverage|htmlcov)([\s"'';/\\]|$)'
 
 foreach ($evalCmd in $candidates) {
+    # Stateful IFC (Fides) egress check when session is tainted by external web content
+    if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
+        $taintCheckPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
+        if ((Test-Path -LiteralPath $taintCheckPath) -and
+            ($evalCmd -match '(^|[\s;|&(])(curl(\.exe)?|wget(\.exe)?|Invoke-WebRequest|Invoke-RestMethod|iwr|irm|Start-BitsTransfer|scp(\.exe)?|ftp(\.exe)?)\b')) {
+            Emit-ForceAsk 'untrusted-web-egress-taint' $evalCmd
+        }
+    }
+
     # Dynamic eval / scriptblock creation block
     if ($evalCmd -match '(^|[\s;|&(])(Invoke-[E]xpression|iex|\[ScriptBlock\]::Create)\b') {
         Emit-Deny 'dynamic-code-evaluation' $evalCmd

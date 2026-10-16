@@ -194,6 +194,23 @@ def check_global_mcp_config(repo_root, global_config_dir, apply_changes=False):
                         % (srv_name, map_key, k)
                     )
 
+    mcp_schemas_root = global_config_dir.parent / "antigravity" / "mcp"
+    if mcp_schemas_root.is_dir():
+        inj_re = re.compile(
+            r"\b(?:ignore|disregard)\s+(?:all\s+|any\s+)?(?:previous|prior|above|system)\s+"
+            r"(?:instructions|prompts|rules|directives)\b",
+            re.IGNORECASE,
+        )
+        for schema_file in sorted(mcp_schemas_root.glob("*/*.json")):
+            if not schema_file.is_file():
+                continue
+            s_text = schema_file.read_bytes().decode("utf-8", errors="replace")
+            if inj_re.search(s_text):
+                errors.append(
+                    "Lazy MCP schema %s contains prompt-injection override directive (tool-poisoning guard)"
+                    % schema_file
+                )
+
     if not errors:
         messages.append(
             "mcp_config.json OK (%d servers, 0 plaintext secrets)"

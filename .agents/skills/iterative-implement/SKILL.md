@@ -36,6 +36,7 @@ Spawn the following read-only review subagents concurrently via `invoke_subagent
 - You MUST wait for ALL invoked subagents to return an explicit `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Set a 3-minute absolute timeout using `schedule` (`DurationSeconds=180`, `TimerCondition="never"`).
 - **Execution-Grounded Rejection Gate (VeriHarness):** Every `[VERDICT: REJECT]` MUST include a structured `<REJECTION_EVIDENCE>` block containing `FILE_AND_LINE` (`path:start-end`), `REPRODUCIBLE_CHECK` (exact command or deterministic rule check), and `FALSIFIABLE_FIX`. Any `[VERDICT: REJECT]` lacking `<REJECTION_EVIDENCE>` is discarded as non-actionable speculation without consuming a consensus round.
 - If a subagent rejects the patch with valid `<REJECTION_EVIDENCE>`, use `send_message` to resubmit the revised artifact to the ENTIRE committee, instructing them to perform a diff-only review on the fix.
+- **Vote-Tally Blindness (`arXiv:2509.23055`):** When resubmitting a revised diff via `send_message` to the committee, pass ONLY the new code delta/diff and the specific `<REJECTION_EVIDENCE>` items resolved. NEVER disclose prior round vote tallies (e.g., `"3 of 4 approved"`) or peer reviewer verdicts, preventing sycophantic conformity cascades.
 - Cap loops at a maximum of 5 rounds. If stagnation occurs, yield to the USER.
 
 ## 6. Resource Cleanup (Anti-Leak Protocol)

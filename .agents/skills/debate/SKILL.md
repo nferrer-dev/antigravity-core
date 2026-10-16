@@ -31,9 +31,11 @@ Subjective LLM scoring is strictly banned to prevent infinite hallucination loop
 3. **Fail-Closed Pruning:** If an argument fails the empirical gate or lacks `<REJECTION_EVIDENCE>`, it is deterministically rejected. Only mathematically sound, empirically verified arguments survive.
 
 ### 3. Phase 3: Vectorized RAG Memory (State Isolation)
+
 1. **Native Integration & `SQLITE_BUSY` Retry:** Sub-Orchestrators MUST first read the lazy MCP tool schema (`mcp/cortex/store_memory.json`) via `view_file` and commit their verified arguments and PoC outputs directly to the **`cortex` MCP server**, retrying with brief backoff if concurrent shard writes encounter `SQLITE_BUSY`.
 2. **Session-ID Namespace Bounding:** To prevent concurrent cross-talk between shards, all RAG ingestion via `store_memory` MUST be heavily tagged with a unique session ID tied strictly to that active workflow instance.
 3. **Synthesis via Retrieval:** The Hostile Adjudicator MUST NOT read a monolithic text transcript. It MUST invoke `recall` on the `cortex` server to query the isolated shard arguments.
+4. **Blind Argument Anonymization (`arXiv:2510.07517`):** Before ingesting shard arguments via `store_memory` or presenting them to the Hostile Adjudicator, Sub-Orchestrators MUST strip persona role labels (`Proponent`, `Critic`, `Radical Innovator`, `Enterprise Minimalist`, `Security Paranoiac`) and re-key each surviving claim as neutral `Claim_A` / `Claim_B` envelopes containing only `{claim_id, empirical_gate_command, exit_code, file_and_line_evidence}` so adjudication evaluates empirical survival rather than persona framing.
 
 ## 4. Phase 4: Resource Cleanup (Anti-Leak Protocol)
 To prevent system instability and memory leaks, the Parent Orchestrator MUST explicitly kill all spawned entities once their arguments are ingested or if the debate loop is aborted.

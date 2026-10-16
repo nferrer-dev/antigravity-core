@@ -14,6 +14,7 @@ result would be meaningless, so it prints one diagnostic and exits 1.
 Exit code 0 when all invariants hold; 1 otherwise, one violation per line.
 Stdlib only; runnable from any cwd; never writes.
 """
+import ast
 import json
 import os
 import re
@@ -438,6 +439,19 @@ def check_inv7_edge_cases(root):
             )
         if not (path.parent / "SKILL.md").is_file():
             violations.append("INV-7: %s: no sibling SKILL.md" % label)
+        text = path.read_bytes().decode("utf-8", errors="replace").lstrip()
+        lines = text.splitlines()
+        if len(lines) > 150:
+            violations.append(
+                "INV-7: %s: %d lines exceeds 150-line ACE compaction cap"
+                % (label, len(lines))
+            )
+        bullets = [ln for ln in lines[1:] if ln.startswith("- ")]
+        if len(bullets) > 10:
+            violations.append(
+                "INV-7: %s: contains %d heuristics (exceeds 10-heuristic cap)"
+                % (label, len(bullets))
+            )
     return violations
 
 
@@ -460,6 +474,71 @@ def check_inv8_vocabulary(root):
     return violations
 
 
+def scan_test_integrity(source_text, label):
+    """Verify test_*.py methods contain real assertions, zero skips, and no tautologies."""
+    violations = []
+    try:
+        tree = ast.parse(source_text)
+    except SyntaxError as exc:
+        return ["%s: SyntaxError in test file (%s)" % (label, exc)]
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not node.name.startswith("test_"):
+            continue
+        for dec in node.decorator_list:
+            if "skip" in ast.dump(dec).lower():
+                violations.append(
+                    "%s: %s uses forbidden skip decorator (reward-hacking guard)"
+                    % (label, node.name)
+                )
+        assert_count = 0
+        for child in ast.walk(node):
+            if isinstance(child, ast.Assert):
+                assert_count += 1
+            elif isinstance(child, ast.Call):
+                func = child.func
+                attr_name = getattr(func, "attr", getattr(func, "id", ""))
+                if attr_name == "skipTest":
+                    violations.append(
+                        "%s: %s calls skipTest (reward-hacking guard)"
+                        % (label, node.name)
+                    )
+                if (
+                    attr_name.startswith("assert")
+                    or attr_name.startswith("_assert")
+                    or attr_name.startswith("check_")
+                    or attr_name == "fail"
+                ):
+                    assert_count += 1
+                if (
+                    attr_name == "assertEqual"
+                    and len(child.args) >= 2
+                    and not isinstance(child.args[0], ast.Constant)
+                    and ast.dump(child.args[0]) == ast.dump(child.args[1])
+                ):
+                    violations.append(
+                        "%s: %s contains tautological assertEqual on identical expressions"
+                        % (label, node.name)
+                    )
+                if (
+                    attr_name == "assertTrue"
+                    and len(child.args) >= 1
+                    and isinstance(child.args[0], ast.Constant)
+                    and child.args[0].value is True
+                ):
+                    violations.append(
+                        "%s: %s contains tautological assertTrue(True)"
+                        % (label, node.name)
+                    )
+        if assert_count == 0:
+            violations.append(
+                "%s: %s contains zero assertions (reward-hacking guard)"
+                % (label, node.name)
+            )
+    return violations
+
+
 def check_inv10_skill_security(root):
     violations = []
     skills_dir = root / ".claude" / "skills"
@@ -473,6 +552,11 @@ def check_inv10_skill_security(root):
         text = path.read_bytes().decode("utf-8", errors="replace")
         for err in scan_skill_security(text, label):
             violations.append("INV-10: %s" % err)
+    for test_py in sorted((root / ".claude" / "tests").glob("test_*.py")):
+        t_label = _rel(root, test_py)
+        t_text = test_py.read_bytes().decode("utf-8", errors="replace")
+        for t_err in scan_test_integrity(t_text, t_label):
+            violations.append("INV-10: %s" % t_err)
     return violations
 
 

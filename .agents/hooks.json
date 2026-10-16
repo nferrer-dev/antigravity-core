@@ -3,7 +3,7 @@
     "enabled": true,
     "PreToolUse": [
       {
-        "matcher": "run_command|execute_command|Bash|view_file|(?:multi_)?replace_file_content|write_to_file|(?:Multi)?Edit|Write|Read|invoke_subagent|schedule",
+        "matcher": "run_command|execute_command|Bash|view_file|(?:multi_)?replace_file_content|write_to_file|(?:Multi)?Edit|Write|Read|invoke_subagent|schedule|read_url_content|WebFetch",
         "hooks": [
           {
             "type": "command",

