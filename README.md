@@ -234,3 +234,23 @@ git submodule add https://github.com/nferrer-dev/antigravity-core.git .agents
 Antigravity automatically discovers `.agents/AGENTS.md`, `.agents/rules/`,
 `.agents/skills/`, `.agents/agents/`, and `.agents/hooks/hooks.json` when
 operating in the workspace.
+
+---
+
+## 📚 Research-Backed Best-Practices Documentation (`docs/best-practices/`)
+
+For an evidence-backed engineering deep dive into all **7 AI Coding Agent
+Customization Surfaces** across both **Google Antigravity (`.agents/`)** and
+**Claude Code (`CLAUDE.md` / `.claude/`)**—complete with **36+ verified
+academic citations (`arXiv` 2024–2026)** and platform specifications—see the
+[**AI Agent Customization Best-Practices Suite**](docs/best-practices/README.md):
+
+1. [**Master Index, Routing Hierarchy, & Dual-Harness Matrix**](docs/best-practices/README.md)
+2. [**Type 1: Rules & Hierarchical Instructions (`AGENTS.md` & `CLAUDE.md`)**](docs/best-practices/01-rules-and-instructions.md)
+3. [**Type 2: Skills, Progressive Disclosure, & Self-Evolution (`SKILL.md`)**](docs/best-practices/02-skills-and-progressive-disclosure.md)
+4. [**Type 3: Lifecycle Hooks, Runtime Guards, & Information-Flow Control**](docs/best-practices/03-lifecycle-hooks-and-deterministic-guards.md)
+5. [**Type 4: MCP Servers, Supply-Chain Security, & RAG Memory Defense**](docs/best-practices/04-mcp-servers-and-supply-chain-security.md)
+6. [**Type 5: Subagents, Consensus Orchestration, & Anti-Sycophancy**](docs/best-practices/05-subagents-and-consensus-orchestration.md)
+7. [**Type 6: Distributable Plugins, Cryptographic BOMs, & Global Sync**](docs/best-practices/06-plugins-and-packaging.md)
+8. [**Type 7: Sidecars, Scheduled Automations, & Generative UI**](docs/best-practices/07-sidecars-automations-and-generative-ui.md)
+

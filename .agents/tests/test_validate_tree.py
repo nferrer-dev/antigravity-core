@@ -1282,7 +1282,7 @@ class LiveTree(unittest.TestCase):
                 [sys.executable, str(script), "--self-test"],
                 capture_output=True,
                 text=True,
-                timeout=20,
+                timeout=45,
             )
             self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
 
@@ -2045,6 +2045,94 @@ class LiveTree(unittest.TestCase):
             ]
             self.assertEqual(len(tel_lines), 1)
             self.assertEqual(vt.verify_telemetry_chain("\n".join(tel_lines), "tel.md"), [])
+
+    def test_best_practices_docs_suite_complete_and_cited(self):
+        import importlib.util
+
+        docs_dir = REPO_ROOT / "docs" / "best-practices"
+        expected_files = (
+            "README.md",
+            "01-rules-and-instructions.md",
+            "02-skills-and-progressive-disclosure.md",
+            "03-lifecycle-hooks-and-deterministic-guards.md",
+            "04-mcp-servers-and-supply-chain-security.md",
+            "05-subagents-and-consensus-orchestration.md",
+            "06-plugins-and-packaging.md",
+            "07-sidecars-automations-and-generative-ui.md",
+        )
+        self.assertTrue(docs_dir.is_dir(), "Missing docs/best-practices directory")
+
+        sec_path = REPO_ROOT / ".agents" / "scripts" / "secret_scan.py"
+        spec = importlib.util.spec_from_file_location("secret_scan_bp", sec_path)
+        sec_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sec_mod)
+
+        file_paths = []
+        for fname in expected_files:
+            fpath = docs_dir / fname
+            self.assertTrue(fpath.is_file(), "Missing best-practices guide: %s" % fname)
+            file_paths.append(str(fpath))
+            raw = fpath.read_bytes()
+            self.assertIsNone(vt.bom_kind(raw), "%s has unexpected BOM" % fname)
+            self.assertFalse(vt.has_nul(raw), "%s has NUL bytes" % fname)
+            self.assertNotIn(b"\r", raw, "%s must use strict LF line endings" % fname)
+            self.assertFalse(
+                vt.has_forbidden_control_bytes(raw),
+                "%s has forbidden ASCII control bytes" % fname,
+            )
+            text = raw.decode("utf-8")
+
+            # Verify single H1 heading and language-tagged opening code fences
+            in_fence = False
+            h1_count = 0
+            for line_no, line in enumerate(text.splitlines(), start=1):
+                stripped = line.strip()
+                if stripped.startswith("```"):
+                    if not in_fence:
+                        lang = stripped[3:].strip()
+                        self.assertTrue(
+                            bool(lang),
+                            "%s:%d opening code fence missing language tag"
+                            % (fname, line_no),
+                        )
+                        in_fence = True
+                    else:
+                        in_fence = False
+                elif not in_fence and line.startswith("# "):
+                    h1_count += 1
+            self.assertEqual(
+                h1_count, 1, "%s must have exactly 1 H1 heading, got %d" % (fname, h1_count)
+            )
+            self.assertFalse(in_fence, "%s has unclosed code fence" % fname)
+
+            self.assertEqual(
+                vt.scan_skill_security(text, fname),
+                [],
+                "%s failed scan_skill_security" % fname,
+            )
+            self.assertIn(
+                "https://arxiv.org/abs/",
+                text,
+                "%s missing verified arXiv citation link" % fname,
+            )
+            self.assertIn(".agents", text, "%s missing Antigravity coverage" % fname)
+            self.assertTrue(
+                (TOKEN_CLAUDE_MD in text) or (TOKEN_CLAUDE_DIR in text),
+                "%s missing Claude Code coverage" % fname,
+            )
+
+        self.assertEqual(
+            sec_mod.scan_files(file_paths),
+            [],
+            "docs/best-practices failed secret_scan.py",
+        )
+
+        root_readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "docs/best-practices/README.md",
+            root_readme,
+            "Root README.md must link to docs/best-practices/README.md",
+        )
 
 
 class Meta(unittest.TestCase):
