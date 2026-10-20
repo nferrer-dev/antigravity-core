@@ -11,8 +11,9 @@ command = "cgc"
 args = ["mcp", "start"]
 startup_timeout_sec = 20
 
-[mcp_servers.cortex]
-url = "http://127.0.0.1:8585/mcp"
+# Optional: uncomment if running a local Cortex vector memory server on port 8585
+# [mcp_servers.cortex]
+# url = "http://127.0.0.1:8585/mcp"
 
 # Suppress duplicate discovery of .agents/skills/* inside antigravity-core
 # so Codex uses the Codex-native .codex/skills/* definitions.

@@ -15,7 +15,7 @@ OpenAI Codex sessions operating on non-Codex tasks MUST treat other harness dire
 ## No Guessing Protocol
 
 1. **Deduction vs. Guessing**: Use fact-based deductive reasoning from repository files, AST symbols, test outputs, or primary documentation. Any assumption that cannot cite a concrete file path, line number, API output, or official specification is a blind guess and is strictly forbidden.
-2. **Proactive Ambiguity Resolution**: Conduct a bounded search first (`rg -n` via `exec_command`/`Bash`). Do not enter unbounded search loops. If ambiguity remains or requires a subjective product/design choice, trigger the Standardized Failure State.
+2. **Proactive Ambiguity Resolution**: Conduct a bounded search first (`rg -n`, `git grep -n`, or `Select-String` via `exec_command`/`Bash`). Do not enter unbounded search loops. If ambiguity remains or requires a subjective product/design choice, trigger the Standardized Failure State.
 3. **Standardized Failure State**: Immediately halt execution and report:
    - What you **DO** know with certainty.
    - What you **DO NOT** know.
@@ -39,7 +39,8 @@ OpenAI Codex sessions operating on non-Codex tasks MUST treat other harness dire
 
 ## Consensus Loop & Subagent Orchestration (`spawn_agent` / `send_input` / `wait_agent` / `close_agent`)
 
-1. **Stage 1 Divergent Brainstorming (`brainstorm-solutions`)**: Spawn 3 parallel read-only subagents via `spawn_agent` with distinct cognitive framings (**Radical Innovator**, **Enterprise Minimalist**, **Security Paranoiac**) and Zero Shared Context. Compile their outputs into `scratch/candidate_solutions.md`.
+0. **Stage 0 Epistemic Comprehension Router (`comprehend-problem`)**: For every non-trivial (Tier 1 or Tier 2) task, read `.codex/skills/comprehend-problem/SKILL.md` (or `~/.codex/skills/comprehend-problem/SKILL.md`), classify the problem into **Structural** (`mcp__code-graph-context__*` or `structural_graph_polyfill.py`), **Logical** (`logical_z3_polyfill.py`), or **Exploratory** (parallel `spawn_agent` blackboard swarm with `fork_context=false`), and write a non-empty `scratch/stage0_<topic>.md` or `.json` rubric BEFORE entering Stage 1 or writing `implementation_plan.md` (mechanically enforced by `brc-guard.ps1` `stage0-comprehend-problem-gate`).
+1. **Stage 1 Divergent Brainstorming (`brainstorm-solutions`)**: Spawn 3 parallel read-only subagents via `spawn_agent` (`fork_context=false`) with distinct cognitive framings (**Radical Innovator**, **Enterprise Minimalist**, **Security Paranoiac**) and Zero Shared Context. Compile their outputs into `scratch/candidate_solutions.md` (mechanically enforced by `brc-guard.ps1` `stage1-candidate-solutions-gate`).
 2. **Stage 2 Technical Debate (`technical-debate` -> `debate`)**: Map impacted AST dependency clusters into shards, spawn paired Proponent and Critic subagents per shard, run the Deterministic Empirical Survival Gate in a detached git worktree, anonymize surviving claims into SHA-256 digest-ordered `Claim_A` / `Claim_B` envelopes, and run the Hostile Adjudicator for a `[GLOBAL VERDICT: PROCEED]` or `[GLOBAL VERDICT: REJECT]`.
 3. **Stage 3 Design-Validate Loop (`design-validate`)**: Spawn the impacted read-only `stage3-design-reviewer` subagents (`Idea Skeptic`, `System Architect`, `Requirements Engineer`, `Scope Reviewer`) in parallel and await all of them via `wait_agent`.
    - **Execution-Grounded Rejection Gate (VeriHarness)**: Every reviewer must end with `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Every `[VERDICT: REJECT]` MUST include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`; ungrounded rejections are discarded without consuming a round.
@@ -48,7 +49,7 @@ OpenAI Codex sessions operating on non-Codex tasks MUST treat other harness dire
 4. **Stage 4 Iterative-Implement Loop (`iterative-implement`)**:
    - **Bounded Pre-Flight Gate**: Run the project's linter and unit test suite on modified files ONCE before invoking the Stage 4 committee (no unmanaged test-and-fix loops).
    - **Context-Dependent Roster**: Spawn read-only `stage4-code-auditor` subagents passing only the git diff and file paths: Language-Specific Style Expert (`style-python`, `style-js`, `style-go`, `style-cpp`, `style-java`, `style-rust` + companion `*-edge-cases.md`), `security-auditor` (for auth/crypto/inputs/network/hooks), Performance Profiler (for hot loops/pipelines), and `markdown-style-expert` (for Markdown/docs).
-   - **Self-Evolution (`skill-evolve`)**: When a rejection or BRC yield stems from a missing skill heuristic, update the relevant `*-edge-cases.md` file (respecting the 150-line / 10-bullet ACE cap) and store the lesson via `mcp__cortex__store_memory`.
+   - **Self-Evolution (`skill-evolve`)**: When a rejection or BRC yield stems from a missing skill heuristic, update the relevant `*-edge-cases.md` file (respecting the 150-line / 10-bullet ACE cap) and store the lesson via `mcp__cortex__store_memory` (when the optional `cortex` MCP server is configured).
 
 ## Agentic Test-Driven Development (TDD) & No Code Without Design Artifact
 

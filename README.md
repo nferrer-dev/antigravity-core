@@ -173,12 +173,12 @@ Antigravity executes these protocols via the 19 dynamic skills in
   `style-rust`: Authoritative language-specific style guides, companion
   `-edge-cases.md` references, and mechanical linters.
 
-### Cortex & RAG Integration
+### Optional MCP Servers (`cortex` & `code-graph-context`)
 
-- `cortex-librarian`: Read-only specialist querying the local Cortex vector
-  database to retrieve cited architectural best practices.
-- `skill-evolve`: Universal self-evolution hook that patches systemic edge-case
-  failures into companion skill references and Cortex memory.
+- **`cortex` (Optional Vector RAG Memory)**: Disabled by default in repository configs (`.agents/mcp_config.json`, `.mcp.json`, `.codex/config.toml`) so fresh clones work out of the box without running a local Cortex server on `127.0.0.1:8585`. When `cortex` is absent, `cortex-librarian` reports zero memories retrieved and `debate` (`technical-debate`, `design-validate`) falls back to `<scratchpad>/debate/<session-id>/survivors.md`. When `cortex` is opted in locally, `brc-guard.ps1` enforces `cortex-memory-poisoning-guard` and `untrusted-web-memory-taint`.
+- **`code-graph-context` (Optional AST Graph Engine)**: When the `cgc` CLI is unavailable, Stage 0 (`comprehend-problem`) automatically falls back to its bundled zero-dependency Python AST polyfill (`structural_graph_polyfill.py`).
+- `cortex-librarian`: Read-only specialist querying the optional local Cortex vector database to retrieve cited architectural best practices.
+- `skill-evolve`: Universal self-evolution hook that patches systemic edge-case failures into companion skill references (and optional Cortex memory when configured).
 
 ### Tooling & Reverse Engineering
 

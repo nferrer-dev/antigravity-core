@@ -402,6 +402,75 @@ class LiveTree(unittest.TestCase):
             self.assertEqual(len(tel_lines), 1)
             self.assertEqual(vt.verify_telemetry_chain("\n".join(tel_lines), "tel.md"), [])
 
+    def test_stage0_stage1_gates_and_skill_routing_triggers(self):
+        import tempfile
+
+        claude_md = (REPO_ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        self.assertIn("scratch/stage0_", claude_md)
+        comp_skill = (
+            REPO_ROOT / ".claude" / "skills" / "comprehend-problem" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("~/.claude/skills/comprehend-problem/scripts/", comp_skill)
+        self.assertIn("stage0-comprehend-problem-gate", vt.REQUIRED_BRC_GUARD_RULES)
+        self.assertIn("stage1-candidate-solutions-gate", vt.REQUIRED_BRC_GUARD_RULES)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            res_no_s0 = self._run_claude_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": str(tmp_path / "implementation_plan.md"),
+                        "content": "# Plan\n",
+                    },
+                }
+            )
+            self.assertEqual(res_no_s0.returncode, 2)
+            self.assertIn("stage0-comprehend-problem-gate", res_no_s0.stderr)
+
+            scratch_dir = tmp_path / "scratch"
+            scratch_dir.mkdir(parents=True, exist_ok=True)
+            (scratch_dir / "stage0_rubric.md").write_text(
+                "# Stage 0 Rubric\n", encoding="utf-8"
+            )
+            res_ok_s0 = self._run_claude_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": str(tmp_path / "implementation_plan.md"),
+                        "content": "# Plan\n",
+                    },
+                }
+            )
+            self.assertEqual(res_ok_s0.returncode, 0, res_ok_s0.stderr)
+
+            res_bad_s1 = self._run_claude_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": str(scratch_dir / "candidate_solutions.md"),
+                        "content": "## Radical Innovator\n",
+                    },
+                }
+            )
+            self.assertEqual(res_bad_s1.returncode, 2)
+            self.assertIn("stage1-candidate-solutions-gate", res_bad_s1.stderr)
+
+            res_ok_s1 = self._run_claude_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": str(scratch_dir / "candidate_solutions.md"),
+                        "content": "## Radical Innovator\n## Enterprise Minimalist\n## Security Paranoiac\n",
+                    },
+                }
+            )
+            self.assertEqual(res_ok_s1.returncode, 0, res_ok_s1.stderr)
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

@@ -1,6 +1,6 @@
 ---
 name: markdown-style-expert
-description: Validates Markdown files and skill heuristics against the Google Markdown Style Guide.
+description: Validates Markdown files and skill heuristics against the Google Markdown Style Guide. Use when invoked as the Markdown Style Expert during Stage 4 reviews or skill-evolve pre-flight gates. Do not invoke directly as a user slash workflow.
 ---
 
 # Markdown Style Expert

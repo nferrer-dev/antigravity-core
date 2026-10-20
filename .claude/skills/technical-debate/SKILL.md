@@ -1,6 +1,6 @@
 ---
 name: technical-debate
-description: Automates a rigorous adversarial review to vet a technical proposition (Stage 2 Idea Vetting), and serves as the terminal arbitration mechanism for deadlocked consensus loops.
+description: Automates a rigorous adversarial review to vet a technical proposition or arbitrate a consensus deadlock (Stage 2 Idea Vetting). Use for Tier 2 architectural propositions, major config changes, or deadlock arbitration. Do not use for Tier 0/1 bounded tasks or routine code diff reviews.
 ---
 
 # Technical Debate Workflow (Stage 2 Idea Vetting)

@@ -574,7 +574,7 @@ def verify_or_sync_claude(
 
 
 
-def _merge_codex_config_toml(existing_text):
+def _merge_codex_config_toml(existing_text, include_cortex=False):
     """Non-destructively merge Antigravity Codex keys into config.toml with root keys before [section]."""
     text = (existing_text or "").replace("\r\n", "\n").replace("\r", "\n")
     if text.startswith("\ufeff"):
@@ -637,7 +637,7 @@ def _merge_codex_config_toml(existing_text):
             rest_part += "\n\n"
         rest_part += "[features]\ncodex_hooks = true\n"
 
-    # Upsert [mcp_servers.code-graph-context] and [mcp_servers.cortex] if missing
+    # Upsert [mcp_servers.code-graph-context] and optional [mcp_servers.cortex]
     if not re.search(r"(?m)^\[mcp_servers\.code-graph-context\][ \t]*$", rest_part):
         rest_part = (
             rest_part.rstrip()
@@ -646,7 +646,9 @@ def _merge_codex_config_toml(existing_text):
             + 'args = ["mcp", "start"]\n'
             + "startup_timeout_sec = 20\n"
         )
-    if not re.search(r"(?m)^\[mcp_servers\.cortex\][ \t]*$", rest_part):
+    if include_cortex and not re.search(
+        r"(?m)^\[mcp_servers\.cortex\][ \t]*$", rest_part
+    ):
         rest_part = (
             rest_part.rstrip()
             + "\n\n[mcp_servers.cortex]\n"
@@ -876,8 +878,26 @@ def verify_or_sync_codex(
     elif not apply_changes:
         errors.append("Global Codex config.toml missing at %s" % cfg_path)
 
+    include_cortex = False
+    global_mcp_path = Path(global_config_dir) / "mcp_config.json"
+    if global_mcp_path.is_file():
+        try:
+            m_data = json.loads(
+                global_mcp_path.read_bytes()
+                .replace(b"\r\n", b"\n")
+                .decode("utf-8-sig")
+            )
+            if "cortex" in (m_data.get("mcpServers") or {}):
+                include_cortex = True
+        except Exception:
+            pass
+    if re.search(r"(?m)^\[mcp_servers\.cortex\][ \t]*$", existing_cfg_text):
+        include_cortex = True
+
     if apply_changes:
-        merged_cfg_text = _merge_codex_config_toml(existing_cfg_text)
+        merged_cfg_text = _merge_codex_config_toml(
+            existing_cfg_text, include_cortex=include_cortex
+        )
         merged_bytes = merged_cfg_text.encode("utf-8")
         if not cfg_path.is_file() or cfg_path.read_bytes() != merged_bytes:
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -906,7 +926,12 @@ def verify_or_sync_codex(
                     "Global %s [features].codex_hooks must be true" % cfg_path
                 )
             mcp_tbl = parsed_toml.get("mcp_servers") or {}
-            for req_srv in ("code-graph-context", "cortex"):
+            req_codex_srvs = (
+                ("code-graph-context", "cortex")
+                if include_cortex
+                else ("code-graph-context",)
+            )
+            for req_srv in req_codex_srvs:
                 if req_srv not in mcp_tbl:
                     errors.append(
                         "Global %s missing [mcp_servers.%s]" % (cfg_path, req_srv)
@@ -1245,10 +1270,31 @@ def run_self_test(repo_root):
             or parsed_x.get("model") != "gpt-5.4"
             or (parsed_x.get("windows") or {}).get("sandbox") != "elevated"
             or "ida-pro-mcp" not in (parsed_x.get("mcp_servers") or {})
-            or "cortex" not in (parsed_x.get("mcp_servers") or {})
+            or "cortex" in (parsed_x.get("mcp_servers") or {})
             or "code-graph-context" not in (parsed_x.get("mcp_servers") or {})
         ):
-            return 1, ["Self-test failed: Codex TOML root/table merge incorrect"]
+            return 1, ["Self-test failed: Codex TOML cortex-free merge incorrect"]
+
+        # Enable cortex in fake_global/mcp_config.json and verify opt-in Codex sync
+        gmcp = json.loads((fake_global / "mcp_config.json").read_text(encoding="utf-8"))
+        gmcp.setdefault("mcpServers", {})["cortex"] = {
+            "url": "http://127.0.0.1:8585/mcp"
+        }
+        (fake_global / "mcp_config.json").write_text(
+            json.dumps(gmcp, indent=2) + "\n", encoding="utf-8"
+        )
+        x_errs_c, _ = verify_or_sync_codex(
+            repo_root=Path(repo_root),
+            global_config_dir=fake_global,
+            codex_dir=fake_codex,
+            apply_changes=True,
+            backup_dir=fake_backup,
+        )
+        if x_errs_c:
+            return 1, ["Self-test failed during Codex cortex-enabled apply: %s" % x_errs_c]
+        parsed_xc = tomllib.loads((fake_codex / "config.toml").read_text(encoding="utf-8"))
+        if "cortex" not in (parsed_xc.get("mcp_servers") or {}):
+            return 1, ["Self-test failed: Codex TOML opt-in cortex merge missing"]
 
     return 0, ["sync_global_config.py self-test: PASS"]
 

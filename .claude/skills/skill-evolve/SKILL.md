@@ -1,6 +1,6 @@
 ---
 name: skill-evolve
-description: Universal self-evolution hook. Executed when an agent encounters an edge case or failure mode in any other skill.
+description: Universal self-evolution hook executed when an agent encounters a systemic edge case or failure mode in another skill. Use when triggered by a Stage 3/4 rejection or blast-radius yield caused by a missing skill heuristic. Do not use for routine edits.
 ---
 
 # SkillOpt Universal Self-Evolution (`skill-evolve`)

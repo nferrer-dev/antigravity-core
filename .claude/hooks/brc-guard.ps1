@@ -182,6 +182,85 @@ function Test-UnsafeFetchUrl {
     return $false
 }
 
+function Test-MissingStage0Artifact {
+    param([string]$PathStr, $PayloadObj)
+    if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
+    $norm = $PathStr.Replace('/', '\')
+    if ($norm -notmatch '(?i)(^|\\)implementation_plan\.md$') { return $false }
+    $searchDirs = New-Object System.Collections.Generic.List[string]
+    if ($null -ne $PayloadObj -and $PayloadObj.PSObject.Properties['artifactDirectoryPath']) {
+        $artDir = [string]$PayloadObj.artifactDirectoryPath
+        if (-not [string]::IsNullOrWhiteSpace($artDir)) {
+            $searchDirs.Add($artDir.Replace('/', '\'))
+        }
+    }
+    $cwdDir = ''
+    if ($null -ne $PayloadObj -and $PayloadObj.PSObject.Properties['cwd']) {
+        $cwdDir = [string]$PayloadObj.cwd
+        if (-not [string]::IsNullOrWhiteSpace($cwdDir)) {
+            $cwdNorm = $cwdDir.Replace('/', '\')
+            if (-not $searchDirs.Contains($cwdNorm)) {
+                $searchDirs.Add($cwdNorm)
+            }
+        }
+    }
+    $parentDir = Split-Path -Parent $norm
+    if (-not [string]::IsNullOrWhiteSpace($parentDir)) {
+        $resolvedParent = $parentDir
+        if (-not [System.IO.Path]::IsPathRooted($parentDir)) {
+            if (-not [string]::IsNullOrWhiteSpace($cwdDir)) {
+                $resolvedParent = Join-Path ($cwdDir.Replace('/', '\')) $parentDir
+            } else {
+                $resolvedParent = ''
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($resolvedParent) -and -not $searchDirs.Contains($resolvedParent)) {
+            $searchDirs.Add($resolvedParent)
+        }
+    }
+    if ($searchDirs.Count -eq 0) { return $false }
+    foreach ($dir in $searchDirs) {
+        $scratchDir = Join-Path $dir 'scratch'
+        if (Test-Path -LiteralPath $scratchDir) {
+            $hits = @(Get-ChildItem -LiteralPath $scratchDir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object {
+                if ($_.Length -le 0) { return $false }
+                if ($_.Extension -ieq '.json') {
+                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
+                }
+                return $true
+            })
+            if ($hits.Count -gt 0) { return $false }
+        }
+        if (Test-Path -LiteralPath $dir) {
+            $rootHits = @(Get-ChildItem -LiteralPath $dir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object {
+                if ($_.Length -le 0) { return $false }
+                if ($_.Extension -ieq '.json') {
+                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
+                }
+                return $true
+            })
+            if ($rootHits.Count -gt 0) { return $false }
+        }
+    }
+    return $true
+}
+
+function Test-Stage1CandidateSolutionsGate {
+    param([string]$PathStr, $ArgsObj)
+    if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
+    $norm = $PathStr.Replace('/', '\')
+    if ($norm -notmatch '(?i)(^|\\)candidate_solutions\.md$') { return $false }
+    $body = Get-WriteContentString $ArgsObj
+    if (($body -notmatch '(?i)Radical\s+Innovator') -or
+        ($body -notmatch '(?i)Enterprise\s+Minimalist') -or
+        ($body -notmatch '(?i)Security\s+Paranoiac')) {
+        return $true
+    }
+    return $false
+}
+
 if ($filePath -ne '') {
     $norm = $filePath.Replace('/', '\')
     $isExample = ($norm -match '\.env\.(example|sample|template|dist|schema)$') -or ($norm -match '\.deprecated-redacted$')
@@ -202,6 +281,12 @@ if ($filePath -ne '') {
         if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
             ($norm -match '(?i)(^|\\)(dist|build)(\\|$)')) {
             Deny 'generated-output-write-guard' $filePath
+        }
+        if (Test-MissingStage0Artifact $filePath $payload) {
+            Deny 'stage0-comprehend-problem-gate' 'Run comprehend-problem (.claude/skills/comprehend-problem/SKILL.md) and write non-empty scratch/stage0_<topic>.md or .json (with SAT status) before writing implementation_plan.md'
+        }
+        if (($toolName -eq 'Write') -and (Test-Stage1CandidateSolutionsGate $filePath $toolInput)) {
+            Deny 'stage1-candidate-solutions-gate' 'candidate_solutions.md must include all 3 cognitive framing lenses (Radical Innovator, Enterprise Minimalist, Security Paranoiac)'
         }
         if (($filePath -match '(?i)\.md$') -and $payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
             $taintMdPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'

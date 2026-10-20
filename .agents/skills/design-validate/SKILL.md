@@ -15,7 +15,7 @@ When the user finalizes a draft of an implementation plan, design document, or a
 - **Target Artifacts**: The debate will rigorously audit the proposed `implementation_plan.md` (or equivalent artifact).
 
 ## 2. Adjudication & RAG Synthesis
-- Once the Map-Reduce engine completes, execute Phase 3 (Vectorized RAG Memory). Use `recall` on the `cortex` MCP server to synthesize the empirically validated arguments from the isolated session namespace.
+- Once the Map-Reduce engine completes, execute Phase 3 (Vectorized RAG Memory). Use `recall` on the `cortex` MCP server to synthesize the empirically validated arguments from the isolated session namespace (or, if the optional `cortex` server is not configured, synthesize from `<appDataDir>\brain\<conversation-id>\scratch\debate\<session-id>\survivors.md`).
 - As the Hostile Adjudicator, determine the final binary verdict (`[GLOBAL VERDICT: PROCEED]` or `[GLOBAL VERDICT: REJECT]`).
 - **Execution-Grounded Rejection Gate (VeriHarness)**: Any `[VERDICT: REJECT]` or `[GLOBAL VERDICT: REJECT]` must include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`.
 - **Vote-Tally Blindness (`arXiv:2509.23055`)**: During any `Full-Committee Resubmission` round, pass ONLY the artifact diff and the specific falsifiable `<REJECTION_EVIDENCE>` items being addressed. NEVER include prior round vote tallies (e.g., `"3 of 4 approved"`) or peer reviewer identities, preventing conformity cascades and sycophantic convergence.

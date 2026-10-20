@@ -1,6 +1,6 @@
 ---
 name: style-cpp
-description: The authoritative style guide and mechanical linter for C++ code.
+description: The authoritative Google C++ style guide and mechanical linter rubric for C++ code. Use when invoked as the C++ Style Expert during Stage 4 iterative-implement reviews. Do not invoke directly as a user slash workflow.
 ---
 
 # C++ Style Guide

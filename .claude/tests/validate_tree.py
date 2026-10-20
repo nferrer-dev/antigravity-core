@@ -57,6 +57,8 @@ REQUIRED_BRC_GUARD_RULES = (
     "secret-file-access",
     "harness-config-self-tampering",
     "generated-output-write-guard",
+    "stage0-comprehend-problem-gate",
+    "stage1-candidate-solutions-gate",
     "untrusted-web-markdown-image-exfil",
     "cortex-memory-poisoning-guard",
     "untrusted-web-memory-taint",
@@ -157,6 +159,31 @@ def parse_frontmatter(data, label):
         if XML_TAG_RE.search(desc):
             violations.append("%s: description contains an XML tag" % label)
     return mapping, violations
+
+
+def check_skill_description_triggers(desc, label):
+    """Verify that a skill description includes positive and negative trigger clauses."""
+    violations = []
+    lower = (desc or "").lower()
+    has_positive = any(
+        phrase in lower
+        for phrase in ("use when", "use for", "use before", "use after")
+    )
+    has_negative = any(
+        phrase in lower
+        for phrase in ("do not use", "do not invoke", "skip ")
+    )
+    if not has_positive:
+        violations.append(
+            "%s: description missing positive trigger clause ('Use when/for/before/after...')"
+            % label
+        )
+    if not has_negative:
+        violations.append(
+            "%s: description missing negative boundary clause ('Do not use/invoke...')"
+            % label
+        )
+    return violations
 
 
 def extract_pipeline_skills(text):
@@ -324,6 +351,9 @@ def check_inv1_frontmatter(root):
                 "INV-1: %s: name %r does not match directory %r"
                 % (label, mapping["name"], skill_file.parent.name)
             )
+        if mapping and "description" in mapping:
+            for trig_err in check_skill_description_triggers(mapping["description"], label):
+                violations.append("INV-1: %s" % trig_err)
     return violations
 
 

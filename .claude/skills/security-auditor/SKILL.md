@@ -1,6 +1,6 @@
 ---
 name: security-auditor
-description: Two-pass Hunter-Verifier security auditing rubric for Stage 4 code diffs and harness configurations covering CWE and OWASP LLM 2025 threat classes.
+description: Two-pass Hunter-Verifier security auditing rubric for Stage 4 code diffs and harness configurations covering CWE and OWASP LLM 2025 threat classes. Use when invoked as the Security Auditor subagent. Do not invoke directly as a user slash workflow.
 ---
 
 # Security Auditor Rubric (Stage 4 Specialist)

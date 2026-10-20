@@ -1,6 +1,6 @@
 ---
 name: iterative-implement
-description: Stage 4 implementation committee. Validates code patches through Agentic TDD, a bounded pre-flight gate, and a fast linear roster of parallel Task reviewers.
+description: Automatically triggers the Stage 4 harness-nexus implementation committee to validate code patches via a bounded pre-flight test gate and linear expert roster. Use after modifying code or documentation in Tier 1 or Tier 2 tasks. Do not use for pre-implementation design debates.
 ---
 
 # Iterative Implement Workflow (Stage 4)

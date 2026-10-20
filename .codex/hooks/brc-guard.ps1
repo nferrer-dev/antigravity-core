@@ -224,6 +224,84 @@ function Test-UnsafeFetchUrl {
     return $false
 }
 
+function Test-MissingStage0Artifact {
+    param([string]$PathStr, $PayloadObj)
+    if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
+    $norm = $PathStr.Replace('/', '\')
+    if ($norm -notmatch '(?i)(^|\\)implementation_plan\.md$') { return $false }
+    $searchDirs = New-Object System.Collections.Generic.List[string]
+    if ($null -ne $PayloadObj -and $PayloadObj.PSObject.Properties['artifactDirectoryPath']) {
+        $artDir = [string]$PayloadObj.artifactDirectoryPath
+        if (-not [string]::IsNullOrWhiteSpace($artDir)) {
+            $searchDirs.Add($artDir.Replace('/', '\'))
+        }
+    }
+    $cwdDir = ''
+    if ($null -ne $PayloadObj -and $PayloadObj.PSObject.Properties['cwd']) {
+        $cwdDir = [string]$PayloadObj.cwd
+        if (-not [string]::IsNullOrWhiteSpace($cwdDir)) {
+            $cwdNorm = $cwdDir.Replace('/', '\')
+            if (-not $searchDirs.Contains($cwdNorm)) {
+                $searchDirs.Add($cwdNorm)
+            }
+        }
+    }
+    $parentDir = Split-Path -Parent $norm
+    if (-not [string]::IsNullOrWhiteSpace($parentDir)) {
+        $resolvedParent = $parentDir
+        if (-not [System.IO.Path]::IsPathRooted($parentDir)) {
+            if (-not [string]::IsNullOrWhiteSpace($cwdDir)) {
+                $resolvedParent = Join-Path ($cwdDir.Replace('/', '\')) $parentDir
+            } else {
+                $resolvedParent = ''
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($resolvedParent) -and -not $searchDirs.Contains($resolvedParent)) {
+            $searchDirs.Add($resolvedParent)
+        }
+    }
+    if ($searchDirs.Count -eq 0) { return $false }
+    foreach ($dir in $searchDirs) {
+        $scratchDir = Join-Path $dir 'scratch'
+        if (Test-Path -LiteralPath $scratchDir) {
+            $hits = @(Get-ChildItem -LiteralPath $scratchDir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object {
+                if ($_.Length -le 0) { return $false }
+                if ($_.Extension -ieq '.json') {
+                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
+                }
+                return $true
+            })
+            if ($hits.Count -gt 0) { return $false }
+        }
+        if (Test-Path -LiteralPath $dir) {
+            $rootHits = @(Get-ChildItem -LiteralPath $dir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object {
+                if ($_.Length -le 0) { return $false }
+                if ($_.Extension -ieq '.json') {
+                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
+                }
+                return $true
+            })
+            if ($rootHits.Count -gt 0) { return $false }
+        }
+    }
+    return $true
+}
+
+function Test-Stage1CandidateSolutionsGate {
+    param([string]$PathStr, [string]$BodyStr)
+    if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
+    $norm = $PathStr.Replace('/', '\')
+    if ($norm -notmatch '(?i)(^|\\)candidate_solutions\.md$') { return $false }
+    if (($BodyStr -notmatch '(?i)Radical\s+Innovator') -or
+        ($BodyStr -notmatch '(?i)Enterprise\s+Minimalist') -or
+        ($BodyStr -notmatch '(?i)Security\s+Paranoiac')) {
+        return $true
+    }
+    return $false
+}
+
 # ---- 1. Multi-Header V4A apply_patch Guard ----
 if ($toolName -eq 'apply_patch') {
     $patchText = ''
@@ -234,10 +312,12 @@ if ($toolName -eq 'apply_patch') {
         }
     }
     if (-not [string]::IsNullOrWhiteSpace($patchText)) {
-        $headerMatches = [regex]::Matches($patchText, '(?m)^\*\*\* (?:(?:Add|Update|Delete) File|Move to):\s*(.+?)\s*$')
+        $headerMatches = [regex]::Matches($patchText, '(?m)^\*\*\* ((?:Add|Update|Delete) File|Move to):\s*(.+?)\s*$')
         $hasMdTarget = $false
+        $addedLines = ([regex]::Matches($patchText, '(?m)^\+(?!\+\+)(.*)$') | ForEach-Object { $_.Groups[1].Value }) -join "`n"
         foreach ($m in $headerMatches) {
-            $targetPath = $m.Groups[1].Value.Trim()
+            $actionVerb = $m.Groups[1].Value.Trim()
+            $targetPath = $m.Groups[2].Value.Trim()
             if (Test-SecretPath $targetPath) {
                 Deny 'secret-file-access' $targetPath
             }
@@ -247,12 +327,17 @@ if ($toolName -eq 'apply_patch') {
             if (Test-GeneratedOutputPath $targetPath) {
                 Deny 'generated-output-write-guard' $targetPath
             }
+            if (($actionVerb -in @('Add File', 'Update File')) -and (Test-MissingStage0Artifact $targetPath $payload)) {
+                Deny 'stage0-comprehend-problem-gate' 'Run comprehend-problem (.codex/skills/comprehend-problem/SKILL.md) and write non-empty scratch/stage0_<topic>.md or .json (with SAT status) before writing implementation_plan.md'
+            }
+            if (($actionVerb -eq 'Add File') -and (Test-Stage1CandidateSolutionsGate $targetPath $addedLines)) {
+                Deny 'stage1-candidate-solutions-gate' 'candidate_solutions.md must include all 3 cognitive framing lenses (Radical Innovator, Enterprise Minimalist, Security Paranoiac)'
+            }
             if ($targetPath -match '(?i)\.md$') {
                 $hasMdTarget = $true
             }
         }
         if ($hasMdTarget -and (Test-SessionWebTainted $payload)) {
-            $addedLines = ([regex]::Matches($patchText, '(?m)^\+(?!\+\+)(.*)$') | ForEach-Object { $_.Groups[1].Value }) -join "`n"
             if ($addedLines -match '!\[[^\]]*\]\(\s*https?://') {
                 Deny 'untrusted-web-markdown-image-exfil' 'Writing external Markdown image URL while session is web-tainted'
             }
@@ -280,14 +365,20 @@ if ($filePath -ne '') {
         if (Test-GeneratedOutputPath $filePath) {
             Deny 'generated-output-write-guard' $filePath
         }
-        if (($filePath -match '(?i)\.md$') -and (Test-SessionWebTainted $payload)) {
-            $mdBody = ''
-            foreach ($cf in @('content', 'new_string', 'CodeContent', 'ReplacementContent')) {
-                if ($toolInput.PSObject.Properties[$cf] -and $null -ne $toolInput.$cf) {
-                    $mdBody += "`n" + [string]$toolInput.$cf
-                }
+        if (Test-MissingStage0Artifact $filePath $payload) {
+            Deny 'stage0-comprehend-problem-gate' 'Run comprehend-problem (.codex/skills/comprehend-problem/SKILL.md) and write non-empty scratch/stage0_<topic>.md or .json (with SAT status) before writing implementation_plan.md'
+        }
+        $writeBody = ''
+        foreach ($cf in @('content', 'new_string', 'CodeContent', 'ReplacementContent')) {
+            if ($toolInput.PSObject.Properties[$cf] -and $null -ne $toolInput.$cf) {
+                $writeBody += "`n" + [string]$toolInput.$cf
             }
-            if ($mdBody -match '!\[[^\]]*\]\(\s*https?://') {
+        }
+        if (($toolName -match '^(Write|write_to_file)$') -and (Test-Stage1CandidateSolutionsGate $filePath $writeBody)) {
+            Deny 'stage1-candidate-solutions-gate' 'candidate_solutions.md must include all 3 cognitive framing lenses (Radical Innovator, Enterprise Minimalist, Security Paranoiac)'
+        }
+        if (($filePath -match '(?i)\.md$') -and (Test-SessionWebTainted $payload)) {
+            if ($writeBody -match '!\[[^\]]*\]\(\s*https?://') {
                 Deny 'untrusted-web-markdown-image-exfil' 'Writing external Markdown image URL while session is web-tainted'
             }
         }

@@ -1,6 +1,6 @@
 ---
 name: brainstorm-solutions
-description: Formal Stage 1 Divergent Brainstorming skill. Enforces the ADHD (Parallel Divergent Ideation) and ReDNA frameworks to generate mutually exclusive candidate solutions via zero shared context subagent swarms.
+description: Formal Stage 1 Divergent Brainstorming skill enforcing the ADHD and ReDNA frameworks to generate mutually exclusive candidate solutions via zero-shared-context subagent swarms. Use for open-ended Tier 2 architectural problems after Stage 0. Do not use for bounded Tier 0 or Tier 1 tasks.
 ---
 
 # Stage 1: Divergent Brainstorming (ADHD Framework)

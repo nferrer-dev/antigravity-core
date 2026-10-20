@@ -1,6 +1,6 @@
 ---
 name: style-java
-description: The authoritative style guide and mechanical linter for Java code.
+description: The authoritative Google Java style guide and mechanical linter rubric for Java code. Use when invoked as the Java Style Expert during Stage 4 iterative-implement reviews. Do not invoke directly as a user slash workflow.
 ---
 
 # Java Style Guide

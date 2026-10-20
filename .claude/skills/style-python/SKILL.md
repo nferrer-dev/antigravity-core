@@ -1,6 +1,6 @@
 ---
 name: style-python
-description: The authoritative style guide and mechanical linter for Python code.
+description: The authoritative PEP 8 style guide and mechanical linter rubric for Python code. Use when invoked as the Python Style Expert during Stage 4 iterative-implement reviews. Do not invoke directly as a user slash workflow.
 ---
 
 # Python Style Guide

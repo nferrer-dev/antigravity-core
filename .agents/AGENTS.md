@@ -15,7 +15,7 @@
    - Loop until unanimous consensus, capped at **5 rounds**.
    - **Dynamic Stagnation Detection**: Halt immediately if subagents impose mutually exclusive constraints or repeat identical rejections across consecutive rounds.
    - **Automated Arbitration**: Before yielding to the user, invoke `technical-debate` (delegating to `debate`) ONCE: map one deadlocked stance to Proponent and the opposing stance to Critic; Parent acts as Hostile Adjudicator (`PROCEED` for Proponent or `REJECT` for Critic overrides unanimity and discards the losing constraint).
-   - **Arbitration Circuit Breaker**: Timebox arbitration to 3 minutes. On timeout or tie, halt, summarize dissenting arguments, and yield to the USER.
+   - **Arbitration Circuit Breaker**: Timebox to 3 minutes; on timeout or tie, halt, summarize dissenting arguments, and yield to the USER.
 
 4. **Stage 4 Iterative-Implement Loop**: After code or doc changes, invoke the `iterative-implement` committee.
    - **Bounded Pre-Flight Gate**: Run linters/unit tests on modified files ONCE (no unmanaged test-and-fix loop) and pass output (or `scratch/` log path) to subagents.
@@ -23,7 +23,7 @@
      - **SkillOpt Style Integration (Lazy Evaluation)**: Specialists must read their domain skill (`style-python`, `style-go`, `style-js`, `style-cpp`, `style-java`, `style-rust`, `security-auditor`) AND companion `[skillname]-edge-cases.md`. Code-generating agents must NOT read `-edge-cases.md` unless hitting a failure or ambiguity.
    - **State Machine & Diff Resubmissions**: Tier 0 exemptions, 3-minute timeouts, `[VERDICT]` signalling, full-committee resubmissions, 5-round cap, and stagnation detection apply. Resubmit ONLY the new code delta/diff; subagents use `view_file` for context.
    - **Bounded Quality Constraints**: Check localized diffs only for newly introduced bugs/redundancies; never block on pre-existing tech debt, hallucinated dependencies, or subjective style.
-   - **Global SkillOpt Self-Evolution Mandate**: If a `[VERDICT: REJECT]`, debate ruling, or BRC yield stems from a missing `SKILL.md` rule, execute `.agents/skills/skill-evolve/SKILL.md` and call Cortex `store_memory` (retrying on `SQLITE_BUSY`).
+   - **Global SkillOpt Self-Evolution Mandate**: If a `[VERDICT: REJECT]`, debate ruling, or BRC yield stems from a missing `SKILL.md` rule, execute `.agents/skills/skill-evolve/SKILL.md` and call optional Cortex `store_memory` (retrying on `SQLITE_BUSY`).
    - **Comprehensive Yield Fallback**: On 5-round cap or stagnation, present both the final Git diff and dissenting summary to the USER.
 
 5. **Artifact-Scoped Singleton Constraint**: Run at most ONE consensus loop per artifact. Check `manage_subagents` (`list`) and `kill` stale instances for that artifact first.

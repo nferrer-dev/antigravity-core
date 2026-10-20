@@ -27,8 +27,8 @@ Execute the `comprehend-problem` skill for all non-trivial tasks to build a dete
 
 Once the problem is comprehended, invoke the `brainstorm-solutions` skill for complex or open-ended tasks to generate multiple, mutually exclusive candidate solutions.
 
-- Spawn a swarm of parallel Task calls with unique "Cognitive Framing" (e.g., Radical Innovator, Security Paranoiac).
-- Parallel Task calls are natively context-isolated — this IS the Zero Shared Context requirement that prevents Degeneration-of-Thought (DoT). Do not defeat it by pasting one subagent's output into another's prompt.
+- Spawn a swarm of parallel subagents via `spawn_agent` (`fork_context=false`) with unique "Cognitive Framing" (e.g., Radical Innovator, Security Paranoiac).
+- Passing `fork_context=false` to `spawn_agent` isolates each subagent's context window — this IS the Zero Shared Context requirement that prevents Degeneration-of-Thought (DoT). Do not defeat it by pasting one subagent's output into another's prompt.
 - The parent alone compiles the returned brainstorms, sequentially, into a single file in the session scratchpad directory (e.g., `candidate_solutions.md`). Subagents never write to a shared file concurrently.
 
 ## Stage 2: Technical Debate Auto-Trigger
@@ -38,7 +38,7 @@ Invoke the `technical-debate` skill automatically, without explicit prompting, w
 1. **Idea Vetting**: The user asks a complex technical question, proposes a significant design decision, or asks whether a specific change correctly accomplishes a goal — including vetting the candidates generated in Stage 1.
 2. **Major Configuration Changes**: The user proposes swapping databases, altering deployment environments, or changing core dependencies — debate the downstream/upstream risks.
 
-**Hard gate**: `technical-debate` runs upstream of the Stage 3 design-validate gate. You are NOT allowed to draft an `implementation_plan.md` (which triggers the design-validate gate) until the debate completes and its Phase 5 Hostile Adjudicator — a dedicated Task agent; the parent never adjudicates its own debate — delivers a `PROCEED` verdict.
+**Hard gate**: `technical-debate` runs upstream of the Stage 3 design-validate gate. You are NOT allowed to draft an `implementation_plan.md` (which triggers the design-validate gate) until the debate completes and its Phase 5 Hostile Adjudicator — a dedicated subagent spawned via `spawn_agent`; the parent never adjudicates its own debate — delivers a `PROCEED` verdict.
 
 ## Stage 3: No Code Without Design Artifact
 

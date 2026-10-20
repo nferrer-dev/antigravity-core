@@ -1,6 +1,6 @@
 ---
 name: comprehend-problem
-description: The Stage 0 Epistemic Router to deterministically comprehend ambiguous problems via structural, logical, or exploratory modeling.
+description: The Stage 0 Epistemic Router to deterministically comprehend non-trivial or ambiguous problems via structural, logical, or exploratory modeling. Use before planning or coding Tier 1 and Tier 2 tasks. Do not use for Tier 0 trivial or cosmetic edits.
 ---
 # Stage 0: Comprehend Problem
 
@@ -18,8 +18,8 @@ Execute the chosen path using the designated tooling:
 
 ### A. Structural (CodeGraphContext)
 1. If the `code-graph-context` MCP server is configured, call its tools directly (`mcp__code-graph-context__<tool>`) to perform an AST traversal (e.g., extracting a call graph or blast radius).
-2. **Graceful Degradation (Polyfill)**: If the server is unavailable or errors, you MUST fall back to the bundled pure-Python polyfill at `scripts/structural_graph_polyfill.py` inside this skill's directory. Run it via Bash:
-   `python .claude/skills/comprehend-problem/scripts/structural_graph_polyfill.py <target_directory> <output_json_path>`
+2. **Graceful Degradation (Polyfill)**: If the server is unavailable or errors, you MUST fall back to the bundled pure-Python polyfill at `scripts/structural_graph_polyfill.py` inside this skill's directory. Run it via Bash (using `~/.claude/skills/comprehend-problem/scripts/...` when operating outside `antigravity-core`):
+   `python .claude/skills/comprehend-problem/scripts/structural_graph_polyfill.py <target_directory> <output_json_path>` (or `python ~/.claude/skills/comprehend-problem/scripts/structural_graph_polyfill.py <target_directory> <output_json_path>`)
    Point `<output_json_path>` at the session scratchpad directory (see Section 3).
 3. Either engine yields a JSON graph.
 
@@ -27,7 +27,7 @@ Execute the chosen path using the designated tooling:
 1. The `chiasmus` MCP server is **optional and absent by default**. Check whether `mcp__chiasmus__*` tools exist before routing here.
 2. If configured: translate the problem requirements into formal constraints, run Z3 SMT logic proofs via the server, and extract verifiable invariants.
 3. **Graceful Degradation (Polyfill)**: If not configured, fall back to the bundled Python Z3 polyfill at `scripts/logical_z3_polyfill.py` inside this skill's directory. Run it via Bash:
-   `python .claude/skills/comprehend-problem/scripts/logical_z3_polyfill.py <spec_json_path> <output_json_path>`
+   `python .claude/skills/comprehend-problem/scripts/logical_z3_polyfill.py <spec_json_path> <output_json_path>` (or `python ~/.claude/skills/comprehend-problem/scripts/logical_z3_polyfill.py <spec_json_path> <output_json_path>`)
 
 ### C. Exploratory (Blackboard Swarm)
 1. Spawn multiple decoupled research subagents as parallel Task calls issued in a single message. Parallel Task calls are natively context-isolated: the swarm shares zero context by construction.

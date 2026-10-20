@@ -1,6 +1,6 @@
 ---
 name: style-go
-description: The authoritative style guide and mechanical linter for Go code.
+description: The authoritative Go style guide and mechanical linter rubric for Go code. Use when invoked as the Go Style Expert during Stage 4 iterative-implement reviews. Do not invoke directly as a user slash workflow.
 ---
 
 # Go Style Guide

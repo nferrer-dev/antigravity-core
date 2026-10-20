@@ -1,6 +1,6 @@
 ---
 name: style-js
-description: The authoritative style guide and mechanical linter for JavaScript/TypeScript code.
+description: The authoritative Airbnb style guide and mechanical linter rubric for JavaScript/TypeScript code. Use when invoked as the JS/TS Style Expert during Stage 4 iterative-implement reviews. Do not invoke directly as a user slash workflow.
 ---
 
 # JavaScript/TypeScript Style Guide

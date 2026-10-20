@@ -1,6 +1,6 @@
 ---
 name: harness-scaffold
-description: Instantly bootstraps an unmanaged repository with the Agentic Harness — language-agnostic structural testing infrastructure, Git isolation sandboxing, causal telemetry artifacts, and CI/CD mocking.
+description: Bootstraps an unmanaged repository with the 2026 Agentic Harness (structural testing infrastructure, Git isolation sandboxing, pre-commit secret scanning, Causal Telemetry artifacts, and CI/CD test gate mocks). Use when initializing a new project or onboarding a repository without a test harness. Do not use for repositories that already have an active test suite and git hooks.
 ---
 
 # Harness Scaffold Execution

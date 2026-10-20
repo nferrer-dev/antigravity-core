@@ -1,6 +1,6 @@
 ---
 name: technical-debate
-description: Automates a rigorous adversarial review to vet a technical proposition (Stage 2 Idea Vetting), and serves as the terminal arbitration mechanism for deadlocked consensus loops.
+description: Automates a rigorous adversarial review to vet a technical proposition or arbitrate a consensus deadlock (Stage 2 Idea Vetting). Use for Tier 2 architectural propositions, major config changes, or deadlock arbitration. Do not use for Tier 0/1 bounded tasks or routine code diff reviews.
 ---
 
 # Technical Debate Workflow (Stage 2 Idea Vetting)
@@ -10,8 +10,8 @@ When this skill triggers to vet a technical proposition or configuration change,
 ## 1. Context Scoping & Pre-Flight
 
 - **Triviality Fast-Path**: Evaluate if the proposition is purely cosmetic, non-functional, or trivial. If so, bypass the debate, log a 'Triviality Exemption', and proceed.
-- **Workflow Delegation**: You MUST immediately Read the sibling canonical debate skill at `.codex\skills\debate\SKILL.md` (relative to the repo root) and follow it exactly.
-- **Execution**: You act as the sole Parent Orchestrator for the entire flattened topology — there are no Sub-Orchestrators. Execute Phase 1 (Dynamic Ontology Discovery), spawn each shard's Proponent and Critic directly as parallel Task calls for Phase 2 (Concurrent Map-Reduce Debate), and run the Phase 3 Deterministic Empirical Survival Gate before any verdict.
+- **Workflow Delegation**: You MUST immediately read the sibling canonical debate skill at `.codex/skills/debate/SKILL.md` (or `~/.codex/skills/debate/SKILL.md`) and follow it exactly.
+- **Execution**: You act as the sole Parent Orchestrator for the entire flattened topology — there are no Sub-Orchestrators. Execute Phase 1 (Dynamic Ontology Discovery), spawn each shard's Proponent and Critic directly in parallel via `spawn_agent` (`fork_context=false`) for Phase 2 (Concurrent Map-Reduce Debate), and run the Phase 3 Deterministic Empirical Survival Gate before any verdict.
 
 ## 2. Adjudication & RAG Synthesis
 

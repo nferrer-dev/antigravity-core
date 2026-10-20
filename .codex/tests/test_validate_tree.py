@@ -113,21 +113,24 @@ class LiveTree(unittest.TestCase):
 
     def _run_codex_brc_guard(self, payload_dict):
         guard = REPO_ROOT / ".codex" / "hooks" / "brc-guard.ps1"
-        return subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                str(guard),
-            ],
-            input=json.dumps(payload_dict),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        with tempfile.TemporaryDirectory() as default_tmp:
+            effective = dict(payload_dict)
+            effective.setdefault("cwd", default_tmp)
+            return subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(guard),
+                ],
+                input=json.dumps(effective),
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
 
     def test_brc_guard_multi_header_apply_patch_and_mac_guards(self):
         # 1. Multi-header V4A apply_patch smuggling blocked (exit 2)
@@ -315,6 +318,124 @@ class LiveTree(unittest.TestCase):
             ]
             self.assertEqual(len(tel_lines), 1)
             self.assertEqual(vt.verify_telemetry_chain("\n".join(tel_lines), "tel.md"), [])
+
+    def test_optional_cortex_and_stage0_comprehend_lifecycle_gates(self):
+        # 1. .codex/config.toml has cortex commented out as optional
+        cfg_path = REPO_ROOT / ".codex" / "config.toml"
+        cfg_raw = cfg_path.read_text(encoding="utf-8")
+        parsed_cfg = tomllib.loads(cfg_raw)
+        self.assertIn("code-graph-context", parsed_cfg.get("mcp_servers", {}))
+        self.assertNotIn("cortex", parsed_cfg.get("mcp_servers", {}))
+        self.assertIn("# [mcp_servers.cortex]", cfg_raw)
+
+        # 2. CODEX.md has inline Step 0 (Stage 0 Epistemic Comprehension Router)
+        codex_md = (REPO_ROOT / "CODEX.md").read_text(encoding="utf-8")
+        self.assertIn("Stage 0 Epistemic Comprehension Router (`comprehend-problem`)", codex_md)
+        self.assertIn("optional `cortex` MCP server", codex_md)
+
+        # 3. .codex/skills/comprehend-problem/SKILL.md documents ~/.codex fallback and zero Task wording
+        comp_skill = (
+            REPO_ROOT / ".codex" / "skills" / "comprehend-problem" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("~/.codex/skills/comprehend-problem/scripts/", comp_skill)
+        for s_name in (
+            "comprehend-problem",
+            "brainstorm-solutions",
+            "technical-debate",
+            "design-validate",
+            "iterative-implement",
+        ):
+            s_text = (REPO_ROOT / ".codex" / "skills" / s_name / "SKILL.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertNotIn("parallel Task calls", s_text, "%s still has Task wording" % s_name)
+
+        # 4. Mechanical stage0-comprehend-problem-gate and stage1-candidate-solutions-gate
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            plan_patch = (
+                "*** Begin Patch\n"
+                "*** Add File: implementation_plan.md\n"
+                "+# Plan\n"
+                "*** End Patch\n"
+            )
+            # Blocked when scratch/stage0* is missing
+            res_no_s0 = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "apply_patch",
+                    "tool_input": {"command": plan_patch},
+                }
+            )
+            self.assertEqual(res_no_s0.returncode, 2)
+            self.assertIn("stage0-comprehend-problem-gate", res_no_s0.stderr)
+
+            # Blocked when scratch/stage0.json has status UNSAT
+            scratch_dir = tmp_path / "scratch"
+            scratch_dir.mkdir(parents=True, exist_ok=True)
+            (scratch_dir / "stage0_check.json").write_text(
+                '{"status": "UNSAT"}\n', encoding="utf-8"
+            )
+            res_unsat_s0 = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": str(tmp_path / "implementation_plan.md"),
+                        "content": "# Plan\n",
+                    },
+                }
+            )
+            self.assertEqual(res_unsat_s0.returncode, 2)
+            self.assertIn("stage0-comprehend-problem-gate", res_unsat_s0.stderr)
+
+            # Allowed when valid non-empty scratch/stage0_rubric.md exists
+            (scratch_dir / "stage0_check.json").unlink()
+            (scratch_dir / "stage0_rubric.md").write_text(
+                "# Stage 0 Rubric\n", encoding="utf-8"
+            )
+            res_ok_s0 = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "apply_patch",
+                    "tool_input": {"command": plan_patch},
+                }
+            )
+            self.assertEqual(res_ok_s0.returncode, 0, res_ok_s0.stderr)
+
+            # Stage 1 candidate_solutions.md gate: blocked when missing lenses on Add File / Write
+            bad_s1_patch = (
+                "*** Begin Patch\n"
+                "*** Add File: scratch/candidate_solutions.md\n"
+                "+# Only Radical Innovator\n"
+                "*** End Patch\n"
+            )
+            res_bad_s1 = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "apply_patch",
+                    "tool_input": {"command": bad_s1_patch},
+                }
+            )
+            self.assertEqual(res_bad_s1.returncode, 2)
+            self.assertIn("stage1-candidate-solutions-gate", res_bad_s1.stderr)
+
+            ok_s1_patch = (
+                "*** Begin Patch\n"
+                "*** Add File: scratch/candidate_solutions.md\n"
+                "+## Radical Innovator\n"
+                "+## Enterprise Minimalist\n"
+                "+## Security Paranoiac\n"
+                "*** End Patch\n"
+            )
+            res_ok_s1 = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "apply_patch",
+                    "tool_input": {"command": ok_s1_patch},
+                }
+            )
+            self.assertEqual(res_ok_s1.returncode, 0, res_ok_s1.stderr)
 
 
 class Meta(unittest.TestCase):

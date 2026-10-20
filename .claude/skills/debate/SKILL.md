@@ -1,6 +1,6 @@
 ---
 name: debate
-description: The canonical Map-Reduce orchestration engine for the Claude Code port. Executes flattened, concurrent Map-Reduce technical debates with Dynamic Ontology Discovery, a Deterministic Empirical Survival Gate, and Vectorized RAG Memory isolation.
+description: The canonical Map-Reduce orchestration engine for the Claude Code port executing flattened, concurrent Map-Reduce technical debates with Dynamic Ontology Discovery, a Deterministic Empirical Survival Gate, and Vectorized RAG Memory isolation. Use when delegated by technical-debate (Stage 2) or design-validate (Stage 3). Do not invoke for Stage 4 code diffs.
 ---
 
 # Canonical Debate Engine (Flattened Map-Reduce Orchestration)

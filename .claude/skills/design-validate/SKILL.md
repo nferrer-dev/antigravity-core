@@ -1,6 +1,6 @@
 ---
 name: design-validate
-description: Stage 3 wrapper that triggers the canonical debate engine to validate design artifacts before any code is written.
+description: Automatically triggers the Stage 3 design validation workflow to audit implementation_plan.md and architecture artifacts before code generation. Use when a non-trivial design artifact is drafted. Do not use for Tier 0 trivial tasks or post-implementation Stage 4 code diffs.
 ---
 
 # Design Validation Workflow (Stage 3)
