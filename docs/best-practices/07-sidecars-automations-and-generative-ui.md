@@ -107,3 +107,7 @@ strict structural and WCAG 2.1 AA visual invariants:
    [https://arxiv.org/abs/2503.13657](https://arxiv.org/abs/2503.13657)
 3. **W3C Web Content Accessibility Guidelines (WCAG) 2.1 AA Specification.**
    [https://www.w3.org/TR/WCAG21/](https://www.w3.org/TR/WCAG21/)
+
+### OpenAI Codex Multi-Agent Patience & Worktree Isolation (`CODEX.md` & `.codex/`)
+
+In OpenAI Codex sessions governed by [`CODEX.md`](../../CODEX.md) and [`.codex/rules/context-and-isolation.md`](../../.codex/rules/context-and-isolation.md), parallel subagent waves launched via `spawn_agent` are awaited to completion via `wait_agent` and deterministically cleaned up via `close_agent`, while decoupled sidecars (`.agents/sidecars/sidecar.json`) remain process-isolated on port `3000`.

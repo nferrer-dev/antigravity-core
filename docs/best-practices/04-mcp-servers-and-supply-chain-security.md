@@ -165,3 +165,7 @@ trusted orchestration context.
    [https://arxiv.org/abs/2407.12784](https://arxiv.org/abs/2407.12784)
 7. **Model Context Protocol (MCP) Specification (`2025-03-26`).**
    [https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http)
+
+### OpenAI Codex MCP Server Configuration (`[mcp_servers.*]` in `.codex/config.toml`)
+
+In OpenAI Codex, MCP servers are configured under `[mcp_servers.code-graph-context]` (`command = "cgc"`, `args = ["mcp", "start"]`, `startup_timeout_sec = 20`) and `[mcp_servers.cortex]` (`url = "http://127.0.0.1:8585/mcp"`) in [`.codex/config.toml`](../../.codex/config.toml). During global synchronization, [`sync_global_config.py`](../../.agents/scripts/sync_global_config.py) non-destructively upserts these two core tables into `~/.codex/config.toml` while preserving existing user MCP servers and scanning all `[mcp_servers.*]` tables for plaintext secrets.

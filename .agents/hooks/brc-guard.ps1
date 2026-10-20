@@ -175,7 +175,7 @@ function Test-TamperFilePath {
     if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
     $norm = $PathStr.Replace('/', '\')
     if ($norm -match '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') { return $false }
-    if ($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|agentic_telemetry\.md)$') {
+    if ($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|CODEX\.md|config\.toml|antigravity\.rules|agentic_telemetry\.md)$') {
         return $true
     }
     return $false
@@ -565,7 +565,7 @@ foreach ($evalCmd in $candidates) {
 
     # Shell self-tampering writes/redirects targeting governance configs
     if (($evalCmd -notmatch '(?i)[/\\](scratch|tmp|temp)[/\\]') -and
-        ($evalCmd -match '(>|>>|\bOut-File\b|\bSet-Content\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bRemove-Item\b|\bcp\b|\bmv\b|\brm\b|\bdel\b|\btee\b|WriteAllText|WriteAllLines|AppendAllText)[^\r\n]*?(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|agentic_telemetry\.md)')) {
+        ($evalCmd -match '(>|>>|\bOut-File\b|\bSet-Content\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bRemove-Item\b|\bcp\b|\bmv\b|\brm\b|\bdel\b|\btee\b|WriteAllText|WriteAllLines|AppendAllText)[^\r\n]*?(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|CODEX\.md|config\.toml|antigravity\.rules|agentic_telemetry\.md)')) {
         Emit-ForceAsk 'harness-config-self-tampering' $evalCmd
     }
 

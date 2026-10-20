@@ -1,0 +1,91 @@
+# Antigravity Core — OpenAI Codex Layer 0 Starlark Execution Policy (.rules)
+# Enforced deterministically by the Codex execpolicy engine before shell commands run.
+
+prefix_rule(
+    pattern = ["git", "push", ["--force", "-f", "--force-with-lease"]],
+    decision = "forbidden",
+    justification = "BRC guard [git-push-force-protected-branch]: Force-pushing is forbidden. Emit a <BLAST_RADIUS> assessment and obtain explicit user authorization.",
+    match = [
+        "git push --force origin main",
+        "git push -f origin master",
+    ],
+    not_match = [
+        "git push origin feature-branch",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "BRC guard [git-reset-hard-protected-branch]: Hard git reset is forbidden without a <BLAST_RADIUS> audit.",
+    match = [
+        "git reset --hard HEAD~1",
+    ],
+    not_match = [
+        "git reset --soft HEAD~1",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "commit", ["--no-verify", "-n", "-nm", "-mn"]],
+    decision = "forbidden",
+    justification = "BRC guard [git-no-verify-bypass]: Bypassing pre-commit hooks with --no-verify or -n is strictly forbidden.",
+    match = [
+        "git commit --no-verify -m wip",
+        "git commit -n -m wip",
+    ],
+    not_match = [
+        "git commit -m fix",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "config", ["--global", "--system", "user.name", "user.email", "core.hooksPath"]],
+    decision = "forbidden",
+    justification = "BRC guard [git-config-mutation-guard]: Mutating git config identity or hooksPath is forbidden; read-only --get and --list are permitted.",
+    match = [
+        "git config --global user.email bot@example.com",
+        "git config user.name Bot",
+        "git config core.hooksPath /tmp",
+    ],
+    not_match = [
+        "git config --get user.name",
+        "git config --list",
+    ],
+)
+
+prefix_rule(
+    pattern = ["terraform", "destroy"],
+    decision = "forbidden",
+    justification = "BRC guard [destructive-infrastructure-command]: terraform destroy is forbidden without human authorization.",
+    match = [
+        "terraform destroy -auto-approve",
+    ],
+)
+
+prefix_rule(
+    pattern = ["kubectl", "delete", ["namespace", "node", "--all"]],
+    decision = "forbidden",
+    justification = "BRC guard [destructive-infrastructure-command]: Deleting Kubernetes namespaces/nodes is forbidden.",
+    match = [
+        "kubectl delete namespace prod",
+    ],
+)
+
+prefix_rule(
+    pattern = ["docker", "system", "prune", "-a"],
+    decision = "forbidden",
+    justification = "BRC guard [destructive-infrastructure-command]: docker system prune -a is forbidden.",
+    match = [
+        "docker system prune -a",
+    ],
+)
+
+prefix_rule(
+    pattern = ["mkfs"],
+    decision = "forbidden",
+    justification = "BRC guard [mkfs]: Filesystem formatting via mkfs is forbidden.",
+    match = [
+        "mkfs /dev/sda1",
+    ],
+)

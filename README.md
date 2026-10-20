@@ -2,8 +2,9 @@
 
 > **The 2026 Agentic Architecture Ecosystem**
 
-This repository contains the globally vetted **Customizations & Governance
-Ecosystem** for Google Antigravity and Claude Code. It enforces
+This repository contains the globally vetted **Tri-Harness Customizations &
+Governance Ecosystem** for **Google Antigravity (`.agents/`)**, **Claude Code
+(`CLAUDE.md` / `.claude/`)**, and **OpenAI Codex (`CODEX.md` / `.codex/`)**. It enforces
 enterprise-grade safety, deterministic execution gates, and observability for
 autonomous AI coding agents operating on your codebase.
 
@@ -215,8 +216,10 @@ agy plugin install dist/antigravity-core-plugin
 
 ### 2. Global Machine Config Sync (`sync_global_config.py`)
 
-Synchronize the repository's rules, skills, declarative subagents, and MCP
-catalogs into your user-level `~/.gemini/` configuration and verify zero drift:
+Synchronize the repository's rules, skills, declarative subagents, Starlark
+policies, hooks, and MCP catalogs across all three global harness directories
+(`~/.gemini/config`, `~/.claude` + `~/.claude.json`, and `~/.codex`) and verify
+zero drift:
 
 ```powershell
 python .agents/scripts/sync_global_config.py --apply
@@ -240,8 +243,8 @@ operating in the workspace.
 ## 📚 Research-Backed Best-Practices Documentation (`docs/best-practices/`)
 
 For an evidence-backed engineering deep dive into all **7 AI Coding Agent
-Customization Surfaces** across both **Google Antigravity (`.agents/`)** and
-**Claude Code (`CLAUDE.md` / `.claude/`)**—complete with **36+ verified
+Customization Surfaces** across **Google Antigravity (`.agents/`)**, **Claude Code (`CLAUDE.md` /
+`.claude/`)**, and **OpenAI Codex (`CODEX.md` / `.codex/`)**—complete with **36+ verified
 academic citations (`arXiv` 2024–2026)** and platform specifications—see the
 [**AI Agent Customization Best-Practices Suite**](docs/best-practices/README.md):
 

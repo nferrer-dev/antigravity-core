@@ -205,3 +205,7 @@ rejects:
     *"RewardHackingAgents: Empirical Analysis of Specification Gaming in Coding Agents."*
     `arXiv:2603.11337`.
     [https://arxiv.org/abs/2603.11337](https://arxiv.org/abs/2603.11337)
+
+### OpenAI Codex Declarative Subagents (`.codex/agents/*.toml`)
+
+OpenAI Codex defines custom subagents in [`.codex/agents/stage3-design-reviewer.toml`](../../.codex/agents/stage3-design-reviewer.toml), [`.codex/agents/stage4-code-auditor.toml`](../../.codex/agents/stage4-code-auditor.toml), and [`.codex/agents/cortex-librarian.toml`](../../.codex/agents/cortex-librarian.toml). Each TOML manifest places top-level `name`, `description`, `sandbox_mode = "read-only"`, and `developer_instructions` strictly before the `[features]` table (`shell_tool = false`, `request_permissions_tool = false`), ensuring read-only committee reviewers cannot execute shell commands or trigger interactive permission prompts when invoked via `spawn_agent`, `send_input`, `wait_agent`, and `close_agent`.

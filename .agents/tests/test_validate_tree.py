@@ -2120,6 +2120,10 @@ class LiveTree(unittest.TestCase):
                 (TOKEN_CLAUDE_MD in text) or (TOKEN_CLAUDE_DIR in text),
                 "%s missing Claude Code coverage" % fname,
             )
+            self.assertTrue(
+                ("CODEX.md" in text) or (".codex" in text),
+                "%s missing OpenAI Codex coverage" % fname,
+            )
 
         self.assertEqual(
             sec_mod.scan_files(file_paths),
@@ -2133,6 +2137,27 @@ class LiveTree(unittest.TestCase):
             root_readme,
             "Root README.md must link to docs/best-practices/README.md",
         )
+        self.assertIn(
+            "CODEX.md",
+            root_readme,
+            "Root README.md must document CODEX.md / .codex/ integration",
+        )
+
+    def test_codex_integration_parity_and_validator(self):
+        codex_md = REPO_ROOT / "CODEX.md"
+        codex_dir = REPO_ROOT / ".codex"
+        self.assertTrue(codex_md.is_file(), "Missing root CODEX.md")
+        self.assertTrue(codex_dir.is_dir(), "Missing .codex/ directory")
+        codex_vt = codex_dir / "tests" / "validate_tree.py"
+        self.assertTrue(codex_vt.is_file(), "Missing .codex/tests/validate_tree.py")
+        res = subprocess.run(
+            [sys.executable, str(codex_vt)],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
 
 
 class Meta(unittest.TestCase):

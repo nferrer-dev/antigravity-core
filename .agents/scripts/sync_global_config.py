@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import sys
+import tomllib
 from pathlib import Path
 
 FORBIDDEN_CONTROL_BYTES = (
@@ -52,14 +53,17 @@ CLAUDE_MD_NAME = "CLAUDE" + ".md"
 CLAUDE_DIR_NAME = "." + "claude"
 CLAUDE_JSON_NAME = "." + "claude.json"
 CLAUDE_HOOKS_VAR = "$CLAUDE_PROJECT_DIR/" + CLAUDE_DIR_NAME + "/hooks"
+CODEX_MD_NAME = "CODEX" + ".md"
+CODEX_DIR_NAME = "." + "codex"
+CODEX_HOOKS_REL = "./" + CODEX_DIR_NAME + "/hooks"
 
 
 def normalize_lf_utf8(repo_root):
-    """Normalize all .md, .json, .ps1, .py files under .agents/ and Claude tree to UTF-8 no-BOM LF."""
-    exts = {".md", ".json", ".ps1", ".py"}
+    """Normalize all text files under .agents/, Claude, and Codex trees to UTF-8 no-BOM LF."""
+    exts = {".md", ".json", ".toml", ".rules", ".yaml", ".ps1", ".py"}
     normalized = []
-    targets = [repo_root / CLAUDE_MD_NAME]
-    for sub_name in (".agents", CLAUDE_DIR_NAME):
+    targets = [repo_root / CLAUDE_MD_NAME, repo_root / CODEX_MD_NAME]
+    for sub_name in (".agents", CLAUDE_DIR_NAME, CODEX_DIR_NAME):
         sub_dir = repo_root / sub_name
         if sub_dir.is_dir():
             targets.extend(sorted(sub_dir.rglob("*")))
@@ -568,6 +572,387 @@ def verify_or_sync_claude(
     return errors, messages
 
 
+
+
+def _merge_codex_config_toml(existing_text):
+    """Non-destructively merge Antigravity Codex keys into config.toml with root keys before [section]."""
+    text = (existing_text or "").replace("\r\n", "\n").replace("\r", "\n")
+    if text.startswith("\ufeff"):
+        text = text[1:]
+
+    sec_match = re.search(r"(?m)^\[", text)
+    if sec_match:
+        top_part = text[: sec_match.start()]
+        rest_part = text[sec_match.start() :]
+    else:
+        top_part = text
+        rest_part = ""
+
+    top_lines = top_part.splitlines()
+    new_top_lines = []
+    found_fallback = False
+    found_max_bytes = False
+    for line in top_lines:
+        stripped = line.strip()
+        if re.match(r"^project_doc_fallback_filenames\s*=", stripped):
+            new_top_lines.append('project_doc_fallback_filenames = ["CODEX.md"]')
+            found_fallback = True
+        elif re.match(r"^project_doc_max_bytes\s*=", stripped):
+            new_top_lines.append("project_doc_max_bytes = 65536")
+            found_max_bytes = True
+        else:
+            new_top_lines.append(line)
+
+    insert_header = []
+    if not found_fallback:
+        insert_header.append('project_doc_fallback_filenames = ["CODEX.md"]')
+    if not found_max_bytes:
+        insert_header.append("project_doc_max_bytes = 65536")
+    if insert_header:
+        while new_top_lines and new_top_lines[-1].strip() == "":
+            new_top_lines.pop()
+        new_top_lines.extend(insert_header)
+
+    top_rebuilt = "\n".join(new_top_lines).rstrip() + "\n\n"
+
+    # Ensure [features] has codex_hooks = true
+    feat_hdr = re.search(r"(?m)^\[features\][ \t]*$", rest_part)
+    if feat_hdr:
+        after_feat = rest_part[feat_hdr.end() :]
+        next_sec = re.search(r"(?m)^\[", after_feat)
+        feat_body = after_feat[: next_sec.start()] if next_sec else after_feat
+        feat_tail = after_feat[next_sec.start() :] if next_sec else ""
+        if re.search(r"(?m)^[ \t]*codex_hooks[ \t]*=", feat_body):
+            feat_body = re.sub(
+                r"(?m)^[ \t]*codex_hooks[ \t]*=.*$", "codex_hooks = true", feat_body
+            )
+        else:
+            feat_body = "\ncodex_hooks = true" + (
+                feat_body if feat_body.startswith("\n") else "\n" + feat_body
+            )
+        rest_part = rest_part[: feat_hdr.end()] + feat_body + feat_tail
+    else:
+        rest_part = rest_part.rstrip()
+        if rest_part:
+            rest_part += "\n\n"
+        rest_part += "[features]\ncodex_hooks = true\n"
+
+    # Upsert [mcp_servers.code-graph-context] and [mcp_servers.cortex] if missing
+    if not re.search(r"(?m)^\[mcp_servers\.code-graph-context\][ \t]*$", rest_part):
+        rest_part = (
+            rest_part.rstrip()
+            + "\n\n[mcp_servers.code-graph-context]\n"
+            + 'command = "cgc"\n'
+            + 'args = ["mcp", "start"]\n'
+            + "startup_timeout_sec = 20\n"
+        )
+    if not re.search(r"(?m)^\[mcp_servers\.cortex\][ \t]*$", rest_part):
+        rest_part = (
+            rest_part.rstrip()
+            + "\n\n[mcp_servers.cortex]\n"
+            + 'url = "http://127.0.0.1:8585/mcp"\n'
+        )
+
+    merged = top_rebuilt + rest_part.lstrip("\n").rstrip() + "\n"
+    return merged
+
+
+def verify_or_sync_codex(
+    repo_root,
+    global_config_dir,
+    codex_dir,
+    apply_changes=False,
+    backup_dir=None,
+):
+    """Verify or apply non-destructive global OpenAI Codex sync to codex_dir."""
+    repo_root = Path(repo_root)
+    codex_dir = Path(codex_dir)
+    x_src = repo_root / CODEX_DIR_NAME
+    errors = []
+    messages = []
+
+    codex_pairs = [
+        (repo_root / CODEX_MD_NAME, codex_dir / "AGENTS.md"),
+        (
+            x_src / "rules" / "antigravity.rules",
+            codex_dir / "rules" / "antigravity.rules",
+        ),
+    ]
+    for sub, pat in (("rules", "*.md"), ("hooks", "*.ps1"), ("agents", "*.toml")):
+        sub_dir = x_src / sub
+        if sub_dir.is_dir():
+            for src_f in sorted(sub_dir.glob(pat)):
+                codex_pairs.append((src_f, codex_dir / sub / src_f.name))
+
+    for src_path, dst_path in codex_pairs:
+        if not src_path.is_file():
+            errors.append("Missing canonical Codex source: %s" % src_path)
+            continue
+        src_bytes = src_path.read_bytes()
+        bad_bytes = check_control_bytes(src_bytes)
+        if bad_bytes:
+            errors.append(
+                "Source %s contains forbidden control bytes (first at offset %d: 0x%02x)"
+                % (src_path, bad_bytes[0][0], bad_bytes[0][1])
+            )
+            continue
+
+        if apply_changes and (
+            not dst_path.is_file() or dst_path.read_bytes() != src_bytes
+        ):
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            if dst_path.is_file() and backup_dir:
+                rel_dst = dst_path.relative_to(codex_dir)
+                b_path = (
+                    Path(backup_dir)
+                    / "codex"
+                    / rel_dst.with_name(rel_dst.name + ".bak")
+                )
+                b_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(dst_path, b_path)
+                messages.append("Backed up existing %s to %s" % (dst_path, b_path))
+            dst_path.write_bytes(src_bytes)
+            messages.append(
+                "Synced %s -> %s (sha256:%s)"
+                % (src_path, dst_path, sha256_hex(src_bytes)[:12])
+            )
+
+        if not dst_path.is_file():
+            errors.append("Global Codex file missing at %s" % dst_path)
+        else:
+            dst_bytes = dst_path.read_bytes()
+            if src_bytes != dst_bytes:
+                errors.append(
+                    "Drift detected between %s (sha256:%s) and %s (sha256:%s)"
+                    % (
+                        src_path,
+                        sha256_hex(src_bytes)[:12],
+                        dst_path,
+                        sha256_hex(dst_bytes)[:12],
+                    )
+                )
+            else:
+                messages.append(
+                    "Codex %s parity OK (sha256:%s)"
+                    % (dst_path.name, sha256_hex(src_bytes)[:12])
+                )
+
+    # Non-destructive per-skill NTFS directory junctions in global Codex skills directory
+    skills_src_root = x_src / "skills"
+    if skills_src_root.is_dir():
+        for sk_src in sorted(skills_src_root.iterdir()):
+            if not sk_src.is_dir():
+                continue
+            sk_dst = codex_dir / "skills" / sk_src.name
+            exp = sk_src.resolve()
+            already_ok = (
+                os.path.lexists(sk_dst)
+                and sk_dst.exists()
+                and os.path.normcase(str(sk_dst.resolve()))
+                == os.path.normcase(str(exp))
+            )
+            if not already_ok and apply_changes:
+                sk_dst.parent.mkdir(parents=True, exist_ok=True)
+                if os.path.lexists(sk_dst):
+                    is_reparse = not sk_dst.exists() or (
+                        os.path.normcase(str(sk_dst.resolve()))
+                        != os.path.normcase(str(os.path.abspath(sk_dst)))
+                    )
+                    if is_reparse:
+                        os.rmdir(sk_dst)
+                        _create_directory_junction(exp, sk_dst)
+                    else:
+                        errors.append(
+                            "Codex skill path %s is a non-junction directory; refusing to overwrite"
+                            % sk_dst
+                        )
+                else:
+                    _create_directory_junction(exp, sk_dst)
+
+            if sk_dst.exists():
+                resolved_sk = sk_dst.resolve()
+                if os.path.normcase(str(resolved_sk)) != os.path.normcase(str(exp)):
+                    errors.append(
+                        "Codex skill junction mismatch: %s -> %s (expected %s)"
+                        % (sk_dst, resolved_sk, exp)
+                    )
+                else:
+                    messages.append(
+                        "Codex skill junction OK: %s -> %s" % (sk_dst, resolved_sk)
+                    )
+            else:
+                errors.append("Codex skill junction missing at %s" % sk_dst)
+
+    # Non-destructive global hooks.json upsert with absolute global hook paths
+    hooks_dir_posix = (codex_dir / "hooks").as_posix()
+    canon_hooks_raw = (
+        (x_src / "hooks.json")
+        .read_text(encoding="utf-8")
+        .replace(CODEX_HOOKS_REL, hooks_dir_posix)
+    )
+    required_hooks = json.loads(canon_hooks_raw).get("hooks", {})
+    hooks_json_path = codex_dir / "hooks.json"
+    hooks_json_data = {}
+    if hooks_json_path.is_file():
+        h_raw = hooks_json_path.read_bytes()
+        bad_h = check_control_bytes(h_raw)
+        if bad_h and not apply_changes:
+            errors.append(
+                "Global %s contains forbidden control bytes" % hooks_json_path
+            )
+        try:
+            hooks_json_data = json.loads(
+                h_raw.replace(b"\r\n", b"\n").decode("utf-8-sig")
+            )
+        except Exception as exc:
+            errors.append("Failed to parse %s: %s" % (hooks_json_path, exc))
+            hooks_json_data = None
+
+    if isinstance(hooks_json_data, dict):
+        hooks_map = hooks_json_data.get("hooks")
+        if not isinstance(hooks_map, dict):
+            hooks_map = {}
+        hooks_modified = False
+        for event_name, req_entries in required_hooks.items():
+            cur_list = list(hooks_map.get(event_name) or [])
+            for req_entry in req_entries:
+                req_cmd = req_entry["hooks"][0]["command"]
+                script_base = (
+                    "brc-guard.ps1"
+                    if "brc-guard.ps1" in req_cmd
+                    else "telemetry-append.ps1"
+                )
+                if req_entry not in cur_list:
+                    if apply_changes:
+                        replaced = False
+                        new_list = []
+                        for item in cur_list:
+                            item_cmds = " ".join(
+                                h.get("command", "")
+                                for h in (item.get("hooks") or [])
+                                if isinstance(h, dict)
+                            )
+                            if script_base in item_cmds:
+                                if not replaced:
+                                    new_list.append(req_entry)
+                                    replaced = True
+                            else:
+                                new_list.append(item)
+                        if not replaced:
+                            new_list.append(req_entry)
+                        cur_list = new_list
+                        hooks_map[event_name] = cur_list
+                        hooks_json_data["hooks"] = hooks_map
+                        hooks_modified = True
+                    else:
+                        errors.append(
+                            "Global %s missing or drifted hook %s (%s)"
+                            % (hooks_json_path, event_name, script_base)
+                        )
+        if apply_changes and (hooks_modified or not hooks_json_path.is_file()):
+            hooks_json_path.parent.mkdir(parents=True, exist_ok=True)
+            if hooks_json_path.is_file() and backup_dir:
+                b_path = Path(backup_dir) / "codex" / "hooks.json.bak"
+                b_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(hooks_json_path, b_path)
+            hooks_json_path.write_bytes(
+                (json.dumps(hooks_json_data, indent=2) + "\n").encode("utf-8")
+            )
+            messages.append("Updated global Codex hooks in %s" % hooks_json_path)
+        if not errors:
+            messages.append("Global Codex hooks.json OK")
+
+    # Non-destructive root-level-aware TOML merge on config.toml
+    cfg_path = codex_dir / "config.toml"
+    existing_cfg_text = ""
+    if cfg_path.is_file():
+        c_raw = cfg_path.read_bytes()
+        bad_c = check_control_bytes(c_raw)
+        if bad_c and not apply_changes:
+            errors.append("Global %s contains forbidden control bytes" % cfg_path)
+        existing_cfg_text = c_raw.replace(b"\r\n", b"\n").decode(
+            "utf-8-sig", errors="replace"
+        )
+    elif not apply_changes:
+        errors.append("Global Codex config.toml missing at %s" % cfg_path)
+
+    if apply_changes:
+        merged_cfg_text = _merge_codex_config_toml(existing_cfg_text)
+        merged_bytes = merged_cfg_text.encode("utf-8")
+        if not cfg_path.is_file() or cfg_path.read_bytes() != merged_bytes:
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            if cfg_path.is_file() and backup_dir:
+                b_path = Path(backup_dir) / "codex" / "config.toml.bak"
+                b_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(cfg_path, b_path)
+            cfg_path.write_bytes(merged_bytes)
+            messages.append("Updated global Codex config in %s" % cfg_path)
+        existing_cfg_text = merged_cfg_text
+
+    if cfg_path.is_file():
+        try:
+            parsed_toml = tomllib.loads(existing_cfg_text)
+            if parsed_toml.get("project_doc_fallback_filenames") != ["CODEX.md"]:
+                errors.append(
+                    "Global %s root project_doc_fallback_filenames must be ['CODEX.md']"
+                    % cfg_path
+                )
+            if parsed_toml.get("project_doc_max_bytes") != 65536:
+                errors.append(
+                    "Global %s root project_doc_max_bytes must be 65536" % cfg_path
+                )
+            if (parsed_toml.get("features") or {}).get("codex_hooks") is not True:
+                errors.append(
+                    "Global %s [features].codex_hooks must be true" % cfg_path
+                )
+            mcp_tbl = parsed_toml.get("mcp_servers") or {}
+            for req_srv in ("code-graph-context", "cortex"):
+                if req_srv not in mcp_tbl:
+                    errors.append(
+                        "Global %s missing [mcp_servers.%s]" % (cfg_path, req_srv)
+                    )
+            for srv_name, cfg in mcp_tbl.items():
+                if not isinstance(cfg, dict):
+                    continue
+                url_val = str(cfg.get("url") or "")
+                if url_val and (
+                    MCP_URL_SECRET_RE.search(url_val)
+                    or MCP_SECRET_VALUE_RE.search(url_val)
+                ):
+                    errors.append(
+                        "Global %s server %r URL contains plaintext secret"
+                        % (cfg_path.name, srv_name)
+                    )
+                for map_key in ("env", "http_headers"):
+                    env_map = cfg.get(map_key, {})
+                    if not isinstance(env_map, dict):
+                        continue
+                    for k, v in env_map.items():
+                        v_str = str(v)
+                        if (
+                            v_str == "__REDACTED_IN_WINVAULT__"
+                            or v_str.startswith("${")
+                            or v_str.startswith("{{")
+                        ):
+                            continue
+                        if MCP_SECRET_VALUE_RE.search(v_str) or (
+                            MCP_SECRET_KEY_RE.search(str(k)) and len(v_str.strip()) >= 8
+                        ):
+                            errors.append(
+                                "Global %s server %r %s[%r] contains plaintext secret"
+                                % (cfg_path.name, srv_name, map_key, k)
+                            )
+            if not errors:
+                messages.append(
+                    "Global Codex config.toml OK (%d MCP servers verified)"
+                    % len(mcp_tbl)
+                )
+        except Exception as exc:
+            errors.append("Failed to parse TOML %s: %s" % (cfg_path, exc))
+
+    return errors, messages
+
+
 def verify_or_sync(
     repo_root,
     global_config_dir,
@@ -575,6 +960,7 @@ def verify_or_sync(
     backup_dir=None,
     claude_dir=None,
     claude_json=None,
+    codex_dir=None,
 ):
     """Verify or apply UTF-8 LF sync from .agents/ (and optionally Claude tree) to global dirs."""
     sync_pairs = [
@@ -689,6 +1075,17 @@ def verify_or_sync(
         )
         errors.extend(c_errs)
         messages.extend(c_msgs)
+
+    if codex_dir is not None:
+        x_errs, x_msgs = verify_or_sync_codex(
+            repo_root,
+            global_config_dir,
+            codex_dir,
+            apply_changes=apply_changes,
+            backup_dir=backup_dir,
+        )
+        errors.extend(x_errs)
+        messages.extend(x_msgs)
 
     if errors:
         return 1, messages + errors
@@ -806,11 +1203,58 @@ def run_self_test(repo_root):
         ):
             return 1, ["Self-test failed: Claude MCP servers merge incorrect"]
 
+        # Verify hermetic global OpenAI Codex sync (root-level TOML key placement before [windows] + twice-applied idempotency)
+        fake_codex = tmp_path / "codex"
+        (fake_codex / "skills" / ".system").mkdir(parents=True, exist_ok=True)
+        (fake_codex / "skills" / ".system" / "SKILL.md").write_text(
+            "# System skill\n", encoding="utf-8"
+        )
+        (fake_codex / "config.toml").write_text(
+            'model = "gpt-5.4"\n'
+            "[mcp_servers.ida-pro-mcp]\n"
+            'command = "uv"\n'
+            "[windows]\n"
+            'sandbox = "elevated"\n',
+            encoding="utf-8",
+        )
+        for _ in range(2):
+            x_errs, _ = verify_or_sync_codex(
+                repo_root=Path(repo_root),
+                global_config_dir=fake_global,
+                codex_dir=fake_codex,
+                apply_changes=True,
+                backup_dir=fake_backup,
+            )
+            if x_errs:
+                return 1, ["Self-test failed during Codex apply: %s" % x_errs]
+
+        x_check_errs, _ = verify_or_sync_codex(
+            repo_root=Path(repo_root),
+            global_config_dir=fake_global,
+            codex_dir=fake_codex,
+            apply_changes=False,
+        )
+        if x_check_errs:
+            return 1, ["Self-test failed during Codex check: %s" % x_check_errs]
+        if not (fake_codex / "skills" / ".system" / "SKILL.md").is_file():
+            return 1, ["Self-test failed: Codex .system skill was not preserved"]
+        parsed_x = tomllib.loads((fake_codex / "config.toml").read_text(encoding="utf-8"))
+        if (
+            parsed_x.get("project_doc_fallback_filenames") != ["CODEX.md"]
+            or parsed_x.get("project_doc_max_bytes") != 65536
+            or parsed_x.get("model") != "gpt-5.4"
+            or (parsed_x.get("windows") or {}).get("sandbox") != "elevated"
+            or "ida-pro-mcp" not in (parsed_x.get("mcp_servers") or {})
+            or "cortex" not in (parsed_x.get("mcp_servers") or {})
+            or "code-graph-context" not in (parsed_x.get("mcp_servers") or {})
+        ):
+            return 1, ["Self-test failed: Codex TOML root/table merge incorrect"]
+
     return 0, ["sync_global_config.py self-test: PASS"]
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Sync .agents and Claude global configs.")
+    parser = argparse.ArgumentParser(description="Sync .agents, Claude, and OpenAI Codex global configs.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="Verify parity without writing.")
     group.add_argument("--apply", action="store_true", help="Normalize LF and sync global configs.")
@@ -825,6 +1269,7 @@ def main():
         global_config_dir = Path.home() / ".gemini" / "config"
         claude_dir = Path.home() / CLAUDE_DIR_NAME
         claude_json = Path.home() / CLAUDE_JSON_NAME
+        codex_dir = Path.home() / CODEX_DIR_NAME
         code, lines = verify_or_sync(
             repo_root=repo_root,
             global_config_dir=global_config_dir,
@@ -832,6 +1277,7 @@ def main():
             backup_dir=args.backup_dir,
             claude_dir=claude_dir,
             claude_json=claude_json,
+            codex_dir=codex_dir,
         )
     for line in lines:
         print(line)

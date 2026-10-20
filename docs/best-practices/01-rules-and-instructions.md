@@ -177,3 +177,7 @@ call `invoke_subagent`).
    *"Improving the Efficiency of LLM Agent Systems through Trajectory Reduction (AgentDiet)."*
    `arXiv:2509.23586`.
    [https://arxiv.org/abs/2509.23586](https://arxiv.org/abs/2509.23586)
+
+### OpenAI Codex (`CODEX.md`, `.codex/rules/*.md`, & `~/.codex/AGENTS.md`)
+
+Because Google Antigravity automatically discovers any root `AGENTS.md` file in a repository, `antigravity-core` places the OpenAI Codex constitution at root [`CODEX.md`](../../CODEX.md) (`<= 18,000` bytes) and configures `project_doc_fallback_filenames = ["CODEX.md"]` and `project_doc_max_bytes = 65536` at the root table level of [`.codex/config.toml`](../../.codex/config.toml) (before any `[section]` header). Since OpenAI Codex does not auto-inject `.codex/rules/*.md` on every turn, `CODEX.md` is authored as a self-contained constitution synced byte-for-byte to `~/.codex/AGENTS.md`, paired with 7 reference modules under `.codex/rules/*.md`.

@@ -130,3 +130,7 @@ synchronizes both **Google Antigravity (`~/.gemini`)** and **Claude Code
    *"Evaluating AGENTS.md: Are Repository-Level Context Files Helpful for Coding Agents?"*
    `arXiv:2602.11988`.
    [https://arxiv.org/abs/2602.11988](https://arxiv.org/abs/2602.11988)
+
+### Tri-Harness Global Machine Synchronization (`~/.gemini/config`, `~/.claude`, & `~/.codex`)
+
+[`sync_global_config.py`](../../.agents/scripts/sync_global_config.py) extends idempotent machine synchronization to `~/.codex` via `verify_or_sync_codex(...)`: syncing `CODEX.md -> ~/.codex/AGENTS.md`, `.codex/rules/*`, `.codex/agents/*.toml`, and `.codex/hooks/*`, creating per-skill NTFS junctions in `~/.codex/skills/`, and performing a top-level-aware TOML merge on `~/.codex/config.toml` verified via `tomllib.loads()`.

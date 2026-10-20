@@ -1,0 +1,93 @@
+# Antigravity Core — OpenAI Codex Repository Configuration
+# Top-level keys MUST appear before any [section] header.
+project_doc_fallback_filenames = ["CODEX.md"]
+project_doc_max_bytes = 65536
+
+[features]
+codex_hooks = true
+
+[mcp_servers.code-graph-context]
+command = "cgc"
+args = ["mcp", "start"]
+startup_timeout_sec = 20
+
+[mcp_servers.cortex]
+url = "http://127.0.0.1:8585/mcp"
+
+# Suppress duplicate discovery of .agents/skills/* inside antigravity-core
+# so Codex uses the Codex-native .codex/skills/* definitions.
+[[skills.config]]
+path = ".agents/skills/brainstorm-solutions/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/comprehend-problem/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/cortex-librarian/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/debate/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/design-validate/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/harness-scaffold/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/iterative-implement/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/markdown-style-expert/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/restart-phone-ui/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/reverse-engineer-anything/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/security-auditor/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/skill-evolve/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/style-cpp/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/style-go/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/style-java/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/style-js/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/style-python/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/style-rust/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = ".agents/skills/technical-debate/SKILL.md"
+enabled = false

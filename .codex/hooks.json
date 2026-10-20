@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./.codex/hooks/brc-guard.ps1",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./.codex/hooks/telemetry-append.ps1",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./.codex/hooks/telemetry-append.ps1",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

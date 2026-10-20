@@ -179,3 +179,7 @@ five deterministic quarantine invariants (`RB-6`):
    [https://arxiv.org/abs/2503.15223](https://arxiv.org/abs/2503.15223)
 7. **Agent Skills Open Specification (2025–2026).**
    [https://agentskills.io/specification](https://agentskills.io/specification)
+
+### OpenAI Codex Skills (`.codex/skills/`, `agents/openai.yaml`, & `[[skills.config]]`)
+
+OpenAI Codex discovers all 17 portable `harness-nexus` skills under `.codex/skills/<name>/SKILL.md` (linked into `~/.codex/skills/<name>` via NTFS directory junctions while preserving `~/.codex/skills/.system`). All 10 `INTERNAL_COMMITTEE_SKILLS` include `agents/openai.yaml` with `policy.allow_implicit_invocation: false` so internal committee rubrics never trigger implicitly on user prompts, and [`.codex/config.toml`](../../.codex/config.toml) declares 19 explicit `[[skills.config]]` blocks (`enabled = false`) suppressing duplicate discovery of `.agents/skills/*` inside `antigravity-core`.

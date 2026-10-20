@@ -196,7 +196,7 @@ if ($filePath -ne '') {
     }
     if ($toolName -match '^(Edit|Write|MultiEdit)$') {
         if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
-            ($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|CLAUDE\.md|AGENTS\.md|agentic_telemetry\.md)$')) {
+            ($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|CLAUDE\.md|AGENTS\.md|CODEX\.md|config\.toml|antigravity\.rules|agentic_telemetry\.md)$')) {
             Deny 'harness-config-self-tampering' $filePath
         }
         if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
@@ -334,7 +334,7 @@ foreach ($evalCmd in $candidates) {
     }
 
     if (($evalCmd -notmatch '(?i)[/\\](scratch|tmp|temp)[/\\]') -and
-        ($evalCmd -match '(>|>>|\bOut-File\b|\bSet-Content\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bRemove-Item\b|\bcp\b|\bmv\b|\brm\b|\bdel\b|\btee\b|WriteAllText|WriteAllLines|AppendAllText)[^\r\n]*?(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|agentic_telemetry\.md)')) {
+        ($evalCmd -match '(>|>>|\bOut-File\b|\bSet-Content\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bRemove-Item\b|\bcp\b|\bmv\b|\brm\b|\bdel\b|\btee\b|WriteAllText|WriteAllLines|AppendAllText)[^\r\n]*?(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|CODEX\.md|config\.toml|antigravity\.rules|agentic_telemetry\.md)')) {
         Deny 'harness-config-self-tampering' $evalCmd
     }
 

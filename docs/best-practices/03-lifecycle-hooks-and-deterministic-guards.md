@@ -179,3 +179,9 @@ Grounded in Wang et al. ([`arXiv:2606.04990`](https://arxiv.org/abs/2606.04990),
    *"From Agent Traces to Trust: A Survey of Evidence Tracing and Execution Provenance in LLM Agents."*
    `arXiv:2606.04990`.
    [https://arxiv.org/abs/2606.04990](https://arxiv.org/abs/2606.04990)
+
+### OpenAI Codex Dual-Layer Enforcement (`.codex/rules/antigravity.rules` + `.codex/hooks/`)
+
+OpenAI Codex enforces Blast Radius Containment and Mandatory Access Control across two complementary layers:
+1. **Layer 0 Starlark Execution Policy ([`.codex/rules/antigravity.rules`](../../.codex/rules/antigravity.rules))**: Uses `prefix_rule(..., decision="forbidden")` to deterministically block destructive git and infrastructure commands (`git push --force`, `git reset --hard`, `git commit --no-verify`, `git config` mutations, `terraform destroy`, `kubectl delete`, `docker system prune -a`, `mkfs`) at the sandbox runner layer.
+2. **Layer 1 PowerShell Hooks ([`.codex/hooks.json`](../../.codex/hooks.json), [`brc-guard.ps1`](../../.codex/hooks/brc-guard.ps1), [`telemetry-append.ps1`](../../.codex/hooks/telemetry-append.ps1))**: Enabled via `[features] codex_hooks = true`, `brc-guard.ps1` iterates over all headers in multi-file V4A `apply_patch` payloads to prevent patch smuggling, enforces all 26 BRC/MAC rules, and `telemetry-append.ps1` writes SHA-256 hash-chained traces with zero bytes on `stdout` and `$alreadyAppended` deduplication.

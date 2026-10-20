@@ -257,3 +257,7 @@ capability from the same repository and global machine sync
     *"RewardHackingAgents: Empirical Analysis of Specification Gaming in Coding Agents."*
     `arXiv:2603.11337`.
     [https://arxiv.org/abs/2603.11337](https://arxiv.org/abs/2603.11337)
+
+### OpenAI Codex (`CODEX.md` & `.codex/`) Tri-Harness Parity
+
+Alongside Google Antigravity (`.agents/`) and Claude Code (`CLAUDE.md` / `.claude/`), `antigravity-core` provides full autonomous session parity for **OpenAI Codex (`codex-cli 0.115.0` and the Codex Desktop App)** via root [`CODEX.md`](../../CODEX.md) and [`.codex/`](../../.codex/config.toml), synchronized globally to `~/.codex/` by [`sync_global_config.py`](../../.agents/scripts/sync_global_config.py) and validated across `INV-1`–`INV-10` by [`.codex/tests/validate_tree.py`](../../.codex/tests/validate_tree.py).
