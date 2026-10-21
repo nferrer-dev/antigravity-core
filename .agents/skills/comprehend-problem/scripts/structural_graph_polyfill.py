@@ -451,9 +451,26 @@ def main(argv=None):
         )
         print(json.dumps(diff, indent=2))
         return 0
+    dest_str = args.out_flag or args.output_json_path
     if args.high_complexity is not None:
         target_dir = args.target_directory or "."
-        high = find_high_complexity_functions(target_dir, threshold=args.high_complexity)
+        if dest_str:
+            graph = build_graph(target_dir)
+            high = find_high_complexity_functions(
+                graph, threshold=args.high_complexity
+            )
+            graph["high_complexity_functions"] = high
+            output_path = Path(dest_str)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(graph, indent=2) + "\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+        else:
+            high = find_high_complexity_functions(
+                target_dir, threshold=args.high_complexity
+            )
         print(json.dumps({"high_complexity_functions": high}, indent=2))
         return 0
     if args.impacted_tests:
@@ -462,7 +479,6 @@ def main(argv=None):
         print(json.dumps({"impacted_tests": impacted}, indent=2))
         return 0
 
-    dest_str = args.out_flag or args.output_json_path
     if not args.target_directory or not dest_str:
         parser.print_usage(sys.stderr)
         return 1

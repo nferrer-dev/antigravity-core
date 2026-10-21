@@ -72,6 +72,7 @@ TELEMETRY_CHAIN_RE = re.compile(r"^(.*)\s\[chain:([0-9a-fA-F]{8})\]$")
 
 EXPECTED_CODEX_SKILLS = (
     "brainstorm-solutions",
+    "coherence-bake",
     "comprehend-problem",
     "cortex-librarian",
     "debate",
@@ -438,11 +439,15 @@ def check_inv1_frontmatter(root):
                 % yaml_label
             )
 
-    for polyfill_name in ("structural_graph_polyfill.py", "logical_z3_polyfill.py"):
-        pf_path = skills_root / "comprehend-problem" / "scripts" / polyfill_name
+    for rel_script in (
+        ("comprehend-problem", "scripts", "structural_graph_polyfill.py"),
+        ("comprehend-problem", "scripts", "logical_z3_polyfill.py"),
+        ("coherence-bake", "scripts", "coherence_bake_gate.py"),
+    ):
+        pf_path = skills_root.joinpath(*rel_script)
         pf_label = _rel(root, pf_path)
         if not pf_path.is_file():
-            violations.append("INV-1: %s: missing Stage 0 polyfill script" % pf_label)
+            violations.append("INV-1: %s: missing skill script" % pf_label)
             continue
         try:
             ast.parse(pf_path.read_bytes().decode("utf-8"))
@@ -510,9 +515,9 @@ def check_inv2_json_toml_rules(root):
                 for entry in skills_cfg
                 if isinstance(entry, dict) and entry.get("enabled") is False
             }
-            if len(disabled_paths) < 19:
+            if len(disabled_paths) < 20:
                 violations.append(
-                    "INV-2: %s: [[skills.config]] must disable all 19 duplicate repo skills, got %d"
+                    "INV-2: %s: [[skills.config]] must disable all 20 duplicate repo skills, got %d"
                     % (cfg_label, len(disabled_paths))
                 )
         except (ValueError, UnicodeDecodeError) as exc:

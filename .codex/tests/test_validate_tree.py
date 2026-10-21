@@ -437,6 +437,21 @@ class LiveTree(unittest.TestCase):
             )
             self.assertEqual(res_ok_s1.returncode, 0, res_ok_s1.stderr)
 
+    def test_coherence_bake_skill_and_gate(self):
+        skill_dir = REPO_ROOT / ".codex" / "skills" / "coherence-bake"
+        self.assertTrue((skill_dir / "SKILL.md").is_file())
+        self.assertTrue((skill_dir / "coherence-bake-edge-cases.md").is_file())
+        gate_py = skill_dir / "scripts" / "coherence_bake_gate.py"
+        self.assertTrue(gate_py.is_file())
+        res = subprocess.run(
+            [sys.executable, str(gate_py), "--self-test"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

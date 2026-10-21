@@ -31,6 +31,7 @@ OpenAI Codex sessions operating on non-Codex tasks MUST treat other harness dire
 | 2 — Technical debate | `technical-debate` | Significant design decisions, major config changes, vetting Stage 1 candidates — must return PROCEED before drafting `implementation_plan.md` |
 | 3 — Design validation | `design-validate` | A drafted `implementation_plan.md` or architecture artifact — committee consensus before code |
 | 4 — Iterative implementation | `iterative-implement` | Executing or finalizing code/doc changes — implementation committee audits the diff |
+| 5 — Coherence bake | `coherence-bake` | Full-system coherence, system design, optimization, and SOTA benchmark audit with diminishing-returns gate |
 
 ### 3-Tier Proportional Routing Matrix (Anti-Sledgehammer)
 - **Tier 0 — Trivial (Direct Execution)**: Purely cosmetic, non-functional (typos, formatting, comments), or isolated local variable renames execute directly, bypassing Stages 0–3 and consensus committees. *Anti-Loophole*: Modifying execution paths (shell scripts, hooks, build scripts, CI mocks, `.rules` files) or global state boundaries (`.gitignore`, `CODEX.md`, `config.toml`, `hooks.json`) is functional and MUST route to **Tier 2**.

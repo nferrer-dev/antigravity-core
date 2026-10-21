@@ -1,0 +1,7 @@
+# Edge Cases & Heuristics: coherence-bake
+
+- **Zero Invented Problems on `AIRTIGHT_HALT`**: When `coherence_bake_gate.py` returns `"status": "AIRTIGHT_HALT"`, you MUST immediately stop proposing architectural abstractions, micro-optimizations, or cosmetic refactors and present the `certificate_sha256` proof to the user.
+- **Empirical Baseline Mandate for `SYSTEM_DESIGN` and `OPTIMIZATION`**: Never mark `measurable_gain_above_epsilon: true` for a design or optimization finding unless `reproducible_check` demonstrates a concrete asymptotic reduction, query-plan index hit, lock-contention removal, or complexity drop on an active execution path.
+- **Path Traversal and Line-Range Verification**: Every `file_and_line` entry must resolve strictly inside `--repo-root` with 1-indexed `start_line <= end_line <= total_file_lines`, or `coherence_bake_gate.py` will deterministically reject the finding.
+- **Air-Gapped SOTA Retrieval Hygiene**: Research subagents gathering `SOTA_BENCHMARK` citations must never execute shell commands or mutate Cortex memory, and `coherence_bake_gate.py` automatically rejects findings containing invisible Unicode codepoints or Markdown image exfiltration links.
+- **UTF-8 LF Serialization for Gate Artifacts**: Always write `stage0_coherence_bake_ast.json`, `stage0_coherence_bake_z3.json`, and `coherence_bake_findings.json` using explicit UTF-8 without BOM and LF line endings so `coherence_bake_gate.py` and `sha256_anchor` checks remain platform-deterministic.

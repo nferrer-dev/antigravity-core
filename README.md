@@ -143,9 +143,9 @@ flowchart TD
 
 ---
 
-## 🛠️ The Ecosystem (19 Skills & Declarative Subagents)
+## 🛠️ The Ecosystem (20 Skills & Declarative Subagents)
 
-Antigravity executes these protocols via the 19 dynamic skills in
+Antigravity executes these protocols via the 20 dynamic skills in
 `.agents/skills/` and declarative read-only subagent manifests in
 `.agents/agents/` (`stage3-design-reviewer.md`, `stage4-code-auditor.md`):
 
@@ -161,6 +161,9 @@ Antigravity executes these protocols via the 19 dynamic skills in
   artifacts and `implementation_plan.md` prior to code execution.
 - `iterative-implement`: Stage 4 orchestration that triggers the bounded
   pre-flight test gate and expert implementation committee.
+- `coherence-bake`: Stage 5 full-system coherence, system design, optimization,
+  and SOTA benchmark bake with a deterministic diminishing-returns gate
+  (`coherence_bake_gate.py`).
 
 ### Governance, Security & Linter Experts
 

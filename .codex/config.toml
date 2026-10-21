@@ -92,3 +92,7 @@ enabled = false
 [[skills.config]]
 path = ".agents/skills/technical-debate/SKILL.md"
 enabled = false
+
+[[skills.config]]
+path = ".agents/skills/coherence-bake/SKILL.md"
+enabled = false

@@ -124,6 +124,7 @@ EXPECTED_AGENTS_SKILLS = (
     "reverse-engineer-anything",
     "restart-phone-ui",
     "cortex-librarian",
+    "coherence-bake",
 )
 
 AGENTS_MD_MAX_BYTES = 18000

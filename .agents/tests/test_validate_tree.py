@@ -2159,6 +2159,88 @@ class LiveTree(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
 
+    def test_coherence_bake_skill_and_gate(self):
+        import importlib.util
+
+        skill_dir = REPO_ROOT / ".agents" / "skills" / "coherence-bake"
+        skill_md = skill_dir / "SKILL.md"
+        edge_md = skill_dir / "coherence-bake-edge-cases.md"
+        gate_py = skill_dir / "scripts" / "coherence_bake_gate.py"
+
+        self.assertTrue(skill_md.is_file(), "Missing .agents/skills/coherence-bake/SKILL.md")
+        self.assertTrue(edge_md.is_file(), "Missing coherence-bake-edge-cases.md")
+        self.assertTrue(gate_py.is_file(), "Missing scripts/coherence_bake_gate.py")
+
+        claude_gate = (
+            REPO_ROOT
+            / (TOKEN_CLAUDE_DIR.rstrip("/"))
+            / "skills"
+            / "coherence-bake"
+            / "scripts"
+            / "coherence_bake_gate.py"
+        )
+        codex_gate = (
+            REPO_ROOT
+            / ".codex"
+            / "skills"
+            / "coherence-bake"
+            / "scripts"
+            / "coherence_bake_gate.py"
+        )
+        self.assertTrue(claude_gate.is_file(), "Missing Claude coherence_bake_gate.py")
+        self.assertTrue(codex_gate.is_file(), "Missing Codex coherence_bake_gate.py")
+        gate_bytes = gate_py.read_bytes()
+        self.assertEqual(gate_bytes, claude_gate.read_bytes())
+        self.assertEqual(gate_bytes, codex_gate.read_bytes())
+
+        spec = importlib.util.spec_from_file_location("coherence_bake_gate", gate_py)
+        gate_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate_mod)
+        code, msgs = gate_mod.run_self_test()
+        self.assertEqual(code, 0, "\n".join(msgs))
+
+        # INV-BAKE-01: negative gap cancellation & string unconstrained_variables guard
+        res_neg = gate_mod.evaluate_bake_inputs(
+            {"contract_gaps": -1, "unindexed_hot_paths": 1},
+            {"status": "SAT", "unconstrained_variables": []},
+            [],
+            REPO_ROOT,
+        )
+        self.assertEqual(res_neg["status"], "PROCEED_FIX")
+
+        # INV-BAKE-02: all functions in coherence_bake_gate.py must have McCabe complexity <= 9
+        pf_py = (
+            REPO_ROOT
+            / ".agents"
+            / "skills"
+            / "comprehend-problem"
+            / "scripts"
+            / "structural_graph_polyfill.py"
+        )
+        pf_spec = importlib.util.spec_from_file_location("structural_graph_polyfill", pf_py)
+        pf_mod = importlib.util.module_from_spec(pf_spec)
+        pf_spec.loader.exec_module(pf_mod)
+        high_fns = pf_mod.find_high_complexity_functions(str(skill_dir), threshold=10)
+        self.assertEqual(high_fns, [], f"High complexity functions in coherence-bake: {high_fns}")
+
+        # INV-BAKE-04: empty verified_url on SOTA_BENCHMARK & duplicate finding id rejected
+        ok_sota, reason_sota, _ = gate_mod.validate_finding(
+            {
+                "id": "SOTA-EMPTY-URL",
+                "category": "SOTA_BENCHMARK",
+                "citation_author_year": "Kamoi et al. (2024)",
+                "verified_url": "",
+                "file_and_line": ".agents/skills/coherence-bake/SKILL.md:1-2",
+                "reproducible_check": "pytest",
+                "falsifiable_fix": "fix",
+                "is_speculative": False,
+                "measurable_gain_above_epsilon": True,
+            },
+            REPO_ROOT,
+        )
+        self.assertFalse(ok_sota)
+        self.assertEqual(reason_sota, "invalid_sota_verified_url")
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

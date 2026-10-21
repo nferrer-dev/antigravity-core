@@ -44,13 +44,13 @@ three-part formula:
 
 ### 2.2 Separating User Slash Workflows from Internal Subagent Rubrics
 
-Out of the 19 skills in `antigravity-core`, 9 are interactive orchestration
+Out of the 20 skills in `antigravity-core`, 10 are interactive orchestration
 workflows (`comprehend-problem`, `brainstorm-solutions`, `technical-debate`,
-`debate`, `design-validate`, `iterative-implement`, `harness-scaffold`,
-`reverse-engineer-anything`, `restart-phone-ui`) and **10 are internal specialist
-rubrics** (`style-python`, `style-cpp`, `style-go`, `style-java`, `style-js`,
-`style-rust`, `markdown-style-expert`, `security-auditor`, `skill-evolve`,
-`cortex-librarian`).
+`debate`, `design-validate`, `iterative-implement`, `coherence-bake`,
+`harness-scaffold`, `reverse-engineer-anything`, `restart-phone-ui`) and **10
+are internal specialist rubrics** (`style-python`, `style-cpp`, `style-go`,
+`style-java`, `style-js`, `style-rust`, `markdown-style-expert`,
+`security-auditor`, `skill-evolve`, `cortex-librarian`).
 
 To prevent internal subagent rubrics from cluttering the user's `/` slash menu
 while keeping them 100% discoverable in the agent's skill catalog:
