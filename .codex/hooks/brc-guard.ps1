@@ -266,10 +266,11 @@ function Test-MissingStage0Artifact {
         if (Test-Path -LiteralPath $scratchDir) {
             $hits = @(Get-ChildItem -LiteralPath $scratchDir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object {
                 if ($_.Length -le 0) { return $false }
+                $rawBody = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
                 if ($_.Extension -ieq '.json') {
-                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
-                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
+                    if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
                 }
+                if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
                 return $true
             })
             if ($hits.Count -gt 0) { return $false }
@@ -277,10 +278,11 @@ function Test-MissingStage0Artifact {
         if (Test-Path -LiteralPath $dir) {
             $rootHits = @(Get-ChildItem -LiteralPath $dir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object {
                 if ($_.Length -le 0) { return $false }
+                $rawBody = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
                 if ($_.Extension -ieq '.json') {
-                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
-                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
+                    if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
                 }
+                if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
                 return $true
             })
             if ($rootHits.Count -gt 0) { return $false }
@@ -309,6 +311,9 @@ function Test-InvalidRubricScoreBlock {
     if ($blockMatches.Count -eq 0) { return $false }
     $validVerdicts = @('APPROVE', 'REJECT', 'PROCEED', 'HALT', 'TIER_0', 'TIER_1', 'TIER_2')
     $lastVerdict = ''
+    $hasReject = $false
+    $hasHalt = $false
+    $seenPanelRoles = @{}
     foreach ($bm in $blockMatches) {
         $rawJson = $bm.Groups[1].Value
         $critMatches = [regex]::Matches($rawJson, '\{[^{}]*\}')
@@ -338,12 +343,19 @@ function Test-InvalidRubricScoreBlock {
         if (-not $obj.PSObject.Properties['role'] -or [string]::IsNullOrWhiteSpace([string]$obj.role)) {
             return $true
         }
+        $roleKey = "$stageVal|" + ([string]$obj.role).Trim().ToLowerInvariant()
+        if ($blockMatches.Count -gt 1) {
+            if ($seenPanelRoles.ContainsKey($roleKey)) { return $true }
+            $seenPanelRoles[$roleKey] = $true
+        }
         if (-not $obj.PSObject.Properties['verdict'] -or [string]::IsNullOrWhiteSpace([string]$obj.verdict)) {
             return $true
         }
         $verdict = ([string]$obj.verdict).Trim().ToUpperInvariant()
         if ($verdict -notin $validVerdicts) { return $true }
         $lastVerdict = $verdict
+        if ($verdict -eq 'REJECT') { $hasReject = $true }
+        if ($verdict -eq 'HALT') { $hasHalt = $true }
         $critList = @($obj.criteria)
         $minCrit = if ($stageVal -eq 0) { 1 } else { 3 }
         if ($critList.Count -lt $minCrit) { return $true }
@@ -383,9 +395,11 @@ function Test-InvalidRubricScoreBlock {
             if ($actualMin -ge 2 -and $actualTotal -ge $effThr) { return $true }
         }
     }
-    if ($blockMatches.Count -eq 1 -and ($Text -match '\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]')) {
-        $proseVerdict = $Matches[1].Trim().ToUpperInvariant()
-        if ($proseVerdict -ne $lastVerdict) { return $true }
+    $panelVerdict = if ($hasHalt) { 'HALT' } elseif ($hasReject) { 'REJECT' } else { $lastVerdict }
+    $proseMatches = [regex]::Matches($Text, '\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]')
+    if ($proseMatches.Count -gt 0) {
+        $proseVerdict = $proseMatches[$proseMatches.Count - 1].Groups[1].Value.Trim().ToUpperInvariant()
+        if ($proseVerdict -ne $panelVerdict) { return $true }
     }
     return $false
 }
@@ -439,7 +453,7 @@ if ($toolName -eq 'apply_patch') {
 
 # ---- 2. Standard File-Access Tools (Read, Edit, Write, MultiEdit) ----
 $filePath = ''
-foreach ($pf in @('file_path', 'path', 'notebook_path', 'TargetFile', 'AbsolutePath')) {
+foreach ($pf in @('file_path', 'path', 'Path', 'notebook_path', 'TargetFile', 'AbsolutePath')) {
     if ($toolInput.PSObject.Properties[$pf] -and $null -ne $toolInput.$pf) {
         $filePath = [string]$toolInput.$pf
         break
@@ -449,7 +463,7 @@ if ($filePath -ne '') {
     if (Test-SecretPath $filePath) {
         Deny 'secret-file-access' $filePath
     }
-    if ($toolName -match '^(Edit|Write|MultiEdit|write_to_file|replace_file_content)$') {
+    if ($toolName -match '^(Edit|Write|MultiEdit|write_to_file|write_file|(?:multi_)?replace_file_content|edit_file)$') {
         if (Test-TamperPath $filePath) {
             Deny 'harness-config-self-tampering' $filePath
         }
@@ -460,12 +474,12 @@ if ($filePath -ne '') {
             Deny 'stage0-comprehend-problem-gate' 'Run comprehend-problem (.codex/skills/comprehend-problem/SKILL.md) and write non-empty scratch/stage0_<topic>.md or .json (with SAT status) before writing implementation_plan.md'
         }
         $writeBody = ''
-        foreach ($cf in @('content', 'new_string', 'CodeContent', 'ReplacementContent')) {
+        foreach ($cf in @('content', 'new_string', 'CodeContent', 'ReplacementContent', 'Replacement')) {
             if ($toolInput.PSObject.Properties[$cf] -and $null -ne $toolInput.$cf) {
                 $writeBody += "`n" + [string]$toolInput.$cf
             }
         }
-        if (($toolName -match '^(Write|write_to_file)$') -and (Test-Stage1CandidateSolutionsGate $filePath $writeBody)) {
+        if (($toolName -match '^(Write|write_to_file|write_file)$') -and (Test-Stage1CandidateSolutionsGate $filePath $writeBody)) {
             Deny 'stage1-candidate-solutions-gate' 'candidate_solutions.md must include all 3 cognitive framing lenses (Radical Innovator, Enterprise Minimalist, Security Paranoiac)'
         }
         if (Test-InvalidRubricScoreBlock $writeBody) {

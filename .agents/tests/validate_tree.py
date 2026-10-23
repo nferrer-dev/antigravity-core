@@ -595,8 +595,11 @@ VALID_AGENT_MODELS = {"inherit", "flash", "flash_lite", "pro"}
 VALID_AGENT_EXEC_POLICIES = {"off", "auto", "eager", "sandbox"}
 KNOWN_AGENT_TOOLS = {
     "view_file",
+    "read_file",
     "write_to_file",
+    "write_file",
     "replace_file_content",
+    "edit_file",
     "run_command",
     "manage_task",
     "send_message",

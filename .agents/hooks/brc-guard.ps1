@@ -256,6 +256,9 @@ function Test-MissingStageArtifact {
                     if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
                 }
                 if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
+                if ($StageFilter -eq 'stage3*') {
+                    if (($rawBody -match '"verdict"\s*:\s*"(REJECT|HALT)"') -or ($rawBody -match '(?i)\[(?:GLOBAL\s+)?VERDICT:\s*(REJECT|HALT)\]') -or ($rawBody -match '(?i)<REJECTION_EVIDENCE>')) { return $false }
+                }
                 return $true
             })
             if ($hits.Count -gt 0) { return $false }
@@ -268,6 +271,9 @@ function Test-MissingStageArtifact {
                     if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
                 }
                 if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
+                if ($StageFilter -eq 'stage3*') {
+                    if (($rawBody -match '"verdict"\s*:\s*"(REJECT|HALT)"') -or ($rawBody -match '(?i)\[(?:GLOBAL\s+)?VERDICT:\s*(REJECT|HALT)\]') -or ($rawBody -match '(?i)<REJECTION_EVIDENCE>')) { return $false }
+                }
                 return $true
             })
             if ($rootHits.Count -gt 0) { return $false }
@@ -303,15 +309,19 @@ function Get-WriteContentString {
     param($ArgsObj)
     if ($null -eq $ArgsObj) { return '' }
     $parts = New-Object System.Collections.Generic.List[string]
-    foreach ($cf in @('CodeContent', 'ReplacementContent', 'new_string', 'content')) {
+    foreach ($cf in @('CodeContent', 'ReplacementContent', 'Replacement', 'new_string', 'content')) {
         if ($ArgsObj.PSObject.Properties[$cf] -and $null -ne $ArgsObj.$cf) {
             $parts.Add([string]$ArgsObj.$cf)
         }
     }
     if ($ArgsObj.PSObject.Properties['edits'] -and $null -ne $ArgsObj.edits) {
         foreach ($ed in @($ArgsObj.edits)) {
-            if ($null -ne $ed -and $ed.PSObject.Properties['new_string'] -and $null -ne $ed.new_string) {
-                $parts.Add([string]$ed.new_string)
+            if ($null -ne $ed) {
+                foreach ($ef in @('new_string', 'Replacement', 'ReplacementContent')) {
+                    if ($ed.PSObject.Properties[$ef] -and $null -ne $ed.$ef) {
+                        $parts.Add([string]$ed.$ef)
+                    }
+                }
             }
         }
     }
@@ -339,6 +349,9 @@ function Test-InvalidRubricScoreBlock {
     if ($blockMatches.Count -eq 0) { return $false }
     $validVerdicts = @('APPROVE', 'REJECT', 'PROCEED', 'HALT', 'TIER_0', 'TIER_1', 'TIER_2')
     $lastVerdict = ''
+    $hasReject = $false
+    $hasHalt = $false
+    $seenPanelRoles = @{}
     foreach ($bm in $blockMatches) {
         $rawJson = $bm.Groups[1].Value
         $critMatches = [regex]::Matches($rawJson, '\{[^{}]*\}')
@@ -368,12 +381,19 @@ function Test-InvalidRubricScoreBlock {
         if (-not $obj.PSObject.Properties['role'] -or [string]::IsNullOrWhiteSpace([string]$obj.role)) {
             return $true
         }
+        $roleKey = "$stageVal|" + ([string]$obj.role).Trim().ToLowerInvariant()
+        if ($blockMatches.Count -gt 1) {
+            if ($seenPanelRoles.ContainsKey($roleKey)) { return $true }
+            $seenPanelRoles[$roleKey] = $true
+        }
         if (-not $obj.PSObject.Properties['verdict'] -or [string]::IsNullOrWhiteSpace([string]$obj.verdict)) {
             return $true
         }
         $verdict = ([string]$obj.verdict).Trim().ToUpperInvariant()
         if ($verdict -notin $validVerdicts) { return $true }
         $lastVerdict = $verdict
+        if ($verdict -eq 'REJECT') { $hasReject = $true }
+        if ($verdict -eq 'HALT') { $hasHalt = $true }
         $critList = @($obj.criteria)
         $minCrit = if ($stageVal -eq 0) { 1 } else { 3 }
         if ($critList.Count -lt $minCrit) { return $true }
@@ -413,15 +433,17 @@ function Test-InvalidRubricScoreBlock {
             if ($actualMin -ge 2 -and $actualTotal -ge $effThr) { return $true }
         }
     }
-    if ($blockMatches.Count -eq 1 -and ($Text -match '\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]')) {
-        $proseVerdict = $Matches[1].Trim().ToUpperInvariant()
-        if ($proseVerdict -ne $lastVerdict) { return $true }
+    $panelVerdict = if ($hasHalt) { 'HALT' } elseif ($hasReject) { 'REJECT' } else { $lastVerdict }
+    $proseMatches = [regex]::Matches($Text, '\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]')
+    if ($proseMatches.Count -gt 0) {
+        $proseVerdict = $proseMatches[$proseMatches.Count - 1].Groups[1].Value.Trim().ToUpperInvariant()
+        if ($proseVerdict -ne $panelVerdict) { return $true }
     }
     return $false
 }
 
-$isWriteTool = $toolName -match '^(write_to_file|(?:multi_)?replace_file_content|(?:Multi)?Edit|Write)$'
-$isReadOrWriteTool = $isWriteTool -or ($toolName -match '^(view_file|Read)$')
+$isWriteTool = $toolName -match '^(write_to_file|write_file|(?:multi_)?replace_file_content|edit_file|(?:Multi)?Edit|Write)$'
+$isReadOrWriteTool = $isWriteTool -or ($toolName -match '^(view_file|read_file|Read)$')
 
 if ($isReadOrWriteTool -and (Test-SecretFilePath $filePath)) {
     Emit-Deny 'secret-file-access' $filePath
@@ -443,7 +465,7 @@ if ($isWriteTool -and (Test-PrematureExecutionLock $filePath $argsObj $payload))
     Emit-Deny 'stage3-premature-execution-lock' 'Complete Stage 3 design-validate and write non-empty scratch/stage3_<topic>.md or .json before setting RequestFeedback=true on implementation_plan.md'
 }
 
-if (($toolName -match '^(write_to_file|Write)$') -and (Test-Stage1CandidateSolutionsGate $filePath $argsObj)) {
+if (($toolName -match '^(write_to_file|write_file|Write)$') -and (Test-Stage1CandidateSolutionsGate $filePath $argsObj)) {
     Emit-Deny 'stage1-candidate-solutions-gate' 'candidate_solutions.md must include all 3 cognitive framing lenses (Radical Innovator, Enterprise Minimalist, Security Paranoiac)'
 }
 
@@ -485,18 +507,29 @@ if ($toolName -eq 'send_message' -and $null -ne $argsObj) {
     Emit-Allow
 }
 
-if ($toolName -eq 'invoke_subagent' -and $null -ne $argsObj -and $argsObj.PSObject.Properties['Subagents'] -and $null -ne $argsObj.Subagents) {
+if ($toolName -eq 'invoke_subagent' -and $null -ne $argsObj) {
+    $subList = @()
+    if ($argsObj.PSObject.Properties['Subagents'] -and $null -ne $argsObj.Subagents) {
+        $subList = @($argsObj.Subagents)
+    } elseif ($argsObj.PSObject.Properties['TypeName'] -or $argsObj.PSObject.Properties['Role'] -or $argsObj.PSObject.Properties['Prompt']) {
+        $subList = @($argsObj)
+    }
     $hasWebTaint = $false
     if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
         $taintSubPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
         if (Test-Path -LiteralPath $taintSubPath) { $hasWebTaint = $true }
     }
-    foreach ($sub in @($argsObj.Subagents)) {
+    foreach ($sub in $subList) {
         if ($null -eq $sub) { continue }
         if ($sub.PSObject.Properties['Prompt'] -and $null -ne $sub.Prompt) {
-            $pLines = @(([string]$sub.Prompt) -split "\r?\n")
+            $subPromptStr = [string]$sub.Prompt
+            $pLines = @($subPromptStr -split "\r?\n")
             if ($pLines.Count -gt 200) {
                 Emit-Deny 'subagent-mvc-prompt-cap' 'Subagent Prompt exceeds 200-line MVC cap; write context to scratch/ and pass the file path'
+            }
+            if (($subPromptStr -match '(sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AIzaSy[A-Za-z0-9_-]{33}|fc-[a-f0-9]{32}|tvly-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,})') -or
+                ($subPromptStr -match '(?i)(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)|<\s*system\s*>)')) {
+                Emit-Deny 'subagent-message-injection-guard' 'Blocked secret token or prompt-injection override directive in invoke_subagent Prompt'
             }
         }
         $subRole = ''

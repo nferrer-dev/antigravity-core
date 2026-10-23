@@ -2499,6 +2499,107 @@ class LiveTree(unittest.TestCase):
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("https://arxiv.org/abs/2404.18796", readme)
 
+    def test_coherence_bake_r3_f_agy_r3_01_to_05(self):
+        # F-AGY-R3-01: Native Antigravity 2.0 tool names in hooks.json and brc-guard.ps1
+        hooks_cfg = json.loads(
+            (REPO_ROOT / ".agents" / "hooks.json").read_text(encoding="utf-8")
+        )
+        matcher = hooks_cfg["brc-and-secret-guard"]["PreToolUse"][0]["matcher"]
+        self.assertIn("write_file", matcher)
+        self.assertIn("edit_file", matcher)
+        self.assertIn("read_file", matcher)
+
+        res_edit_secret = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "edit_file",
+                    "args": {"Path": "c:/Projects/app/.env", "Replacement": "X=1"},
+                }
+            }
+        )
+        self.assertEqual(json.loads(res_edit_secret.stdout.strip())["decision"], "deny")
+
+        # F-AGY-R3-02: Top-level invoke_subagent MAC least-privilege guard
+        res_sub_mac = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "invoke_subagent",
+                    "args": {
+                        "TypeName": "self",
+                        "Role": "Security Auditor",
+                        "Prompt": "Audit diff.",
+                    },
+                }
+            }
+        )
+        self.assertEqual(json.loads(res_sub_mac.stdout.strip())["decision"], "deny")
+
+        # F-AGY-R3-03: rubric_grade_gate.py non-compensatory veto & duplicate role rejection
+        rgg_dir = REPO_ROOT / ".agents" / "skills" / "comprehend-problem" / "scripts"
+        if str(rgg_dir) not in sys.path:
+            sys.path.insert(0, str(rgg_dir))
+        import rubric_grade_gate as rgg  # noqa: E402
+
+        mixed_panel = (
+            "<RUBRIC_SCORE>\n"
+            '{"stage": 3, "role": "R1", "verdict": "REJECT", "criteria": ['
+            '{"id": "c1", "evidence": "a", "score": 1},'
+            '{"id": "c2", "evidence": "a", "score": 3},'
+            '{"id": "c3", "evidence": "a", "score": 3}'
+            ']}\n</RUBRIC_SCORE>\n'
+            "<RUBRIC_SCORE>\n"
+            '{"stage": 3, "role": "R2", "verdict": "APPROVE", "criteria": ['
+            '{"id": "c1", "evidence": "a", "score": 3},'
+            '{"id": "c2", "evidence": "a", "score": 3},'
+            '{"id": "c3", "evidence": "a", "score": 3}'
+            ']}\n</RUBRIC_SCORE>'
+        )
+        res_mixed = rgg.evaluate_rubric_text(mixed_panel)
+        self.assertEqual(res_mixed["verdict"], "REJECT")
+
+        res_contradict = rgg.evaluate_rubric_text(mixed_panel + "\n[VERDICT: APPROVE]")
+        self.assertEqual(res_contradict["status"], "INVALID")
+        self.assertEqual(res_contradict["reason"], "prose_verdict_contradicts_rubric")
+
+        # F-AGY-R3-04: Rejected stage3 receipt must not unlock RequestFeedback=true
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            scratch = tmp_dir / "scratch"
+            scratch.mkdir()
+            (scratch / "stage0_spec.md").write_text("# Stage 0 OK\n", encoding="utf-8")
+            (scratch / "stage3_review.md").write_text(
+                "# Stage 3\n[VERDICT: REJECT]\n", encoding="utf-8"
+            )
+            res_lock = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(tmp_dir),
+                    "toolCall": {
+                        "name": "write_file",
+                        "args": {
+                            "Path": str(tmp_dir / "implementation_plan.md"),
+                            "Content": "# Plan",
+                            "ArtifactMetadata": {"RequestFeedback": True},
+                        },
+                    },
+                }
+            )
+            self.assertEqual(json.loads(res_lock.stdout.strip())["decision"], "deny")
+
+        # F-AGY-R3-05: coherence_bake_gate.py requires exhaustiveness_manifest on Mapping
+        cbg_dir = REPO_ROOT / ".agents" / "skills" / "coherence-bake" / "scripts"
+        if str(cbg_dir) not in sys.path:
+            sys.path.insert(0, str(cbg_dir))
+        import coherence_bake_gate as cbg  # noqa: E402
+
+        res_no_manifest = cbg.evaluate_bake_inputs(
+            {"contract_gaps": 0}, {"status": "SAT"}, {"findings": []}, REPO_ROOT
+        )
+        self.assertEqual(res_no_manifest["status"], "PROCEED_FIX")
+        self.assertEqual(
+            res_no_manifest["exhaustiveness_status"],
+            "incomplete_exhaustiveness_manifest",
+        )
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

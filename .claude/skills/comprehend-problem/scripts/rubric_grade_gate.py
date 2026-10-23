@@ -39,6 +39,10 @@ _CRITERION_OBJ_RE = re.compile(r"\{[^{}]*\}")
 _FILE_SPAN_RE = re.compile(
     r"^(?P<path>[^:#\s]+)(?::|#L)(?P<start>\d+)(?:-(?:L)?(?P<end>\d+))?$"
 )
+_PROSE_VERDICT_RE = re.compile(
+    r"\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]",
+    re.IGNORECASE,
+)
 
 
 def _is_strict_int(value: Any) -> bool:
@@ -295,6 +299,8 @@ def evaluate_rubric_payload(
     return {
         "status": "VALID",
         "reason": "ok",
+        "stage": int(payload["stage"]),
+        "role": str(payload["role"]).strip(),
         "verdict": verdict,
         "certificate_sha256": digest,
         **metrics,
@@ -317,6 +323,49 @@ def _evaluate_single_rubric_json(
     )
 
 
+def _aggregate_panel_verdict(
+    results: Sequence[Mapping[str, Any]],
+) -> str:
+    """Return non-compensatory panel verdict (HALT > REJECT > last)."""
+    verdicts = {str(r.get("verdict", "")).upper() for r in results}
+    if "HALT" in verdicts:
+        return "HALT"
+    if "REJECT" in verdicts:
+        return "REJECT"
+    return str(results[-1]["verdict"])
+
+
+def _has_duplicate_panel_role(
+    results: Sequence[Mapping[str, Any]],
+) -> bool:
+    """Return True if a multi-block panel repeats a (stage, role) pair."""
+    seen = set()
+    for r in results:
+        key = (
+            int(r.get("stage", -1)),
+            str(r.get("role", "")).strip().lower(),
+        )
+        if key in seen:
+            return True
+        seen.add(key)
+    return False
+
+
+def _check_panel_roles_and_prose(
+    results: Sequence[Mapping[str, Any]],
+    raw_text: str,
+) -> Optional[str]:
+    """Verify distinct panel roles and trailing prose verdict consistency."""
+    if len(results) > 1 and _has_duplicate_panel_role(results):
+        return "duplicate_panel_role"
+    prose_tags = _PROSE_VERDICT_RE.findall(raw_text)
+    if prose_tags:
+        panel_verdict = _aggregate_panel_verdict(results)
+        if prose_tags[-1].strip().upper() != panel_verdict:
+            return "prose_verdict_contradicts_rubric"
+    return None
+
+
 def _combine_valid_rubric_results(
     results: Sequence[Mapping[str, Any]],
 ) -> Dict[str, Any]:
@@ -330,7 +379,7 @@ def _combine_valid_rubric_results(
     return {
         "status": "VALID",
         "reason": "ok",
-        "verdict": str(results[-1]["verdict"]),
+        "verdict": _aggregate_panel_verdict(results),
         "block_count": len(results),
         "certificate_sha256": panel_cert,
         "min_score": min(int(r["min_score"]) for r in results),
@@ -355,6 +404,9 @@ def evaluate_rubric_text(
             res["failed_block_index"] = idx
             return res
         valid_results.append(res)
+    panel_err = _check_panel_roles_and_prose(valid_results, raw_text)
+    if panel_err is not None:
+        return {"status": "INVALID", "reason": panel_err}
     return _combine_valid_rubric_results(valid_results)
 
 
@@ -476,9 +528,17 @@ def run_self_test() -> Tuple[int, List[str]]:
         res_ok = evaluate_rubric_text(good_txt, repo_root=repo_root)
         if res_ok.get("status") != "VALID":
             return 1, [f"Expected VALID, got {res_ok}"]
-        panel_ok = evaluate_rubric_text(good_txt + "\n" + good_txt, repo_root=repo_root)
+        good_txt_2 = good_txt.replace('"System Architect"', '"Idea Skeptic"')
+        panel_ok = evaluate_rubric_text(
+            good_txt + "\n" + good_txt_2, repo_root=repo_root
+        )
         if panel_ok.get("status") != "VALID" or panel_ok.get("block_count") != 2:
             return 1, [f"Expected 2-block VALID panel, got {panel_ok}"]
+        dup_res = evaluate_rubric_text(
+            good_txt + "\n" + good_txt, repo_root=repo_root
+        )
+        if dup_res.get("reason") != "duplicate_panel_role":
+            return 1, [f"Expected duplicate_panel_role, got {dup_res}"]
         if derive_stage0_tier(1, False, True, False, False) != "TIER_2":
             return 1, ["Anti-Loophole tier routing check failed"]
 

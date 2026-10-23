@@ -110,15 +110,19 @@ function Get-WriteContentString {
     param($ArgsObj)
     if ($null -eq $ArgsObj) { return '' }
     $parts = New-Object System.Collections.Generic.List[string]
-    foreach ($cf in @('CodeContent', 'ReplacementContent', 'new_string', 'content')) {
+    foreach ($cf in @('CodeContent', 'ReplacementContent', 'Replacement', 'new_string', 'content')) {
         if ($ArgsObj.PSObject.Properties[$cf] -and $null -ne $ArgsObj.$cf) {
             $parts.Add([string]$ArgsObj.$cf)
         }
     }
     if ($ArgsObj.PSObject.Properties['edits'] -and $null -ne $ArgsObj.edits) {
         foreach ($ed in @($ArgsObj.edits)) {
-            if ($null -ne $ed -and $ed.PSObject.Properties['new_string'] -and $null -ne $ed.new_string) {
-                $parts.Add([string]$ed.new_string)
+            if ($null -ne $ed) {
+                foreach ($ef in @('new_string', 'Replacement', 'ReplacementContent')) {
+                    if ($ed.PSObject.Properties[$ef] -and $null -ne $ed.$ef) {
+                        $parts.Add([string]$ed.$ef)
+                    }
+                }
             }
         }
     }
@@ -127,7 +131,7 @@ function Get-WriteContentString {
 
 # ---- Check file-access tools (Read, Edit, Write, MultiEdit) ----
 $filePath = ''
-foreach ($pf in @('file_path', 'path', 'notebook_path')) {
+foreach ($pf in @('file_path', 'path', 'Path', 'notebook_path', 'TargetFile', 'AbsolutePath')) {
     if ($toolInput.PSObject.Properties[$pf] -and $null -ne $toolInput.$pf) {
         $filePath = [string]$toolInput.$pf
         break
@@ -224,10 +228,11 @@ function Test-MissingStage0Artifact {
         if (Test-Path -LiteralPath $scratchDir) {
             $hits = @(Get-ChildItem -LiteralPath $scratchDir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object {
                 if ($_.Length -le 0) { return $false }
+                $rawBody = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
                 if ($_.Extension -ieq '.json') {
-                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
-                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
+                    if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
                 }
+                if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
                 return $true
             })
             if ($hits.Count -gt 0) { return $false }
@@ -235,10 +240,11 @@ function Test-MissingStage0Artifact {
         if (Test-Path -LiteralPath $dir) {
             $rootHits = @(Get-ChildItem -LiteralPath $dir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object {
                 if ($_.Length -le 0) { return $false }
+                $rawBody = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
                 if ($_.Extension -ieq '.json') {
-                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
-                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
+                    if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
                 }
+                if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
                 return $true
             })
             if ($rootHits.Count -gt 0) { return $false }
@@ -268,6 +274,9 @@ function Test-InvalidRubricScoreBlock {
     if ($blockMatches.Count -eq 0) { return $false }
     $validVerdicts = @('APPROVE', 'REJECT', 'PROCEED', 'HALT', 'TIER_0', 'TIER_1', 'TIER_2')
     $lastVerdict = ''
+    $hasReject = $false
+    $hasHalt = $false
+    $seenPanelRoles = @{}
     foreach ($bm in $blockMatches) {
         $rawJson = $bm.Groups[1].Value
         $critMatches = [regex]::Matches($rawJson, '\{[^{}]*\}')
@@ -297,12 +306,19 @@ function Test-InvalidRubricScoreBlock {
         if (-not $obj.PSObject.Properties['role'] -or [string]::IsNullOrWhiteSpace([string]$obj.role)) {
             return $true
         }
+        $roleKey = "$stageVal|" + ([string]$obj.role).Trim().ToLowerInvariant()
+        if ($blockMatches.Count -gt 1) {
+            if ($seenPanelRoles.ContainsKey($roleKey)) { return $true }
+            $seenPanelRoles[$roleKey] = $true
+        }
         if (-not $obj.PSObject.Properties['verdict'] -or [string]::IsNullOrWhiteSpace([string]$obj.verdict)) {
             return $true
         }
         $verdict = ([string]$obj.verdict).Trim().ToUpperInvariant()
         if ($verdict -notin $validVerdicts) { return $true }
         $lastVerdict = $verdict
+        if ($verdict -eq 'REJECT') { $hasReject = $true }
+        if ($verdict -eq 'HALT') { $hasHalt = $true }
         $critList = @($obj.criteria)
         $minCrit = if ($stageVal -eq 0) { 1 } else { 3 }
         if ($critList.Count -lt $minCrit) { return $true }
@@ -342,9 +358,11 @@ function Test-InvalidRubricScoreBlock {
             if ($actualMin -ge 2 -and $actualTotal -ge $effThr) { return $true }
         }
     }
-    if ($blockMatches.Count -eq 1 -and ($Text -match '\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]')) {
-        $proseVerdict = $Matches[1].Trim().ToUpperInvariant()
-        if ($proseVerdict -ne $lastVerdict) { return $true }
+    $panelVerdict = if ($hasHalt) { 'HALT' } elseif ($hasReject) { 'REJECT' } else { $lastVerdict }
+    $proseMatches = [regex]::Matches($Text, '\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]')
+    if ($proseMatches.Count -gt 0) {
+        $proseVerdict = $proseMatches[$proseMatches.Count - 1].Groups[1].Value.Trim().ToUpperInvariant()
+        if ($proseVerdict -ne $panelVerdict) { return $true }
     }
     return $false
 }
@@ -361,7 +379,7 @@ if ($filePath -ne '') {
             Deny 'secret-file-access' $filePath
         }
     }
-    if ($toolName -match '^(Edit|Write|MultiEdit)$') {
+    if ($toolName -match '^(Edit|Write|MultiEdit|write_to_file|write_file|(?:multi_)?replace_file_content|edit_file)$') {
         if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
             ($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|CLAUDE\.md|AGENTS\.md|CODEX\.md|config\.toml|antigravity\.rules|agentic_telemetry\.md)$')) {
             Deny 'harness-config-self-tampering' $filePath
@@ -373,7 +391,7 @@ if ($filePath -ne '') {
         if (Test-MissingStage0Artifact $filePath $payload) {
             Deny 'stage0-comprehend-problem-gate' 'Run comprehend-problem (.claude/skills/comprehend-problem/SKILL.md) and write non-empty scratch/stage0_<topic>.md or .json (with SAT status) before writing implementation_plan.md'
         }
-        if (($toolName -eq 'Write') -and (Test-Stage1CandidateSolutionsGate $filePath $toolInput)) {
+        if (($toolName -match '^(Write|write_to_file|write_file)$') -and (Test-Stage1CandidateSolutionsGate $filePath $toolInput)) {
             Deny 'stage1-candidate-solutions-gate' 'candidate_solutions.md must include all 3 cognitive framing lenses (Radical Innovator, Enterprise Minimalist, Security Paranoiac)'
         }
         if (Test-InvalidRubricScoreBlock (Get-WriteContentString $toolInput)) {
@@ -391,6 +409,49 @@ if ($filePath -ne '') {
     }
 }
 
+if ($toolName -match '^(Agent|Task|spawn_agent)$') {
+    $subPrompt = ''
+    foreach ($mf in @('prompt', 'Prompt', 'message')) {
+        if ($toolInput.PSObject.Properties[$mf] -and $null -ne $toolInput.$mf) {
+            $subPrompt = [string]$toolInput.$mf
+            break
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($subPrompt)) {
+        $pLines = @($subPrompt -split "\r?\n")
+        if ($pLines.Count -gt 200) {
+            Deny 'subagent-mvc-prompt-cap' 'Subagent prompt exceeds 200-line MVC cap; write context to scratch/ and pass the file path'
+        }
+        if (($subPrompt -match '(sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AIzaSy[A-Za-z0-9_-]{33}|fc-[a-f0-9]{32}|tvly-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,})') -or
+            ($subPrompt -match '(?i)(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)|<\s*system\s*>)')) {
+            Deny 'subagent-message-injection-guard' 'Blocked secret token or prompt-injection override directive in subagent prompt'
+        }
+    }
+    $subType = ''
+    foreach ($tf in @('subagent_type', 'agent_type', 'TypeName')) {
+        if ($toolInput.PSObject.Properties[$tf] -and $null -ne $toolInput.$tf) {
+            $subType = [string]$toolInput.$tf
+            break
+        }
+    }
+    $subRole = ''
+    foreach ($rf in @('description', 'role', 'Role')) {
+        if ($toolInput.PSObject.Properties[$rf] -and $null -ne $toolInput.$rf) {
+            $subRole = [string]$toolInput.$rf
+            break
+        }
+    }
+    if ($subType -ieq 'self' -and $subRole -match '(?i)(Style Expert|Security Auditor|Code Health Agent|Idea Skeptic|System Architect|Requirements Engineer|Scope Reviewer|Cortex Librarian|Codebase Explorer)') {
+        Deny 'subagent-role-least-privilege' "Read-only auditor/explorer role '$subRole' must not be spawned with write-capable subagent_type='self'"
+    }
+    if ($subType -match '(?i)^(stage3-design-reviewer|stage4-code-auditor|cortex-librarian|explorer)$') {
+        if ($subPrompt -match '(?i)\b(apply_patch|git\s+commit|git\s+push|rm\s+-rf|Remove-Item)\b') {
+            Deny 'subagent-role-least-privilege' "Read-only subagent '$subType' must not be instructed to mutate files or git state"
+        }
+    }
+    exit 0
+}
+
 if ($toolName -match '^(SendMessage|send_message)$') {
     $msgText = ''
     foreach ($mf in @('message', 'Message', 'content')) {
@@ -399,8 +460,18 @@ if ($toolName -match '^(SendMessage|send_message)$') {
             break
         }
     }
-    if (Test-InvalidRubricScoreBlock $msgText) {
-        Deny 'rubric-score-threshold-gate' 'RUBRIC_SCORE block in SendMessage failed validation (require evidence before score, min_score >= 2, and total_score >= threshold for APPROVE/PROCEED)'
+    if (-not [string]::IsNullOrWhiteSpace($msgText)) {
+        $mLines = @($msgText -split "\r?\n")
+        if ($mLines.Count -gt 200) {
+            Deny 'subagent-mvc-prompt-cap' 'SendMessage payload exceeds 200-line MVC cap; write context to scratch/ and pass the file path'
+        }
+        if (($msgText -match '(sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AIzaSy[A-Za-z0-9_-]{33}|fc-[a-f0-9]{32}|tvly-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,})') -or
+            ($msgText -match '(?i)(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)|<\s*system\s*>)')) {
+            Deny 'subagent-message-injection-guard' 'Blocked secret token or prompt-injection override directive in SendMessage'
+        }
+        if (Test-InvalidRubricScoreBlock $msgText) {
+            Deny 'rubric-score-threshold-gate' 'RUBRIC_SCORE block in SendMessage failed validation (require evidence before score, min_score >= 2, and total_score >= threshold for APPROVE/PROCEED)'
+        }
     }
     exit 0
 }

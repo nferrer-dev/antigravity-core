@@ -614,6 +614,53 @@ class LiveTree(unittest.TestCase):
             for req_key in ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"'):
                 self.assertIn(req_key, ag_txt, "%s missing %s" % (agent_name, req_key))
 
+    def test_coherence_bake_r3_f_agy_r3_01_to_05_claude(self):
+        settings = json.loads(
+            (REPO_ROOT / ".claude" / "settings.json").read_text(encoding="utf-8")
+        )
+        matcher = settings["hooks"]["PreToolUse"][0]["matcher"]
+        self.assertIn("write_file", matcher)
+        self.assertIn("edit_file", matcher)
+        self.assertIn("Agent", matcher)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            res_agent = self._run_claude_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Agent",
+                    "tool_input": {
+                        "subagent_type": "self",
+                        "description": "Security Auditor",
+                        "prompt": "Audit diff.",
+                    },
+                }
+            )
+            self.assertEqual(res_agent.returncode, 2)
+
+            dup_role = (
+                "<RUBRIC_SCORE>\n"
+                '{"stage": 3, "role": "R1", "verdict": "APPROVE", "criteria": ['
+                '{"id": "c1", "evidence": "a", "score": 3},'
+                '{"id": "c2", "evidence": "a", "score": 3},'
+                '{"id": "c3", "evidence": "a", "score": 3}'
+                "]}\n</RUBRIC_SCORE>\n"
+                "<RUBRIC_SCORE>\n"
+                '{"stage": 3, "role": "R1", "verdict": "APPROVE", "criteria": ['
+                '{"id": "c1", "evidence": "a", "score": 3},'
+                '{"id": "c2", "evidence": "a", "score": 3},'
+                '{"id": "c3", "evidence": "a", "score": 3}'
+                "]}\n</RUBRIC_SCORE>"
+            )
+            res_dup = self._run_claude_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "SendMessage",
+                    "tool_input": {"message": dup_role},
+                }
+            )
+            self.assertEqual(res_dup.returncode, 2)
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

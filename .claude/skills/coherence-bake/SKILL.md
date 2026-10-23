@@ -34,7 +34,7 @@ Every `coherence-bake` cycle evaluates the target repository across four mandato
     ```bash
     python ~/.claude/skills/comprehend-problem/scripts/structural_graph_polyfill.py <target_dir> <scratch_dir>/stage0_coherence_bake_ast.json --high-complexity
     ```
-2. **Uncapped Exhaustive Discovery (No Top-N Truncation)**: Trace every producer-consumer boundary, high-complexity function (`complexity >= 10`), and database/IPC hot path across the codebase using Grep and Read. Never cap discovery at an arbitrary count; enumerate all verified findings in a single pass.
+2. **Uncapped Exhaustive 4-Surface Matrix Discovery (No Top-N Truncation)**: Audit all four orthogonal producer-consumer surfaces upfront in Round 1 (`config_to_runtime_hooks`, `prompt_to_gate_schemas`, `single_to_multi_composition`, and `cross_tree_and_doc_parity`), along with every producer-consumer boundary, high-complexity function (`complexity >= 10`), and database/IPC hot path across the codebase using Grep and Read. Never cap discovery at an arbitrary count; enumerate all verified findings in a single pass.
 3. Record only concrete, execution-grounded `COHERENCE_CONTRACT`, `SYSTEM_DESIGN`, and `OPTIMIZATION` findings with exact `file_and_line` coordinates, a `reproducible_check`, and `rubric_scores` (`>= 3` criteria on `0..3` BARS with `min >= 2` and `sum >= ceil(0.75 * 3 * n)`).
 
 ### Phase 2: Formal State-Machine & Invariant Verification (Z3 / SMT)
@@ -54,7 +54,7 @@ Every `coherence-bake` cycle evaluates the target repository across four mandato
 
 ### Phase 4: Deterministic Diminishing-Returns Gate (`coherence_bake_gate.py`)
 
-1. Write all candidate findings and the `exhaustiveness_manifest` (`uncapped_discovery: true`, `full_suite_executed: true`, `closed_loop_reaudit: true`, `test_failures: 0`, `invariant_violations: 0`) to `<scratch_dir>/coherence_bake_findings.json`. Each finding MUST specify:
+1. Write all candidate findings and the required `exhaustiveness_manifest` (`uncapped_discovery: true`, `full_suite_executed: true`, `closed_loop_reaudit: true`, `independent_redteam_reaudit: true`, `surfaces_audited: {"config_to_runtime_hooks": true, "prompt_to_gate_schemas": true, "single_to_multi_composition": true, "cross_tree_and_doc_parity": true}`, `test_failures: 0`, `invariant_violations: 0`) to `<scratch_dir>/coherence_bake_findings.json`. Each finding MUST specify:
     - `id`, `category` (`COHERENCE_CONTRACT` | `SYSTEM_DESIGN` | `OPTIMIZATION` | `SOTA_BENCHMARK`),
     - `file_and_line` (`<rel_or_abs_path>:<start_line>-<end_line>` inside the repository),
     - `reproducible_check` and `falsifiable_fix`,
@@ -70,7 +70,7 @@ Every `coherence-bake` cycle evaluates the target repository across four mandato
 ### Phase 5: Automatic Closed-Loop Execution & Re-Verification (Capped at 3 Rounds)
 
 1. Route the surviving `verified_findings` through `Stage 2 (technical-debate) -> Stage 3 (design-validate) -> Agentic TDD (Red/Green/Refactor) -> Stage 4 (iterative-implement)`.
-2. Immediately re-run the full test suite, live invariant sweep, and Phase 4 (`coherence_bake_gate.py`) in the same session (maximum 3 bake rounds) until `status == "AIRTIGHT_HALT"` is achieved before claiming completion.
+2. Immediately re-run the full test suite, spawn an **Independent Zero-Context Red-Team Re-Audit Subagent** (`independent_redteam_reaudit: true`, grounded in Kamoi et al., TACL 2024, `https://arxiv.org/abs/2406.01297` and Huang et al., ICLR 2024, `https://arxiv.org/abs/2310.01798`) to attempt to falsify all 4 surfaces in `surfaces_audited`, and re-run Phase 4 (`coherence_bake_gate.py`) in the same session (maximum 3 bake rounds) until `status == "AIRTIGHT_HALT"` is achieved before claiming completion.
 
 ## 3. Quarantined Edge Cases
 

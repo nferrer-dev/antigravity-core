@@ -31,6 +31,12 @@ VALID_CATEGORIES: Tuple[str, ...] = (
     "OPTIMIZATION",
     "SOTA_BENCHMARK",
 )
+REQUIRED_AUDIT_SURFACES: Tuple[str, ...] = (
+    "config_to_runtime_hooks",
+    "prompt_to_gate_schemas",
+    "single_to_multi_composition",
+    "cross_tree_and_doc_parity",
+)
 
 _FILE_LINE_RE = re.compile(r"^(?P<path>.+?):(?P<start>\d+)(?:-(?P<end>\d+))?$")
 _MD_IMAGE_EXFIL_RE = re.compile(r"!\[[^\]]*\]\(\s*https?://", re.IGNORECASE)
@@ -287,24 +293,37 @@ def _count_unconstrained_vars(z3_data: Mapping[str, Any]) -> int:
     return 0 if unconstrained is None else 1
 
 
-def _check_exhaustiveness_manifest(manifest: Any) -> str:
-    """Validate optional exhaustiveness_manifest dict."""
+def _has_valid_audit_surfaces(surfaces: Any) -> bool:
+    """Return True if surfaces maps all 4 required audit surfaces to True."""
+    if not isinstance(surfaces, Mapping):
+        return False
+    return all(surfaces.get(key) is True for key in REQUIRED_AUDIT_SURFACES)
+
+
+def _check_exhaustiveness_manifest(
+    manifest: Any,
+    require_manifest: bool = False,
+) -> str:
+    """Validate exhaustiveness_manifest dict for 4-surface and red-team closure."""
     if manifest is None:
-        return "ok"
+        return "incomplete_exhaustiveness_manifest" if require_manifest else "ok"
     if not isinstance(manifest, Mapping):
         return "incomplete_exhaustiveness_manifest"
-    bool_flags = (
-        manifest.get("uncapped_discovery") is True
-        and manifest.get("full_suite_executed") is True
-        and manifest.get("closed_loop_reaudit") is True
+    req_bools = (
+        "uncapped_discovery",
+        "full_suite_executed",
+        "closed_loop_reaudit",
+        "independent_redteam_reaudit",
     )
+    if not all(manifest.get(k) is True for k in req_bools):
+        return "incomplete_exhaustiveness_manifest"
+    if not _has_valid_audit_surfaces(manifest.get("surfaces_audited")):
+        return "incomplete_exhaustiveness_manifest"
     zero_counts = (
         _non_negative_count(manifest.get("test_failures", 0)) == 0
         and _non_negative_count(manifest.get("invariant_violations", 0)) == 0
     )
-    if bool_flags and zero_counts:
-        return "ok"
-    return "incomplete_exhaustiveness_manifest"
+    return "ok" if zero_counts else "incomplete_exhaustiveness_manifest"
 
 
 def _extract_findings_and_manifest(
@@ -321,10 +340,14 @@ def _extract_findings_and_manifest(
             findings_payload.get("candidate_items", []),
         )
         raw_list = list(items) if isinstance(items, list) else []
-        return raw_list, _check_exhaustiveness_manifest(manifest)
+        return raw_list, _check_exhaustiveness_manifest(
+            manifest, require_manifest=True
+        )
     if isinstance(findings_payload, list):
-        return list(findings_payload), _check_exhaustiveness_manifest(manifest)
-    return [], _check_exhaustiveness_manifest(manifest)
+        return list(findings_payload), _check_exhaustiveness_manifest(
+            manifest, require_manifest=False
+        )
+    return [], _check_exhaustiveness_manifest(manifest, require_manifest=False)
 
 
 def _partition_findings(

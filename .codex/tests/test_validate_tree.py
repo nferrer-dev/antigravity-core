@@ -576,6 +576,44 @@ class LiveTree(unittest.TestCase):
             for req_key in ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"'):
                 self.assertIn(req_key, ag_txt, "%s missing %s" % (agent_name, req_key))
 
+    def test_coherence_bake_r3_f_agy_r3_01_to_05_codex(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            res_edit = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "edit_file",
+                    "tool_input": {
+                        "Path": str(tmp_path / ".env"),
+                        "Replacement": "SECRET=1",
+                    },
+                }
+            )
+            self.assertEqual(res_edit.returncode, 2)
+
+            dup_role = (
+                "<RUBRIC_SCORE>\n"
+                '{"stage": 3, "role": "R1", "verdict": "APPROVE", "criteria": ['
+                '{"id": "c1", "evidence": "a", "score": 3},'
+                '{"id": "c2", "evidence": "a", "score": 3},'
+                '{"id": "c3", "evidence": "a", "score": 3}'
+                "]}\n</RUBRIC_SCORE>\n"
+                "<RUBRIC_SCORE>\n"
+                '{"stage": 3, "role": "R1", "verdict": "APPROVE", "criteria": ['
+                '{"id": "c1", "evidence": "a", "score": 3},'
+                '{"id": "c2", "evidence": "a", "score": 3},'
+                '{"id": "c3", "evidence": "a", "score": 3}'
+                "]}\n</RUBRIC_SCORE>"
+            )
+            res_dup = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "send_input",
+                    "tool_input": {"message": dup_role},
+                }
+            )
+            self.assertEqual(res_dup.returncode, 2)
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):
