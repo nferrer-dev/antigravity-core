@@ -452,6 +452,56 @@ class LiveTree(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
 
+    def test_rubric_grade_gate_and_brc_hook(self):
+        import tempfile
+
+        rubric_py = (
+            REPO_ROOT
+            / ".codex"
+            / "skills"
+            / "comprehend-problem"
+            / "scripts"
+            / "rubric_grade_gate.py"
+        )
+        self.assertTrue(rubric_py.is_file())
+        res = subprocess.run(
+            [sys.executable, str(rubric_py), "--self-test"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bad_rubric = (
+                "<RUBRIC_SCORE>\n"
+                "{\n"
+                '  "stage": 3,\n'
+                '  "role": "System Architect",\n'
+                '  "verdict": "APPROVE",\n'
+                '  "criteria": [\n'
+                '    {"id": "c1", "evidence": "src/a.py:1-2", "score": 1},\n'
+                '    {"id": "c2", "evidence": "src/a.py:3-4", "score": 3},\n'
+                '    {"id": "c3", "evidence": "src/a.py:5-6", "score": 3}\n'
+                "  ],\n"
+                '  "min_score": 1,\n'
+                '  "total_score": 7,\n'
+                '  "threshold": 7\n'
+                "}\n"
+                "</RUBRIC_SCORE>\n"
+            )
+            res_bad = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "send_input",
+                    "tool_input": {"message": bad_rubric},
+                }
+            )
+            self.assertEqual(res_bad.returncode, 2)
+            self.assertIn("rubric-score-threshold-gate", res_bad.stderr)
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

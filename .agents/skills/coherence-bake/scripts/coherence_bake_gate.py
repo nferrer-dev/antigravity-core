@@ -7,8 +7,9 @@ proofs, and candidate findings across four first-class dimensions:
 3. OPTIMIZATION (asymptotic complexity, query plans, vectorization & I/O)
 4. SOTA_BENCHMARK (peer-reviewed literature & production OSS benchmarks)
 
-Rejects speculative or sub-epsilon findings and emits either `AIRTIGHT_HALT`
-(when the point of diminishing returns is reached) or `PROCEED_FIX`.
+Rejects speculative, sub-epsilon, or rubric-deficient findings and emits either
+`AIRTIGHT_HALT` (when the point of diminishing returns is reached with an
+exhaustive audit manifest) or `PROCEED_FIX`.
 
 Usage:
     python coherence_bake_gate.py <ast> <z3> <findings> <out> --repo-root <d>
@@ -17,6 +18,7 @@ Usage:
 import argparse
 import hashlib
 import json
+import math
 import re
 import sys
 import tempfile
@@ -198,6 +200,49 @@ def _check_sota_fields(normalized: Mapping[str, Any]) -> Optional[str]:
     return None
 
 
+def _is_valid_bars_int(val: Any) -> bool:
+    """Return True if val is an integer in 0..3 and not a boolean."""
+    return not isinstance(val, bool) and isinstance(val, int) and 0 <= val <= 3
+
+
+def _check_rubric_scores(normalized: Mapping[str, Any]) -> Optional[str]:
+    """Validate optional BARS rubric_scores on a candidate finding."""
+    rubric = normalized.get("rubric_scores")
+    if rubric is None:
+        return None
+    if not isinstance(rubric, Mapping) or len(rubric) < 3:
+        return "finding_rubric_below_threshold"
+    values = list(rubric.values())
+    if not all(_is_valid_bars_int(val) for val in values):
+        return "finding_rubric_below_threshold"
+    scores = [int(val) for val in values]
+    min_req = int(math.ceil(0.75 * 3.0 * len(scores)))
+    if min(scores) < 2 or sum(scores) < min_req:
+        return "finding_rubric_below_threshold"
+    return None
+
+
+def _check_all_finding_constraints(
+    normalized: Dict[str, Any],
+) -> Optional[str]:
+    """Run smuggled content, flag, SOTA, and rubric checks on a finding."""
+    if _inspect_strings_recursive(normalized):
+        return "smuggled_unicode_or_markdown_exfil"
+    err = _check_finding_flags(normalized)
+    if err is not None:
+        return err
+    err = _check_sota_fields(normalized)
+    if err is not None:
+        return err
+    err = _check_rubric_scores(normalized)
+    if err is not None:
+        return err
+    sha_anchor = normalized.get("sha256_anchor")
+    if sha_anchor is not None and not isinstance(sha_anchor, str):
+        return "invalid_sha256_anchor_type"
+    return None
+
+
 def validate_finding(
     item: Any,
     repo_root: Path,
@@ -208,23 +253,14 @@ def validate_finding(
         return False, "finding_not_an_object", {"raw": str(item)}
 
     normalized = dict(item)
-    if _inspect_strings_recursive(normalized):
-        return False, "smuggled_unicode_or_markdown_exfil", normalized
-
-    flag_err = _check_finding_flags(normalized) or _check_sota_fields(
-        normalized
-    )
-    if flag_err is not None:
-        return False, flag_err, normalized
-
-    sha_anchor = normalized.get("sha256_anchor")
-    if sha_anchor is not None and not isinstance(sha_anchor, str):
-        return False, "invalid_sha256_anchor_type", normalized
+    err = _check_all_finding_constraints(normalized)
+    if err is not None:
+        return False, err, normalized
 
     ok_loc, loc_reason = validate_file_and_line(
         str(normalized.get("file_and_line", "")),
         repo_root=repo_root,
-        sha256_anchor=sha_anchor,
+        sha256_anchor=normalized.get("sha256_anchor"),
         line_cache=line_cache,
     )
     if not ok_loc:
@@ -243,17 +279,52 @@ def _non_negative_count(value: Any) -> int:
     return abs(parsed)
 
 
-def _extract_raw_findings(findings_payload: Any) -> List[Any]:
-    """Extract candidate finding list from a dict or list payload."""
+def _count_unconstrained_vars(z3_data: Mapping[str, Any]) -> int:
+    """Return the count of unconstrained Z3 state variables."""
+    unconstrained = z3_data.get("unconstrained_variables", [])
+    if isinstance(unconstrained, (list, tuple)):
+        return len(unconstrained)
+    return 0 if unconstrained is None else 1
+
+
+def _check_exhaustiveness_manifest(manifest: Any) -> str:
+    """Validate optional exhaustiveness_manifest dict."""
+    if manifest is None:
+        return "ok"
+    if not isinstance(manifest, Mapping):
+        return "incomplete_exhaustiveness_manifest"
+    bool_flags = (
+        manifest.get("uncapped_discovery") is True
+        and manifest.get("full_suite_executed") is True
+        and manifest.get("closed_loop_reaudit") is True
+    )
+    zero_counts = (
+        _non_negative_count(manifest.get("test_failures", 0)) == 0
+        and _non_negative_count(manifest.get("invariant_violations", 0)) == 0
+    )
+    if bool_flags and zero_counts:
+        return "ok"
+    return "incomplete_exhaustiveness_manifest"
+
+
+def _extract_findings_and_manifest(
+    ast_data: Mapping[str, Any],
+    findings_payload: Any,
+) -> Tuple[List[Any], str]:
+    """Extract candidate finding list and validate exhaustiveness_manifest."""
+    manifest = ast_data.get("exhaustiveness_manifest")
     if isinstance(findings_payload, Mapping):
+        if manifest is None:
+            manifest = findings_payload.get("exhaustiveness_manifest")
         items = findings_payload.get(
             "findings",
             findings_payload.get("candidate_items", []),
         )
-        return list(items) if isinstance(items, list) else []
+        raw_list = list(items) if isinstance(items, list) else []
+        return raw_list, _check_exhaustiveness_manifest(manifest)
     if isinstance(findings_payload, list):
-        return list(findings_payload)
-    return []
+        return list(findings_payload), _check_exhaustiveness_manifest(manifest)
+    return [], _check_exhaustiveness_manifest(manifest)
 
 
 def _partition_findings(
@@ -295,19 +366,16 @@ def evaluate_bake_inputs(
     findings_payload: Any,
     repo_root: Path,
 ) -> Dict[str, Any]:
-    """Evaluate AST audit, Z3 proof, and candidate findings."""
+    """Evaluate AST audit, Z3 proof, exhaustiveness manifest, and findings."""
     ast_contract_gaps = _non_negative_count(
         ast_data.get("contract_gaps", 0)
     ) + _non_negative_count(ast_data.get("unindexed_hot_paths", 0))
     z3_status = str(z3_data.get("status", "SAT")).strip().upper()
-    unconstrained = z3_data.get("unconstrained_variables", [])
-    z3_unconstrained_count = (
-        len(unconstrained)
-        if isinstance(unconstrained, (list, tuple))
-        else (0 if unconstrained is None else 1)
-    )
+    z3_unconstrained_count = _count_unconstrained_vars(z3_data)
 
-    raw_items = _extract_raw_findings(findings_payload)
+    raw_items, exhaustiveness_status = _extract_findings_and_manifest(
+        ast_data, findings_payload
+    )
     verified, rejected, by_category = _partition_findings(raw_items, repo_root)
 
     is_airtight = (
@@ -315,6 +383,7 @@ def evaluate_bake_inputs(
         and ast_contract_gaps == 0
         and z3_status == "SAT"
         and z3_unconstrained_count == 0
+        and exhaustiveness_status == "ok"
     )
     status = "AIRTIGHT_HALT" if is_airtight else "PROCEED_FIX"
 
@@ -324,6 +393,7 @@ def evaluate_bake_inputs(
             "ast_contract_gaps": ast_contract_gaps,
             "z3_status": z3_status,
             "z3_unconstrained_count": z3_unconstrained_count,
+            "exhaustiveness_status": exhaustiveness_status,
             "verified_findings": verified,
             "rejected_count": len(rejected),
         },
@@ -341,6 +411,7 @@ def evaluate_bake_inputs(
         "ast_contract_gaps": ast_contract_gaps,
         "z3_status": z3_status,
         "z3_unconstrained_count": z3_unconstrained_count,
+        "exhaustiveness_status": exhaustiveness_status,
         "verified_findings_count": len(verified),
         "rejected_speculative_count": len(rejected),
         "verified_by_category": by_category,
@@ -363,7 +434,7 @@ def _write_json_file(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def _build_bad_test_findings() -> List[Dict[str, Any]]:
-    """Return 6 invalid findings exercising all rejection gates."""
+    """Return 7 invalid findings exercising all rejection gates."""
     return [
         {
             "id": "SPEC-1",
@@ -421,6 +492,16 @@ def _build_bad_test_findings() -> List[Dict[str, Any]]:
             "is_speculative": False,
             "measurable_gain_above_epsilon": True,
         },
+        {
+            "id": "RUBRIC-LOW-1",
+            "category": "SYSTEM_DESIGN",
+            "file_and_line": "src/engine.py:1-2",
+            "reproducible_check": "pytest",
+            "falsifiable_fix": "Fix design",
+            "is_speculative": False,
+            "measurable_gain_above_epsilon": True,
+            "rubric_scores": {"c1": 1, "c2": 3, "c3": 3},
+        },
     ]
 
 
@@ -436,6 +517,7 @@ def _build_good_test_findings(anchor_1_2: str) -> List[Dict[str, Any]]:
             "falsifiable_fix": "Hydrate missing producer field",
             "is_speculative": False,
             "measurable_gain_above_epsilon": True,
+            "rubric_scores": {"c1": 3, "c2": 3, "c3": 3},
         },
         {
             "id": "DES-1",
@@ -445,6 +527,7 @@ def _build_good_test_findings(anchor_1_2: str) -> List[Dict[str, Any]]:
             "falsifiable_fix": "Decouple cyclic lock boundary",
             "is_speculative": False,
             "measurable_gain_above_epsilon": True,
+            "rubric_scores": {"c1": 3, "c2": 2, "c3": 3},
         },
         {
             "id": "OPT-1",
@@ -454,6 +537,7 @@ def _build_good_test_findings(anchor_1_2: str) -> List[Dict[str, Any]]:
             "falsifiable_fix": "Replace O(N^2) scan with batch index",
             "is_speculative": False,
             "measurable_gain_above_epsilon": True,
+            "rubric_scores": {"c1": 3, "c2": 3, "c3": 2},
         },
         {
             "id": "SOTA-1",
@@ -467,6 +551,7 @@ def _build_good_test_findings(anchor_1_2: str) -> List[Dict[str, Any]]:
             "falsifiable_fix": "Gate refinement on deterministic verifier",
             "is_speculative": False,
             "measurable_gain_above_epsilon": True,
+            "rubric_scores": {"c1": 3, "c2": 3, "c3": 3},
         },
     ]
 
@@ -493,8 +578,8 @@ def run_self_test() -> Tuple[int, List[str]]:
         res_bad = evaluate_bake_inputs(
             ast_ok, z3_ok, _build_bad_test_findings(), repo_root
         )
-        if res_bad["rejected_speculative_count"] != 6:
-            return 1, [f"Expected 6 rejected findings, got {res_bad}"]
+        if res_bad["rejected_speculative_count"] != 7:
+            return 1, [f"Expected 7 rejected findings, got {res_bad}"]
 
         anchor = compute_slice_sha256(engine_py, 1, 2)
         res_good = evaluate_bake_inputs(

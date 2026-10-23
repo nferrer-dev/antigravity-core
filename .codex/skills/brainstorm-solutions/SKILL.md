@@ -23,8 +23,8 @@ To guarantee true divergence, assign each subagent a radically different, biased
 ### B. Zero Shared Context
 Passing `fork_context=false` to `spawn_agent` isolates each subagent's context window: each subagent sees only its own prompt. Do not pass the conversation history, another agent's persona, or another agent's ideas into any prompt.
 
-### C. Grounding
-You MUST pass the absolute file path of the Stage 0 Epistemic Context file (the rubric written by `comprehend-problem`, e.g. `scratch/stage0_<topic>.md` or `.json`) into every subagent prompt. Instruct each subagent to inspect that file to ground its brainstorm against the factual rubric and prevent pure hallucination.
+### C. Grounding & BARS Self-Scoring (`<RUBRIC_SCORE>`)
+You MUST pass the absolute file path of the Stage 0 Epistemic Context file (the rubric written by `comprehend-problem`, e.g. `scratch/stage0_<topic>.md` or `.json`) into every subagent prompt. Instruct each subagent to inspect that file to ground its brainstorm against the factual rubric and include a `<RUBRIC_SCORE>` block (`stage: 1`) scoring `novelty_or_simplicity`, `constraint_compliance`, `blast_radius_safety`, and `verification_completeness` on a `0..3` BARS scale (`"evidence"` before `"score"`).
 
 ## 3. Centralized Routing (Race Condition Prevention)
 You must explicitly instruct the subagents in their prompt that they are **strictly forbidden from writing their solutions to disk directly**.

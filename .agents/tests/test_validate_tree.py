@@ -2241,6 +2241,157 @@ class LiveTree(unittest.TestCase):
         self.assertFalse(ok_sota)
         self.assertEqual(reason_sota, "invalid_sota_verified_url")
 
+        # INV-BAKE-05: finding rubric below threshold & incomplete exhaustiveness manifest
+        ok_rubric, reason_rubric, _ = gate_mod.validate_finding(
+            {
+                "id": "LOW-RUBRIC-1",
+                "category": "COHERENCE_CONTRACT",
+                "file_and_line": ".agents/skills/coherence-bake/SKILL.md:1-2",
+                "reproducible_check": "pytest",
+                "falsifiable_fix": "fix",
+                "is_speculative": False,
+                "measurable_gain_above_epsilon": True,
+                "rubric_scores": {
+                    "empirical_grounding": 1,
+                    "causal_precision": 3,
+                    "blast_radius_safety": 3,
+                },
+            },
+            REPO_ROOT,
+        )
+        self.assertFalse(ok_rubric)
+        self.assertEqual(reason_rubric, "finding_rubric_below_threshold")
+
+        res_bad_manifest = gate_mod.evaluate_bake_inputs(
+            {"contract_gaps": 0, "unindexed_hot_paths": 0},
+            {"status": "SAT", "unconstrained_variables": []},
+            {
+                "findings": [],
+                "exhaustiveness_manifest": {
+                    "uncapped_discovery": False,
+                    "full_suite_executed": True,
+                    "closed_loop_reaudit": True,
+                    "test_failures": 0,
+                    "invariant_violations": 0,
+                },
+            },
+            REPO_ROOT,
+        )
+        self.assertEqual(res_bad_manifest["status"], "PROCEED_FIX")
+        self.assertEqual(
+            res_bad_manifest["exhaustiveness_status"],
+            "incomplete_exhaustiveness_manifest",
+        )
+
+    def test_rubric_grade_gate_and_brc_hook(self):
+        import importlib.util
+
+        comp_dir = REPO_ROOT / ".agents" / "skills" / "comprehend-problem"
+        rubric_py = comp_dir / "scripts" / "rubric_grade_gate.py"
+        self.assertTrue(rubric_py.is_file(), "Missing scripts/rubric_grade_gate.py")
+
+        claude_rubric = (
+            REPO_ROOT
+            / (TOKEN_CLAUDE_DIR.rstrip("/"))
+            / "skills"
+            / "comprehend-problem"
+            / "scripts"
+            / "rubric_grade_gate.py"
+        )
+        codex_rubric = (
+            REPO_ROOT
+            / ".codex"
+            / "skills"
+            / "comprehend-problem"
+            / "scripts"
+            / "rubric_grade_gate.py"
+        )
+        self.assertTrue(claude_rubric.is_file(), "Missing Claude rubric_grade_gate.py")
+        self.assertTrue(codex_rubric.is_file(), "Missing Codex rubric_grade_gate.py")
+        rubric_bytes = rubric_py.read_bytes()
+        self.assertEqual(rubric_bytes, claude_rubric.read_bytes())
+        self.assertEqual(rubric_bytes, codex_rubric.read_bytes())
+
+        spec = importlib.util.spec_from_file_location("rubric_grade_gate", rubric_py)
+        rubric_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rubric_mod)
+        code, msgs = rubric_mod.run_self_test()
+        self.assertEqual(code, 0, "\n".join(msgs))
+
+        # McCabe complexity <= 9 for all functions in rubric_grade_gate.py
+        pf_py = comp_dir / "scripts" / "structural_graph_polyfill.py"
+        pf_spec = importlib.util.spec_from_file_location("structural_graph_polyfill", pf_py)
+        pf_mod = importlib.util.module_from_spec(pf_spec)
+        pf_spec.loader.exec_module(pf_mod)
+        high_fns = [
+            fn
+            for fn in pf_mod.find_high_complexity_functions(str(comp_dir), threshold=10)
+            if "rubric_grade_gate.py" in str(fn.get("file", ""))
+        ]
+        self.assertEqual(
+            high_fns, [], f"High complexity functions in rubric_grade_gate: {high_fns}"
+        )
+
+        # BRC Guard rubric-score-threshold-gate checks
+        bad_rubric_msg = (
+            "<RUBRIC_SCORE>\n"
+            "{\n"
+            '  "stage": 3,\n'
+            '  "role": "System Architect",\n'
+            '  "verdict": "APPROVE",\n'
+            '  "criteria": [\n'
+            '    {"id": "c1", "evidence": "src/engine.py:1-2", "score": 1},\n'
+            '    {"id": "c2", "evidence": "src/engine.py:3-4", "score": 3},\n'
+            '    {"id": "c3", "evidence": "src/engine.py:5-6", "score": 3}\n'
+            "  ],\n"
+            '  "min_score": 1,\n'
+            '  "total_score": 7,\n'
+            '  "threshold": 7\n'
+            "}\n"
+            "</RUBRIC_SCORE>\n[VERDICT: APPROVE]"
+        )
+        res_bad_msg = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "send_message",
+                    "args": {"Message": bad_rubric_msg},
+                }
+            }
+        )
+        self.assertEqual(res_bad_msg.returncode, 0)
+        out_bad_msg = json.loads(res_bad_msg.stdout.strip())
+        self.assertEqual(out_bad_msg["decision"], "deny")
+        self.assertIn("rubric-score-threshold-gate", out_bad_msg["reason"])
+
+        good_rubric_msg = (
+            "<RUBRIC_SCORE>\n"
+            "{\n"
+            '  "stage": 3,\n'
+            '  "role": "System Architect",\n'
+            '  "verdict": "APPROVE",\n'
+            '  "criteria": [\n'
+            '    {"id": "c1", "evidence": "src/engine.py:1-2", "score": 3},\n'
+            '    {"id": "c2", "evidence": "src/engine.py:3-4", "score": 3},\n'
+            '    {"id": "c3", "evidence": "src/engine.py:5-6", "score": 3}\n'
+            "  ],\n"
+            '  "min_score": 3,\n'
+            '  "total_score": 9,\n'
+            '  "threshold": 7\n'
+            "}\n"
+            "</RUBRIC_SCORE>\n[VERDICT: APPROVE]"
+        )
+        res_good_msg = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "send_message",
+                    "args": {"Message": good_rubric_msg},
+                }
+            }
+        )
+        self.assertEqual(res_good_msg.returncode, 0)
+        out_good_msg = json.loads(res_good_msg.stdout.strip())
+        self.assertEqual(out_good_msg["decision"], "allow")
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

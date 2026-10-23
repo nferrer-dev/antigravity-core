@@ -34,7 +34,8 @@ Execute the chosen path using the designated tooling:
 2. Instruct each subagent to map the dead-ends and vectors of one region of the problem space and return its findings as its final report.
 3. You (the parent) are the blackboard: merge the returned reports into a single problem-space map.
 
-## 3. The MVC "Pull" Mandate (CRITICAL)
+## 3. The MVC "Pull" Mandate & Rubric Grading Engine (`rubric_grade_gate.py`)
 You are strictly forbidden from dumping the raw graphs or SMT proofs directly into the prompt of downstream Stage 1 subagents. Token bloat causes catastrophic hallucination.
 1. Write the formal rubric (JSON graph or logical constraints) to a temporary file under `scratch\` inside the session scratchpad directory listed in your system prompt (e.g., `<scratchpad>\scratch\stage0_rubric.json`).
 2. Pass ONLY the **absolute file path** of this file to the Stage 1 `brainstorm-solutions` skill, instructing downstream consumers to Grep or Read the file to pull the exact context they need.
+3. **Universal Rubric Evaluation (`scripts/rubric_grade_gate.py`)**: Every qualitative judgment emitted across Stages 0–5 (`<RUBRIC_SCORE>` JSON block with `"evidence"` lexically preceding `"score"`, `min_score >= 2`, `total_score >= ceil(0.75 * 3 * n)`, and `cobb_douglas >= 0.75`) is deterministically validated via `python ~/.claude/skills/comprehend-problem/scripts/rubric_grade_gate.py <input_path> --repo-root <repo_root>`.

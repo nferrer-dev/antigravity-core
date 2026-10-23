@@ -17,7 +17,7 @@ When this skill triggers to vet a technical proposition or configuration change,
 
 - Once the map-reduce waves complete, execute Phase 4 (Vectorized RAG Memory): surviving arguments are recalled via `mcp__cortex__recall` from the isolated session namespace (or from the scratchpad survivors file if the `cortex` MCP server is not configured).
 - **Blind Argument Anonymization (`arXiv:2510.07517`):** Ensure retrieved shard arguments use neutral `Claim_A` / `Claim_B` envelopes (`{claim_id, empirical_gate_command, exit_code, file_and_line_evidence}`) stripped of `Proponent` / `Critic` role headers so the Hostile Adjudicator evaluates empirical proof rather than persona framing.
-- Spawn the Phase 5 Hostile Adjudicator to attack the surviving consensus and emit the terminal line — exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]` with its one-paragraph causal justification — plus the `PROCEED` or `REVISE` directive.
+- Spawn the Phase 5 Hostile Adjudicator to attack the surviving consensus and emit a `<RUBRIC_SCORE>` JSON block (`stage: 2`, `0..3` BARS with `"evidence"` before `"score"`) plus the terminal line — exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]` with its one-paragraph causal justification — and the `PROCEED` or `REVISE` directive.
 - You MUST explicitly present the retrieved empirical causal chain and the final verdict to the user.
 - **Strict Gate**: Do NOT proceed to write an implementation plan (validated at Stage 3, `design-validate`) until this Stage 2 verdict is `PROCEED`. On `REVISE`, the proposition gets a full-committee diff-only resubmission.
 

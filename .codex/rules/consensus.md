@@ -2,9 +2,9 @@
 
 The committee state machine defined here governs the Stage 4 gate (iterative-implement, on executed code diffs). The Stage 2 and Stage 3 gates (technical-debate, design-validate) are governed by the canonical debate engine (`.codex/skills/debate/SKILL.md`) — a single-pass flow with a terminal Hostile Adjudicator — but share this file's verdict grammar and arbitration vocabulary.
 
-## Verdict Grammar
+## Verdict Grammar & Universal Rubric Gate (`<RUBRIC_SCORE>`)
 
-Committee members end their review with a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`, followed by a one-paragraph causal justification citing evidence. Every `[VERDICT: REJECT]` MUST also include a structured `<REJECTION_EVIDENCE>` block (`FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, `FALSIFIABLE_FIX`); any `[VERDICT: REJECT]` lacking `<REJECTION_EVIDENCE>` is discarded as non-actionable speculation without consuming a consensus round. Only the verdict line, its `<REJECTION_EVIDENCE>` block, and its justification are load-bearing; ignore intermediate chatter.
+Committee members and Hostile Adjudicators must precede their verdict line with a `<RUBRIC_SCORE>` JSON block grading at least 3 domain criteria on a `0..3` Behaviorally Anchored Rating Scale (`0` = Falsified/Unanchored, `1` = Deficient, `2` = Verified Standard, `3` = Airtight/SOTA) with `"evidence"` lexically preceding `"score"` in each criterion object (verified by `.codex/skills/comprehend-problem/scripts/rubric_grade_gate.py` and `.codex/hooks/brc-guard.ps1` `rubric-score-threshold-gate`). Approval (`[VERDICT: APPROVE]` / `PROCEED`) requires `min_score >= 2`, `total_score >= ceil(0.75 * 3 * n)`, and `cobb_douglas >= 0.75`. Committee members end their review with a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`, followed by a one-paragraph causal justification citing evidence. Every `[VERDICT: REJECT]` MUST also include a structured `<REJECTION_EVIDENCE>` block (`FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, `FALSIFIABLE_FIX`); any `[VERDICT: REJECT]` lacking `<REJECTION_EVIDENCE>` is discarded as non-actionable speculation without consuming a consensus round. Only the `<RUBRIC_SCORE>` block, the verdict line, its `<REJECTION_EVIDENCE>` block, and its justification are load-bearing; ignore intermediate chatter.
 
 ## Roster Composition
 

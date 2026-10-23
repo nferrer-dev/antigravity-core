@@ -261,6 +261,74 @@ function Test-Stage1CandidateSolutionsGate {
     return $false
 }
 
+function Test-InvalidRubricScoreBlock {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+    if ($Text -notmatch '(?is)<RUBRIC_SCORE>\s*(\{[\s\S]*?\})\s*</RUBRIC_SCORE>') {
+        return $false
+    }
+    $rawJson = $Matches[1]
+    $critMatches = [regex]::Matches($rawJson, '\{[^{}]*\}')
+    foreach ($cm in $critMatches) {
+        $chunk = $cm.Value
+        $evIdx = $chunk.IndexOf('"evidence"')
+        $scIdx = $chunk.IndexOf('"score"')
+        if ($evIdx -ge 0 -or $scIdx -ge 0) {
+            if ($evIdx -lt 0 -or $scIdx -lt 0 -or $scIdx -lt $evIdx) {
+                return $true
+            }
+        }
+    }
+    try {
+        $obj = $rawJson | ConvertFrom-Json
+    } catch {
+        return $true
+    }
+    if ($null -eq $obj -or -not $obj.PSObject.Properties['criteria'] -or $null -eq $obj.criteria) {
+        return $true
+    }
+    $critList = @($obj.criteria)
+    $stageVal = 3
+    if ($obj.PSObject.Properties['stage'] -and $null -ne $obj.stage) {
+        $stageVal = [int]$obj.stage
+    }
+    $minCrit = if ($stageVal -eq 0) { 1 } else { 3 }
+    if ($critList.Count -lt $minCrit) { return $true }
+    $actualMin = 99
+    $actualTotal = 0
+    foreach ($c in $critList) {
+        if ($null -eq $c -or -not $c.PSObject.Properties['score'] -or -not $c.PSObject.Properties['evidence']) {
+            return $true
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$c.evidence)) { return $true }
+        if ($c.score -is [bool]) { return $true }
+        $sVal = [int]$c.score
+        if ($sVal -lt 0 -or $sVal -gt 3) { return $true }
+        if ($sVal -lt $actualMin) { $actualMin = $sVal }
+        $actualTotal += $sVal
+    }
+    $defThr = [int][Math]::Ceiling(0.75 * 3.0 * $critList.Count)
+    if ($obj.PSObject.Properties['min_score'] -and $null -ne $obj.min_score) {
+        if ([int]$obj.min_score -ne $actualMin) { return $true }
+    }
+    if ($obj.PSObject.Properties['total_score'] -and $null -ne $obj.total_score) {
+        if ([int]$obj.total_score -ne $actualTotal) { return $true }
+    }
+    $effThr = $defThr
+    if ($obj.PSObject.Properties['threshold'] -and $null -ne $obj.threshold) {
+        $effThr = [int]$obj.threshold
+        if ($effThr -lt $defThr) { return $true }
+    }
+    $verdict = ''
+    if ($obj.PSObject.Properties['verdict'] -and $null -ne $obj.verdict) {
+        $verdict = ([string]$obj.verdict).Trim().ToUpperInvariant()
+    }
+    if ($verdict -in @('APPROVE', 'PROCEED')) {
+        if ($actualMin -lt 2 -or $actualTotal -lt $effThr) { return $true }
+    }
+    return $false
+}
+
 if ($filePath -ne '') {
     $norm = $filePath.Replace('/', '\')
     $isExample = ($norm -match '\.env\.(example|sample|template|dist|schema)$') -or ($norm -match '\.deprecated-redacted$')
@@ -288,6 +356,9 @@ if ($filePath -ne '') {
         if (($toolName -eq 'Write') -and (Test-Stage1CandidateSolutionsGate $filePath $toolInput)) {
             Deny 'stage1-candidate-solutions-gate' 'candidate_solutions.md must include all 3 cognitive framing lenses (Radical Innovator, Enterprise Minimalist, Security Paranoiac)'
         }
+        if (Test-InvalidRubricScoreBlock (Get-WriteContentString $toolInput)) {
+            Deny 'rubric-score-threshold-gate' 'RUBRIC_SCORE block failed validation (require evidence before score, min_score >= 2, and total_score >= threshold for APPROVE/PROCEED)'
+        }
         if (($filePath -match '(?i)\.md$') -and $payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
             $taintMdPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
             if (Test-Path -LiteralPath $taintMdPath) {
@@ -298,6 +369,20 @@ if ($filePath -ne '') {
             }
         }
     }
+}
+
+if ($toolName -match '^(SendMessage|send_message)$') {
+    $msgText = ''
+    foreach ($mf in @('message', 'Message', 'content')) {
+        if ($toolInput.PSObject.Properties[$mf] -and $null -ne $toolInput.$mf) {
+            $msgText = [string]$toolInput.$mf
+            break
+        }
+    }
+    if (Test-InvalidRubricScoreBlock $msgText) {
+        Deny 'rubric-score-threshold-gate' 'RUBRIC_SCORE block in SendMessage failed validation (require evidence before score, min_score >= 2, and total_score >= threshold for APPROVE/PROCEED)'
+    }
+    exit 0
 }
 
 if ($toolName -match '^mcp__cortex__(store_memory|upsert_entity|create_relation|store_procedure|import_memories)$') {

@@ -251,10 +251,11 @@ function Test-MissingStageArtifact {
         if (Test-Path -LiteralPath $scratchDir) {
             $hits = @(Get-ChildItem -LiteralPath $scratchDir -Filter $StageFilter -File -ErrorAction SilentlyContinue | Where-Object {
                 if ($_.Length -le 0) { return $false }
+                $rawBody = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
                 if ($_.Extension -ieq '.json') {
-                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
-                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
+                    if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
                 }
+                if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
                 return $true
             })
             if ($hits.Count -gt 0) { return $false }
@@ -262,10 +263,11 @@ function Test-MissingStageArtifact {
         if (Test-Path -LiteralPath $dir) {
             $rootHits = @(Get-ChildItem -LiteralPath $dir -Filter $StageFilter -File -ErrorAction SilentlyContinue | Where-Object {
                 if ($_.Length -le 0) { return $false }
+                $rawBody = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
                 if ($_.Extension -ieq '.json') {
-                    $rawJson = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
-                    if ($rawJson -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS)"') { return $false }
+                    if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
                 }
+                if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
                 return $true
             })
             if ($rootHits.Count -gt 0) { return $false }
@@ -330,6 +332,74 @@ function Test-Stage1CandidateSolutionsGate {
     return $false
 }
 
+function Test-InvalidRubricScoreBlock {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+    if ($Text -notmatch '(?is)<RUBRIC_SCORE>\s*(\{[\s\S]*?\})\s*</RUBRIC_SCORE>') {
+        return $false
+    }
+    $rawJson = $Matches[1]
+    $critMatches = [regex]::Matches($rawJson, '\{[^{}]*\}')
+    foreach ($cm in $critMatches) {
+        $chunk = $cm.Value
+        $evIdx = $chunk.IndexOf('"evidence"')
+        $scIdx = $chunk.IndexOf('"score"')
+        if ($evIdx -ge 0 -or $scIdx -ge 0) {
+            if ($evIdx -lt 0 -or $scIdx -lt 0 -or $scIdx -lt $evIdx) {
+                return $true
+            }
+        }
+    }
+    try {
+        $obj = $rawJson | ConvertFrom-Json
+    } catch {
+        return $true
+    }
+    if ($null -eq $obj -or -not $obj.PSObject.Properties['criteria'] -or $null -eq $obj.criteria) {
+        return $true
+    }
+    $critList = @($obj.criteria)
+    $stageVal = 3
+    if ($obj.PSObject.Properties['stage'] -and $null -ne $obj.stage) {
+        $stageVal = [int]$obj.stage
+    }
+    $minCrit = if ($stageVal -eq 0) { 1 } else { 3 }
+    if ($critList.Count -lt $minCrit) { return $true }
+    $actualMin = 99
+    $actualTotal = 0
+    foreach ($c in $critList) {
+        if ($null -eq $c -or -not $c.PSObject.Properties['score'] -or -not $c.PSObject.Properties['evidence']) {
+            return $true
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$c.evidence)) { return $true }
+        if ($c.score -is [bool]) { return $true }
+        $sVal = [int]$c.score
+        if ($sVal -lt 0 -or $sVal -gt 3) { return $true }
+        if ($sVal -lt $actualMin) { $actualMin = $sVal }
+        $actualTotal += $sVal
+    }
+    $defThr = [int][Math]::Ceiling(0.75 * 3.0 * $critList.Count)
+    if ($obj.PSObject.Properties['min_score'] -and $null -ne $obj.min_score) {
+        if ([int]$obj.min_score -ne $actualMin) { return $true }
+    }
+    if ($obj.PSObject.Properties['total_score'] -and $null -ne $obj.total_score) {
+        if ([int]$obj.total_score -ne $actualTotal) { return $true }
+    }
+    $effThr = $defThr
+    if ($obj.PSObject.Properties['threshold'] -and $null -ne $obj.threshold) {
+        $effThr = [int]$obj.threshold
+        if ($effThr -lt $defThr) { return $true }
+    }
+    $verdict = ''
+    if ($obj.PSObject.Properties['verdict'] -and $null -ne $obj.verdict) {
+        $verdict = ([string]$obj.verdict).Trim().ToUpperInvariant()
+    }
+    if ($verdict -in @('APPROVE', 'PROCEED')) {
+        if ($actualMin -lt 2 -or $actualTotal -lt $effThr) { return $true }
+    }
+    return $false
+}
+
 $isWriteTool = $toolName -match '^(write_to_file|(?:multi_)?replace_file_content|(?:Multi)?Edit|Write)$'
 $isReadOrWriteTool = $isWriteTool -or ($toolName -match '^(view_file|Read)$')
 
@@ -355,6 +425,10 @@ if ($isWriteTool -and (Test-PrematureExecutionLock $filePath $argsObj $payload))
 
 if (($toolName -match '^(write_to_file|Write)$') -and (Test-Stage1CandidateSolutionsGate $filePath $argsObj)) {
     Emit-Deny 'stage1-candidate-solutions-gate' 'candidate_solutions.md must include all 3 cognitive framing lenses (Radical Innovator, Enterprise Minimalist, Security Paranoiac)'
+}
+
+if ($isWriteTool -and (Test-InvalidRubricScoreBlock (Get-WriteContentString $argsObj))) {
+    Emit-Deny 'rubric-score-threshold-gate' 'RUBRIC_SCORE block failed validation (require evidence before score, min_score >= 2, and total_score >= threshold for APPROVE/PROCEED)'
 }
 
 if ($isWriteTool -and ($filePath -match '(?i)\.md$') -and $payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
@@ -383,6 +457,9 @@ if ($toolName -eq 'send_message' -and $null -ne $argsObj) {
         if (($msgText -match '(sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AIzaSy[A-Za-z0-9_-]{33}|fc-[a-f0-9]{32}|tvly-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,})') -or
             ($msgText -match '(?i)(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)|<\s*system\s*>)')) {
             Emit-Deny 'subagent-message-injection-guard' 'Blocked secret token or prompt-injection override directive in inter-agent send_message'
+        }
+        if (Test-InvalidRubricScoreBlock $msgText) {
+            Emit-Deny 'rubric-score-threshold-gate' 'RUBRIC_SCORE block in send_message failed validation (require evidence before score, min_score >= 2, and total_score >= threshold for APPROVE/PROCEED)'
         }
     }
     Emit-Allow

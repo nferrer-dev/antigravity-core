@@ -28,14 +28,14 @@ Every `coherence-bake` cycle evaluates the target repository across four mandato
 
 ## 2. Five-Phase Execution Protocol
 
-### Phase 1: Structural AST, System Design & Optimization Hotspot Audit
+### Phase 1: Uncapped Exhaustive AST, System Design & Optimization Hotspot Audit
 
 1. Query `code-graph-context` via `call_mcp_tool` or run the bundled Stage 0 polyfill via `run_command`:
     ```powershell
     python .agents/skills/comprehend-problem/scripts/structural_graph_polyfill.py <target_dir> <scratch_dir>/stage0_coherence_bake_ast.json --high-complexity
     ```
-2. Trace every producer-consumer boundary, high-complexity function (`complexity >= 10`), and database/IPC hot path across the codebase using `grep_search` and `view_file`.
-3. Record only concrete, execution-grounded `COHERENCE_CONTRACT`, `SYSTEM_DESIGN`, and `OPTIMIZATION` findings with exact `file_and_line` coordinates and a `reproducible_check`.
+2. **Uncapped Exhaustive Discovery (No Top-N Truncation)**: Trace every producer-consumer boundary, high-complexity function (`complexity >= 10`), and database/IPC hot path across the codebase using `grep_search` and `view_file`. Never cap discovery at an arbitrary count (e.g., 3 findings per round); enumerate all verified findings in a single pass.
+3. Record only concrete, execution-grounded `COHERENCE_CONTRACT`, `SYSTEM_DESIGN`, and `OPTIMIZATION` findings with exact `file_and_line` coordinates, a `reproducible_check`, and `rubric_scores` (`>= 3` criteria on `0..3` BARS with `min >= 2` and `sum >= ceil(0.75 * 3 * n)`).
 
 ### Phase 2: Formal State-Machine & Invariant Verification (Z3 / SMT)
 
@@ -54,23 +54,23 @@ Every `coherence-bake` cycle evaluates the target repository across four mandato
 
 ### Phase 4: Deterministic Diminishing-Returns Gate (`coherence_bake_gate.py`)
 
-1. Write all candidate findings to `<scratch_dir>/coherence_bake_findings.json`. Each item MUST specify:
+1. Write all candidate findings and the `exhaustiveness_manifest` (`uncapped_discovery: true`, `full_suite_executed: true`, `closed_loop_reaudit: true`, `test_failures: 0`, `invariant_violations: 0`) to `<scratch_dir>/coherence_bake_findings.json`. Each finding MUST specify:
     - `id`, `category` (`COHERENCE_CONTRACT` | `SYSTEM_DESIGN` | `OPTIMIZATION` | `SOTA_BENCHMARK`),
     - `file_and_line` (`<rel_or_abs_path>:<start_line>-<end_line>` inside the repository),
     - `reproducible_check` and `falsifiable_fix`,
-    - `is_speculative: false` and `measurable_gain_above_epsilon: true`.
+    - `is_speculative: false`, `measurable_gain_above_epsilon: true`, and `rubric_scores` (`>= 3` criteria on `0..3` BARS with `min >= 2`).
 2. Run the deterministic Diminishing-Returns Gate via `run_command`:
     ```powershell
     python .agents/skills/coherence-bake/scripts/coherence_bake_gate.py <scratch_dir>/stage0_coherence_bake_ast.json <scratch_dir>/stage0_coherence_bake_z3.json <scratch_dir>/coherence_bake_findings.json <scratch_dir>/coherence_bake_decision.json --repo-root <repo_root>
     ```
 3. Inspect `<scratch_dir>/coherence_bake_decision.json`:
-    - **`AIRTIGHT_HALT`**: When `verified_findings_count == 0`, `ast_contract_gaps == 0`, and `z3_status == "SAT"`, the system has reached the point of diminishing returns. Immediately report the `certificate_sha256` and halt without inventing problems or making speculative code changes.
+    - **`AIRTIGHT_HALT`**: When `verified_findings_count == 0`, `ast_contract_gaps == 0`, `z3_status == "SAT"`, and `exhaustiveness_status == "ok"`, the system has reached the point of diminishing returns. Immediately report the `certificate_sha256` and halt without inventing problems or making speculative code changes.
     - **`PROCEED_FIX`**: Proceed to Phase 5 for ONLY the `verified_findings` that survived the gate.
 
-### Phase 5: Closed-Loop Execution & Re-Verification (Capped at 3 Rounds)
+### Phase 5: Automatic Closed-Loop Execution & Re-Verification (Capped at 3 Rounds)
 
 1. Route the surviving `verified_findings` through `Stage 2 (technical-debate) -> Stage 3 (design-validate) -> Agentic TDD (Red/Green/Refactor) -> Stage 4 (iterative-implement)`.
-2. Re-run Phase 4 (`coherence_bake_gate.py`) after verification (maximum 3 bake rounds per session) until `status == "AIRTIGHT_HALT"` is achieved.
+2. Immediately re-run the full test suite, live invariant sweep, and Phase 4 (`coherence_bake_gate.py`) in the same session (maximum 3 bake rounds) until `status == "AIRTIGHT_HALT"` is achieved before claiming completion.
 
 ## 3. Quarantined Edge Cases
 

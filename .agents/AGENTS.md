@@ -7,7 +7,7 @@
    - **Targeted Review**: Instruct subagents to restrict reviews strictly to their assigned domain.
 
 2. **Stage 3 Design-Validate Loop**: Upon drafting `implementation_plan.md` or an architecture artifact, invoke impacted `design-validate` subagents (Idea Skeptic, System Architect, Requirements Engineer, Scope Reviewer).
-   - **Explicit Signalling & Execution-Grounded Rejection Gate (VeriHarness)**: Subagents must end with `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Every `[VERDICT: REJECT]` MUST include `<REJECTION_EVIDENCE>` with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`; rejections lacking it are discarded without consuming a round.
+   - **Explicit Signalling, BARS Rubric & VeriHarness Gate**: Subagents emit `<RUBRIC_SCORE>` (`0..3` BARS via `rubric_grade_gate.py`) and end with `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Every `[VERDICT: REJECT]` MUST include `<REJECTION_EVIDENCE>` (`FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, `FALSIFIABLE_FIX`); rejections lacking it are discarded without consuming a round.
    - **Comprehensive Feedback & Deadlines**: Never exit early or cancel pending subagents; wait for ALL invoked subagents in parallel under a 3-minute `schedule` timeout timer (halt and escalate to the USER on timeout).
    - **Full-Committee Resubmission**: On rejection, revise and use `send_message` to resubmit to the ENTIRE committee for diff-only review.
 
@@ -105,7 +105,7 @@ Apply TDD to complex logic, features, and bug fixes via the `Bounded Pre-Flight 
 ---
 # Causal Telemetry Protocol
 
-1. **Centralized Trace Routing**: Log every "Critical Autonomous Decision". Subagents never write `agentic_telemetry.md` directly; they send traces via `send_message` to the Parent Orchestrator, which sequentially appends them to `<appDataDir>\brain\<conversation-id>\agentic_telemetry.md`.
+1. **Centralized Trace Routing**: Log every "Critical Autonomous Decision". Subagents never write `agentic_telemetry.md` directly; they send traces via `send_message` to the Parent, which appends them to `<appDataDir>\brain\<conversation-id>\agentic_telemetry.md`.
 2. **Trace Format**: `- **Timestamp**: [ISO 8601]`, `- **Agent Role**: [Role]`, `- **Decision**: [3-5 words]`, `- **Causal Justification**: [1-2 sentences citing evidence/file:line]`.
 3. **Critical Decisions Only**: Log ONLY `[VERDICT: REJECT]`, Hostile Adjudicator rulings, BRC yields, declaring a task impossible, or Standardized Failure States.
 

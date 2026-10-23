@@ -116,6 +116,7 @@ REQUIRED_BRC_GUARD_RULES = (
     "generated-output-write-guard",
     "stage0-comprehend-problem-gate",
     "stage1-candidate-solutions-gate",
+    "rubric-score-threshold-gate",
     "untrusted-web-markdown-image-exfil",
     "subagent-mvc-prompt-cap",
     "subagent-message-injection-guard",
@@ -442,6 +443,7 @@ def check_inv1_frontmatter(root):
     for rel_script in (
         ("comprehend-problem", "scripts", "structural_graph_polyfill.py"),
         ("comprehend-problem", "scripts", "logical_z3_polyfill.py"),
+        ("comprehend-problem", "scripts", "rubric_grade_gate.py"),
         ("coherence-bake", "scripts", "coherence_bake_gate.py"),
     ):
         pf_path = skills_root.joinpath(*rel_script)

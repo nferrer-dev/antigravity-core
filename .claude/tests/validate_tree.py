@@ -59,6 +59,7 @@ REQUIRED_BRC_GUARD_RULES = (
     "generated-output-write-guard",
     "stage0-comprehend-problem-gate",
     "stage1-candidate-solutions-gate",
+    "rubric-score-threshold-gate",
     "untrusted-web-markdown-image-exfil",
     "cortex-memory-poisoning-guard",
     "untrusted-web-memory-taint",

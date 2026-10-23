@@ -62,6 +62,7 @@ REQUIRED_BRC_GUARD_RULES = (
     "stage0-comprehend-problem-gate",
     "stage3-premature-execution-lock",
     "stage1-candidate-solutions-gate",
+    "rubric-score-threshold-gate",
     "untrusted-web-markdown-image-exfil",
     "subagent-mvc-prompt-cap",
     "subagent-message-injection-guard",
