@@ -543,6 +543,39 @@ class LiveTree(unittest.TestCase):
                 lines[0].strip(), "# Edge Cases & Heuristics: %s" % skill
             )
 
+    def test_coherence_bake_r2_f_agy_r2_01_to_03_codex(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            multi_block_bad = (
+                "<RUBRIC_SCORE>\n"
+                '{"stage": 3, "role": "R1", "verdict": "APPROVE", "criteria": ['
+                '{"id": "c1", "evidence": "src/a.py:1-2", "score": 3},'
+                '{"id": "c2", "evidence": "src/a.py:3-4", "score": 3},'
+                '{"id": "c3", "evidence": "src/a.py:5-6", "score": 3}'
+                '], "min_score": 3, "total_score": 9, "threshold": 7}\n'
+                "</RUBRIC_SCORE>\n"
+                "<RUBRIC_SCORE>\n"
+                '{"stage": 3, "role": "R2", "verdict": "APPROVE", "criteria": ['
+                '{"id": "c1", "evidence": "src/a.py:1-2", "score": 1},'
+                '{"id": "c2", "evidence": "src/a.py:3-4", "score": 3},'
+                '{"id": "c3", "evidence": "src/a.py:5-6", "score": 3}'
+                '], "min_score": 1, "total_score": 7, "threshold": 7}\n'
+                "</RUBRIC_SCORE>\n"
+            )
+            res_mb = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "send_input",
+                    "tool_input": {"message": multi_block_bad},
+                }
+            )
+            self.assertEqual(res_mb.returncode, 2)
+
+        for agent_name in ("stage3-design-reviewer.toml", "stage4-code-auditor.toml"):
+            ag_txt = (REPO_ROOT / ".codex" / "agents" / agent_name).read_text(encoding="utf-8")
+            for req_key in ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"'):
+                self.assertIn(req_key, ag_txt, "%s missing %s" % (agent_name, req_key))
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

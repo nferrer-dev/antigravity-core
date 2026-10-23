@@ -1060,6 +1060,19 @@ def check_inv10_skill_security(root):
                     "INV-10: %s: Stage 4 auditor skill missing <REJECTION_EVIDENCE> contract"
                     % label
                 )
+            for k in ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"'):
+                if k not in text:
+                    violations.append(
+                        "INV-10: %s: Stage 4 auditor skill missing schema key %s"
+                        % (label, k)
+                    )
+    for agent_name in ("stage3-design-reviewer.toml", "stage4-code-auditor.toml"):
+        ag_path = root / ".codex" / "agents" / agent_name
+        if ag_path.is_file():
+            ag_txt = ag_path.read_bytes().decode("utf-8", errors="replace")
+            for k in ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"'):
+                if k not in ag_txt:
+                    violations.append("INV-10: %s: missing required <RUBRIC_SCORE> schema key %s" % (_rel(root, ag_path), k))
     for test_py in sorted((root / ".codex" / "tests").glob("test_*.py")):
         t_label = _rel(root, test_py)
         t_text = test_py.read_bytes().decode("utf-8", errors="replace")

@@ -1463,6 +1463,40 @@ def scan_test_integrity(source_text, label):
 
 
 
+def _check_rubric_schema_and_script_parity(root):
+    violations = []
+    req_keys = ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"')
+    for agent_name in ("stage3-design-reviewer.md", "stage4-code-auditor.md"):
+        ag_path = root / ".agents" / "agents" / agent_name
+        if ag_path.is_file():
+            ag_txt = ag_path.read_bytes().decode("utf-8", errors="replace")
+            for k in req_keys:
+                if k not in ag_txt:
+                    violations.append("INV-10: %s: missing required <RUBRIC_SCORE> schema key %s" % (_rel(root, ag_path), k))
+    shared_scripts = (
+        "skills/coherence-bake/scripts/coherence_bake_gate.py",
+        "skills/comprehend-problem/scripts/logical_z3_polyfill.py",
+        "skills/comprehend-problem/scripts/rubric_grade_gate.py",
+        "skills/comprehend-problem/scripts/structural_graph_polyfill.py",
+    )
+    other_trees = ("." + "claude", "." + "codex")
+    for rel_script in shared_scripts:
+        base_path = root / ".agents" / rel_script
+        if not base_path.is_file():
+            continue
+        base_sha = hashlib.sha256(base_path.read_bytes()).hexdigest()
+        for tree_name in other_trees:
+            peer_path = root / tree_name / rel_script
+            if peer_path.is_file():
+                peer_sha = hashlib.sha256(peer_path.read_bytes()).hexdigest()
+                if peer_sha != base_sha:
+                    violations.append(
+                        "INV-10: %s/%s: SHA-256 drift vs .agents/%s"
+                        % (tree_name, rel_script, rel_script)
+                    )
+    return violations
+
+
 def check_inv10_skill_security(root):
     violations = []
     skills_dir = root / ".agents" / "skills"
@@ -1499,6 +1533,13 @@ def check_inv10_skill_security(root):
                     "INV-10: %s: Stage 4 auditor skill missing <REJECTION_EVIDENCE> contract"
                     % label
                 )
+            for k in ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"'):
+                if k not in text:
+                    violations.append(
+                        "INV-10: %s: Stage 4 auditor skill missing schema key %s"
+                        % (label, k)
+                    )
+    violations.extend(_check_rubric_schema_and_script_parity(root))
     for test_py in sorted((root / ".agents" / "tests").glob("test_*.py")):
         t_label = _rel(root, test_py)
         t_text = test_py.read_bytes().decode("utf-8", errors="replace")

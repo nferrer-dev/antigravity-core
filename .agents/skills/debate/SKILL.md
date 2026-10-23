@@ -46,6 +46,6 @@ To prevent system instability and memory leaks, the Parent Orchestrator MUST exp
 
 ## Final Output Structure
 The Parent (acting as Hostile Adjudicator) synthesizes the retrieved vectors and outputs a highly distilled summary containing:
-1. **Global Verdict & `<RUBRIC_SCORE>`** (`[GLOBAL VERDICT: PROCEED]` or `[GLOBAL VERDICT: REJECT]` accompanied by a `<RUBRIC_SCORE>` JSON block with `"evidence"` before `"score"`, `min_score >= 2`, and `total_score >= threshold` on `PROCEED`)
+1. **Global Verdict & `<RUBRIC_SCORE>`** (`[GLOBAL VERDICT: PROCEED]` or `[GLOBAL VERDICT: REJECT]` accompanied by a `<RUBRIC_SCORE>` JSON block (`"stage"`, `"role"`, `"verdict"`, and `"criteria"` items with `"id"`, `"evidence"`, `"score"`) with `"evidence"` before `"score"`, `min_score >= 2`, and `total_score >= threshold` on `PROCEED`)
 2. **Retrieved Empirical Causal Chain** (citing the specific compiler/PoC successes that defeated the rebuttals)
 3. **Mathematical Dependency Map** (proving zero blind spots)

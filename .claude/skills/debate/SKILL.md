@@ -61,7 +61,7 @@ Subjective LLM scoring is strictly banned to prevent infinite hallucination loop
 
 Spawn one final Task agent whose explicit role is to ATTACK the surviving consensus: hunt for cross-shard contradictions, unexamined couplings, and survivorship bias in what passed the gate. It retrieves shard arguments per Phase 4 and outputs:
 
-1. A `<RUBRIC_SCORE>` JSON block (`0..3` BARS with `"evidence"` preceding `"score"`, `min_score >= 2`, and `total_score >= threshold` on `APPROVE`) followed by a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`, and a one-paragraph causal justification citing the empirical evidence chain (the specific compile/PoC results that defeated or upheld the rebuttals).
+1. A `<RUBRIC_SCORE>` JSON block (`"stage"`, `"role"`, `"verdict"`, and `"criteria"` items with `"id"`, `"evidence"`, `"score"`) (`0..3` BARS with `"evidence"` preceding `"score"`, `min_score >= 2`, and `total_score >= threshold` on `APPROVE`) followed by a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`, and a one-paragraph causal justification citing the empirical evidence chain (the specific compile/PoC results that defeated or upheld the rebuttals).
 2. A terminal directive: `PROCEED` (on APPROVE) or `REVISE` (on REJECT).
 
 The Adjudicator's verdict is terminal — no appeal, no further rounds. On `REVISE`, the rejected artifact gets a full-committee diff-only resubmission: the author revises, and the next debate is scoped to the shards the diff touches.

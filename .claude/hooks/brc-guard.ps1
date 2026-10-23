@@ -264,67 +264,87 @@ function Test-Stage1CandidateSolutionsGate {
 function Test-InvalidRubricScoreBlock {
     param([string]$Text)
     if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
-    if ($Text -notmatch '(?is)<RUBRIC_SCORE>\s*(\{[\s\S]*?\})\s*</RUBRIC_SCORE>') {
-        return $false
-    }
-    $rawJson = $Matches[1]
-    $critMatches = [regex]::Matches($rawJson, '\{[^{}]*\}')
-    foreach ($cm in $critMatches) {
-        $chunk = $cm.Value
-        $evIdx = $chunk.IndexOf('"evidence"')
-        $scIdx = $chunk.IndexOf('"score"')
-        if ($evIdx -ge 0 -or $scIdx -ge 0) {
-            if ($evIdx -lt 0 -or $scIdx -lt 0 -or $scIdx -lt $evIdx) {
-                return $true
+    $blockMatches = [regex]::Matches($Text, '(?is)<RUBRIC_SCORE>\s*(\{[\s\S]*?\})\s*</RUBRIC_SCORE>')
+    if ($blockMatches.Count -eq 0) { return $false }
+    $validVerdicts = @('APPROVE', 'REJECT', 'PROCEED', 'HALT', 'TIER_0', 'TIER_1', 'TIER_2')
+    $lastVerdict = ''
+    foreach ($bm in $blockMatches) {
+        $rawJson = $bm.Groups[1].Value
+        $critMatches = [regex]::Matches($rawJson, '\{[^{}]*\}')
+        foreach ($cm in $critMatches) {
+            $chunk = $cm.Value
+            $evIdx = $chunk.IndexOf('"evidence"')
+            $scIdx = $chunk.IndexOf('"score"')
+            if ($evIdx -ge 0 -or $scIdx -ge 0) {
+                if ($evIdx -lt 0 -or $scIdx -lt 0 -or $scIdx -lt $evIdx) {
+                    return $true
+                }
             }
         }
-    }
-    try {
-        $obj = $rawJson | ConvertFrom-Json
-    } catch {
-        return $true
-    }
-    if ($null -eq $obj -or -not $obj.PSObject.Properties['criteria'] -or $null -eq $obj.criteria) {
-        return $true
-    }
-    $critList = @($obj.criteria)
-    $stageVal = 3
-    if ($obj.PSObject.Properties['stage'] -and $null -ne $obj.stage) {
-        $stageVal = [int]$obj.stage
-    }
-    $minCrit = if ($stageVal -eq 0) { 1 } else { 3 }
-    if ($critList.Count -lt $minCrit) { return $true }
-    $actualMin = 99
-    $actualTotal = 0
-    foreach ($c in $critList) {
-        if ($null -eq $c -or -not $c.PSObject.Properties['score'] -or -not $c.PSObject.Properties['evidence']) {
+        try {
+            $obj = $rawJson | ConvertFrom-Json
+        } catch {
             return $true
         }
-        if ([string]::IsNullOrWhiteSpace([string]$c.evidence)) { return $true }
-        if ($c.score -is [bool]) { return $true }
-        $sVal = [int]$c.score
-        if ($sVal -lt 0 -or $sVal -gt 3) { return $true }
-        if ($sVal -lt $actualMin) { $actualMin = $sVal }
-        $actualTotal += $sVal
-    }
-    $defThr = [int][Math]::Ceiling(0.75 * 3.0 * $critList.Count)
-    if ($obj.PSObject.Properties['min_score'] -and $null -ne $obj.min_score) {
-        if ([int]$obj.min_score -ne $actualMin) { return $true }
-    }
-    if ($obj.PSObject.Properties['total_score'] -and $null -ne $obj.total_score) {
-        if ([int]$obj.total_score -ne $actualTotal) { return $true }
-    }
-    $effThr = $defThr
-    if ($obj.PSObject.Properties['threshold'] -and $null -ne $obj.threshold) {
-        $effThr = [int]$obj.threshold
-        if ($effThr -lt $defThr) { return $true }
-    }
-    $verdict = ''
-    if ($obj.PSObject.Properties['verdict'] -and $null -ne $obj.verdict) {
+        if ($null -eq $obj -or -not $obj.PSObject.Properties['criteria'] -or $null -eq $obj.criteria) {
+            return $true
+        }
+        if (-not $obj.PSObject.Properties['stage'] -or $null -eq $obj.stage -or ($obj.stage -is [bool])) {
+            return $true
+        }
+        $stageVal = [int]$obj.stage
+        if ($stageVal -lt 0 -or $stageVal -gt 5) { return $true }
+        if (-not $obj.PSObject.Properties['role'] -or [string]::IsNullOrWhiteSpace([string]$obj.role)) {
+            return $true
+        }
+        if (-not $obj.PSObject.Properties['verdict'] -or [string]::IsNullOrWhiteSpace([string]$obj.verdict)) {
+            return $true
+        }
         $verdict = ([string]$obj.verdict).Trim().ToUpperInvariant()
+        if ($verdict -notin $validVerdicts) { return $true }
+        $lastVerdict = $verdict
+        $critList = @($obj.criteria)
+        $minCrit = if ($stageVal -eq 0) { 1 } else { 3 }
+        if ($critList.Count -lt $minCrit) { return $true }
+        $actualMin = 99
+        $actualTotal = 0
+        $seenIds = @{}
+        foreach ($c in $critList) {
+            if ($null -eq $c -or -not $c.PSObject.Properties['id'] -or -not $c.PSObject.Properties['score'] -or -not $c.PSObject.Properties['evidence']) {
+                return $true
+            }
+            $cId = ([string]$c.id).Trim()
+            if ([string]::IsNullOrWhiteSpace($cId) -or $seenIds.ContainsKey($cId)) { return $true }
+            $seenIds[$cId] = $true
+            if ([string]::IsNullOrWhiteSpace([string]$c.evidence)) { return $true }
+            if ($c.score -is [bool]) { return $true }
+            $sVal = [int]$c.score
+            if ($sVal -lt 0 -or $sVal -gt 3) { return $true }
+            if ($sVal -lt $actualMin) { $actualMin = $sVal }
+            $actualTotal += $sVal
+        }
+        $defThr = [int][Math]::Ceiling(0.75 * 3.0 * $critList.Count)
+        if ($obj.PSObject.Properties['min_score'] -and $null -ne $obj.min_score) {
+            if (($obj.min_score -is [bool]) -or ([int]$obj.min_score -ne $actualMin)) { return $true }
+        }
+        if ($obj.PSObject.Properties['total_score'] -and $null -ne $obj.total_score) {
+            if (($obj.total_score -is [bool]) -or ([int]$obj.total_score -ne $actualTotal)) { return $true }
+        }
+        $effThr = $defThr
+        if ($obj.PSObject.Properties['threshold'] -and $null -ne $obj.threshold) {
+            if ($obj.threshold -is [bool]) { return $true }
+            $effThr = [int]$obj.threshold
+            if ($effThr -lt $defThr) { return $true }
+        }
+        if ($verdict -in @('APPROVE', 'PROCEED')) {
+            if ($actualMin -lt 2 -or $actualTotal -lt $effThr) { return $true }
+        } elseif ($verdict -eq 'REJECT') {
+            if ($actualMin -ge 2 -and $actualTotal -ge $effThr) { return $true }
+        }
     }
-    if ($verdict -in @('APPROVE', 'PROCEED')) {
-        if ($actualMin -lt 2 -or $actualTotal -lt $effThr) { return $true }
+    if ($blockMatches.Count -eq 1 -and ($Text -match '\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]')) {
+        $proseVerdict = $Matches[1].Trim().ToUpperInvariant()
+        if ($proseVerdict -ne $lastVerdict) { return $true }
     }
     return $false
 }

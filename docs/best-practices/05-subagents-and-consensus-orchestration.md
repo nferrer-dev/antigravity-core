@@ -122,9 +122,9 @@ flowchart TD
 
 ## 4. Execution-Grounded Rejections (`VeriHarness`) & Anti-Reward-Hacking (`Meta ACH`)
 
-### 4.1 VeriHarness `<REJECTION_EVIDENCE>` & Universal `0..3` BARS `<RUBRIC_SCORE>` Gate (`arXiv:2602.09420`, `arXiv:2405.01535`, `arXiv:2403.18771`)
+### 4.1 VeriHarness `<REJECTION_EVIDENCE>` & Universal `0..3` BARS `<RUBRIC_SCORE>` Jury Gate (`arXiv:2602.09420`, `arXiv:2405.01535`, `arXiv:2403.18771`, `arXiv:2404.18796`)
 
-Following Kim et al. ([`arXiv:2405.01535`](https://arxiv.org/abs/2405.01535), *Prometheus 2*) and Lee et al. ([`arXiv:2403.18771`](https://arxiv.org/abs/2403.18771), *CheckEval*), every qualitative judgment across Stages 0-5 is graded via [`rubric_grade_gate.py`](../../.agents/skills/comprehend-problem/scripts/rubric_grade_gate.py) (`rubric-score-threshold-gate` in `brc-guard.ps1`) using a `<RUBRIC_SCORE>` JSON block over at least 3 domain criteria on a `0..3` Behaviorally Anchored Rating Scale (`"evidence"` lexically preceding `"score"`, `min_score >= 2`, `total_score >= ceil(0.75 * 3 * n)`, and non-compensatory Cobb-Douglas score `>= 0.75`).
+Following Kim et al. ([`arXiv:2405.01535`](https://arxiv.org/abs/2405.01535), *Prometheus 2*) and Lee et al. ([`arXiv:2403.18771`](https://arxiv.org/abs/2403.18771), *CheckEval*), every qualitative judgment across Stages 0-5 is graded via [`rubric_grade_gate.py`](../../.agents/skills/comprehend-problem/scripts/rubric_grade_gate.py) (`rubric-score-threshold-gate` in `brc-guard.ps1`) using a `<RUBRIC_SCORE>` JSON block over at least 3 domain criteria on a `0..3` Behaviorally Anchored Rating Scale (`"evidence"` lexically preceding `"score"`, `min_score >= 2`, `total_score >= ceil(0.75 * 3 * n)`, and non-compensatory Cobb-Douglas score `>= 0.75`). Following Verga et al. ([`arXiv:2404.18796`](https://arxiv.org/abs/2404.18796), *Replacing Judges with Juries / PoLL*), multi-reviewer consensus receipts containing multiple `<RUBRIC_SCORE>` blocks are evaluated fail-closed across every panel member (`extract_all_rubric_json_strs` in `rubric_grade_gate.py` and `Test-InvalidRubricScoreBlock` in `brc-guard.ps1`).
 
 Following Jin et al. ([`arXiv:2602.09420`](https://arxiv.org/abs/2602.09420),
 *VeriHarness*), subjective or ungrounded `[VERDICT: REJECT]` votes are discarded
@@ -154,6 +154,10 @@ rejects:
    `ast.dump(lhs) == ast.dump(rhs)`).
 4. `try: ... except (Exception|BaseException|AssertionError): pass` blocks that
    swallow assertion failures (`RB-17`).
+
+### 4.3 OpenAI Codex Declarative Subagents (`.codex/agents/*.toml`)
+
+OpenAI Codex defines custom subagents in [`.codex/agents/stage3-design-reviewer.toml`](../../.codex/agents/stage3-design-reviewer.toml), [`.codex/agents/stage4-code-auditor.toml`](../../.codex/agents/stage4-code-auditor.toml), and [`.codex/agents/cortex-librarian.toml`](../../.codex/agents/cortex-librarian.toml). Each TOML manifest places top-level `name`, `description`, `sandbox_mode = "read-only"`, and `developer_instructions` strictly before the `[features]` table (`shell_tool = false`, `request_permissions_tool = false`), ensuring read-only committee reviewers cannot execute shell commands or trigger interactive permission prompts when invoked via `spawn_agent`, `send_input`, `wait_agent`, and `close_agent`.
 
 ---
 
@@ -215,7 +219,7 @@ rejects:
     *"CheckEval: A Reliable LLM-as-a-Judge Framework for Evaluating Text Generation Using Checklists."*
     `arXiv:2403.18771`.
     [https://arxiv.org/abs/2403.18771](https://arxiv.org/abs/2403.18771)
-
-### OpenAI Codex Declarative Subagents (`.codex/agents/*.toml`)
-
-OpenAI Codex defines custom subagents in [`.codex/agents/stage3-design-reviewer.toml`](../../.codex/agents/stage3-design-reviewer.toml), [`.codex/agents/stage4-code-auditor.toml`](../../.codex/agents/stage4-code-auditor.toml), and [`.codex/agents/cortex-librarian.toml`](../../.codex/agents/cortex-librarian.toml). Each TOML manifest places top-level `name`, `description`, `sandbox_mode = "read-only"`, and `developer_instructions` strictly before the `[features]` table (`shell_tool = false`, `request_permissions_tool = false`), ensuring read-only committee reviewers cannot execute shell commands or trigger interactive permission prompts when invoked via `spawn_agent`, `send_input`, `wait_agent`, and `close_agent`.
+15. **Verga, P., Hofstatter, S., Althammer, S., Su, Y., Piktus, A., Arkhangorodsky, A., Xu, M., White, N., & Lewis, P. (Apr 2024).**
+    *"Replacing Judges with Juries: Evaluating LLM Generations with a Panel of Diverse Models."*
+    Cohere / TACL, `arXiv:2404.18796`.
+    [https://arxiv.org/abs/2404.18796](https://arxiv.org/abs/2404.18796)

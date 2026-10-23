@@ -24,7 +24,7 @@ To guarantee true divergence, you must assign each subagent a radically differen
 The subagents MUST NOT be able to see each other's generated ideas. Do not pass the conversation history into their prompts.
 
 ### C. Grounding & BARS Self-Scoring (`<RUBRIC_SCORE>`)
-You MUST pass the absolute file path of the Stage 0 Epistemic Context (e.g., the CodeGraphContext AST JSON or Chiasmus Logic Graph) to the subagents. Each subagent must ground its proposal against this factual rubric and include a `<RUBRIC_SCORE>` block (`stage: 1`) scoring `novelty_or_simplicity`, `constraint_compliance`, `blast_radius_safety`, and `verification_completeness` on a `0..3` BARS scale (`"evidence"` before `"score"`).
+You MUST pass the absolute file path of the Stage 0 Epistemic Context (e.g., the CodeGraphContext AST JSON or Chiasmus Logic Graph) to the subagents. Each subagent must ground its proposal against this factual rubric and include a `<RUBRIC_SCORE>` JSON block (`"stage"`, `"role"`, `"verdict"`, and `"criteria"` items with `"id"`, `"evidence"`, `"score"`) scoring `novelty_or_simplicity`, `constraint_compliance`, `blast_radius_safety`, and `verification_completeness` on a `0..3` BARS scale (`"evidence"` before `"score"`).
 
 ## 3. Centralized Routing (Race Condition Prevention)
 You must explicitly instruct the subagents in their prompt that they are **strictly forbidden from writing their solutions to disk directly**. 

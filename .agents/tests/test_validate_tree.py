@@ -2437,6 +2437,68 @@ class LiveTree(unittest.TestCase):
         self.assertIn("https://arxiv.org/abs/2405.01535", doc05_txt)
         self.assertIn("https://arxiv.org/abs/2403.18771", doc05_txt)
 
+    def test_coherence_bake_r2_f_agy_r2_01_to_04(self):
+        # F-AGY-R2-01: Multi-block <RUBRIC_SCORE> & missing/contradictory verdict denied by brc-guard.ps1
+        multi_block_bad = (
+            "<RUBRIC_SCORE>\n"
+            '{"stage": 3, "role": "R1", "verdict": "APPROVE", "criteria": ['
+            '{"id": "c1", "evidence": "src/a.py:1-2", "score": 3},'
+            '{"id": "c2", "evidence": "src/a.py:3-4", "score": 3},'
+            '{"id": "c3", "evidence": "src/a.py:5-6", "score": 3}'
+            '], "min_score": 3, "total_score": 9, "threshold": 7}\n'
+            "</RUBRIC_SCORE>\n"
+            "<RUBRIC_SCORE>\n"
+            '{"stage": 3, "role": "R2", "verdict": "APPROVE", "criteria": ['
+            '{"id": "c1", "evidence": "src/a.py:1-2", "score": 1},'
+            '{"id": "c2", "evidence": "src/a.py:3-4", "score": 3},'
+            '{"id": "c3", "evidence": "src/a.py:5-6", "score": 3}'
+            '], "min_score": 1, "total_score": 7, "threshold": 7}\n'
+            "</RUBRIC_SCORE>\n"
+        )
+        res_mb = self._run_brc_guard(
+            {"toolCall": {"name": "send_message", "args": {"Message": multi_block_bad}}}
+        )
+        self.assertEqual(json.loads(res_mb.stdout.strip())["decision"], "deny")
+
+        missing_verdict_msg = (
+            "<RUBRIC_SCORE>\n"
+            '{"criteria": ['
+            '{"name": "c1", "evidence": "src/a.py:1-2", "score": 1},'
+            '{"name": "c2", "evidence": "src/a.py:3-4", "score": 3},'
+            '{"name": "c3", "evidence": "src/a.py:5-6", "score": 3}'
+            "]}\n"
+            "</RUBRIC_SCORE>\n[VERDICT: APPROVE]"
+        )
+        res_mv = self._run_brc_guard(
+            {"toolCall": {"name": "send_message", "args": {"Message": missing_verdict_msg}}}
+        )
+        self.assertEqual(json.loads(res_mv.stdout.strip())["decision"], "deny")
+
+        # F-AGY-R2-02: rubric_grade_gate.py multi-block evaluation
+        rgg_dir = REPO_ROOT / ".agents" / "skills" / "comprehend-problem" / "scripts"
+        if str(rgg_dir) not in sys.path:
+            sys.path.insert(0, str(rgg_dir))
+        import rubric_grade_gate as rgg  # noqa: E402
+
+        self.assertEqual(len(rgg.extract_all_rubric_json_strs(multi_block_bad)), 2)
+        res_rgg_bad = rgg.evaluate_rubric_text(multi_block_bad)
+        self.assertEqual(res_rgg_bad["status"], "INVALID")
+        self.assertEqual(res_rgg_bad["reason"], "min_score_veto")
+
+        # F-AGY-R2-03: Explicit schema keys in subagents/skills and 4-script SHA-256 parity
+        for agent_name in ("stage3-design-reviewer.md", "stage4-code-auditor.md"):
+            ag_txt = (REPO_ROOT / ".agents" / "agents" / agent_name).read_text(encoding="utf-8")
+            for req_key in ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"'):
+                self.assertIn(req_key, ag_txt, f"{agent_name} missing {req_key}")
+
+        # F-AGY-R2-04: Verga et al. 2024 arXiv:2404.18796 in docs and README
+        doc05 = (
+            REPO_ROOT / "docs" / "best-practices" / "05-subagents-and-consensus-orchestration.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("https://arxiv.org/abs/2404.18796", doc05)
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("https://arxiv.org/abs/2404.18796", readme)
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

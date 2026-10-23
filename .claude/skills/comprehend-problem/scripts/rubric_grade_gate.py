@@ -51,15 +51,21 @@ def _is_nonempty_str(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def extract_rubric_json_str(raw_text: str) -> Optional[str]:
-    """Extract JSON string from a <RUBRIC_SCORE> block or raw JSON text."""
-    match = _RUBRIC_TAG_RE.search(raw_text)
-    if match:
-        return match.group("json").strip()
+def extract_all_rubric_json_strs(raw_text: str) -> List[str]:
+    """Extract all <RUBRIC_SCORE> JSON blocks or a single raw JSON string."""
+    blocks = [m.group("json").strip() for m in _RUBRIC_TAG_RE.finditer(raw_text)]
+    if blocks:
+        return blocks
     stripped = raw_text.strip()
     if stripped.startswith("{") and stripped.endswith("}"):
-        return stripped
-    return None
+        return [stripped]
+    return []
+
+
+def extract_rubric_json_str(raw_text: str) -> Optional[str]:
+    """Extract JSON string from the first <RUBRIC_SCORE> block or raw JSON."""
+    blocks = extract_all_rubric_json_strs(raw_text)
+    return blocks[0] if blocks else None
 
 
 def check_lexical_evidence_precedence(raw_json: str) -> Tuple[bool, str]:
@@ -295,14 +301,11 @@ def evaluate_rubric_payload(
     }
 
 
-def evaluate_rubric_text(
-    raw_text: str,
+def _evaluate_single_rubric_json(
+    raw_json: str,
     repo_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Extract and validate a <RUBRIC_SCORE> block or JSON string."""
-    raw_json = extract_rubric_json_str(raw_text)
-    if raw_json is None:
-        return {"status": "INVALID", "reason": "missing_rubric_score_block"}
+    """Parse and validate a single rubric JSON string."""
     try:
         parsed = json.loads(raw_json)
     except ValueError:
@@ -312,6 +315,47 @@ def evaluate_rubric_text(
     return evaluate_rubric_payload(
         parsed, repo_root=repo_root, raw_json_str=raw_json
     )
+
+
+def _combine_valid_rubric_results(
+    results: Sequence[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Combine one or more valid rubric block decisions into a panel result."""
+    if len(results) == 1:
+        out = dict(results[0])
+        out["block_count"] = 1
+        return out
+    certs = [str(r["certificate_sha256"]) for r in results]
+    panel_cert = hashlib.sha256("|".join(certs).encode("utf-8")).hexdigest()
+    return {
+        "status": "VALID",
+        "reason": "ok",
+        "verdict": str(results[-1]["verdict"]),
+        "block_count": len(results),
+        "certificate_sha256": panel_cert,
+        "min_score": min(int(r["min_score"]) for r in results),
+        "total_score": sum(int(r["total_score"]) for r in results),
+        "threshold": sum(int(r["threshold"]) for r in results),
+        "cobb_douglas": min(float(r["cobb_douglas"]) for r in results),
+    }
+
+
+def evaluate_rubric_text(
+    raw_text: str,
+    repo_root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Extract and validate all <RUBRIC_SCORE> blocks or a raw JSON string."""
+    blocks = extract_all_rubric_json_strs(raw_text)
+    if not blocks:
+        return {"status": "INVALID", "reason": "missing_rubric_score_block"}
+    valid_results: List[Dict[str, Any]] = []
+    for idx, raw_json in enumerate(blocks):
+        res = _evaluate_single_rubric_json(raw_json, repo_root=repo_root)
+        if res.get("status") != "VALID":
+            res["failed_block_index"] = idx
+            return res
+        valid_results.append(res)
+    return _combine_valid_rubric_results(valid_results)
 
 
 def derive_stage0_tier(
@@ -432,6 +476,9 @@ def run_self_test() -> Tuple[int, List[str]]:
         res_ok = evaluate_rubric_text(good_txt, repo_root=repo_root)
         if res_ok.get("status") != "VALID":
             return 1, [f"Expected VALID, got {res_ok}"]
+        panel_ok = evaluate_rubric_text(good_txt + "\n" + good_txt, repo_root=repo_root)
+        if panel_ok.get("status") != "VALID" or panel_ok.get("block_count") != 2:
+            return 1, [f"Expected 2-block VALID panel, got {panel_ok}"]
         if derive_stage0_tier(1, False, True, False, False) != "TIER_2":
             return 1, ["Anti-Loophole tier routing check failed"]
 

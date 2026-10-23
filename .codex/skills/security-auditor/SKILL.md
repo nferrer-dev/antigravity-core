@@ -45,7 +45,7 @@ For each candidate finding from Pass 1, verify:
 
 ## 2. Output Contract (VeriHarness & BARS Rubric Gate)
 
-Emit a `<RUBRIC_SCORE>` JSON block grading at least 3 security criteria on the `0..3` Behaviorally Anchored Rating Scale (`"evidence"` lexically before `"score"`, `min_score >= 2`, `total_score >= ceil(0.75 * 3 * n)`, `cobb_douglas >= 0.75`, validated by `rubric_grade_gate.py`) before your final verdict line, then conclude with an explicit `[VERDICT: APPROVE]` or `[VERDICT: REJECT]` line followed by a concise causal justification.
+Emit a `<RUBRIC_SCORE>` JSON block (`"stage"`, `"role"`, `"verdict"`, and `"criteria"` items with `"id"`, `"evidence"`, `"score"`) grading at least 3 security criteria on the `0..3` Behaviorally Anchored Rating Scale (`"evidence"` lexically before `"score"`, `min_score >= 2`, `total_score >= ceil(0.75 * 3 * n)`, `cobb_douglas >= 0.75`, validated by `rubric_grade_gate.py`) before your final verdict line, then conclude with an explicit `[VERDICT: APPROVE]` or `[VERDICT: REJECT]` line followed by a concise causal justification.
 
 Every `[VERDICT: REJECT]` MUST include a structured `<REJECTION_EVIDENCE>` block; any rejection lacking this block is discarded as non-actionable speculation:
 
