@@ -16,10 +16,9 @@ Do not manually guess style violations. You must rely on automated tooling to en
 - **Command**: Via the Bash tool, run `flake8 <file_path>` or `black --check <file_path>`. Issue each linter as its own Bash call; do not chain commands with `&&` (not PowerShell-safe on Windows).
 - *Note: If the linter is not installed in the environment, you are authorized to install it into a temporary virtual environment or flag it to the user.*
 
-## 3. Learned Edge Cases
-*(This section and the `style-python-edge-cases.md` companion file are the trainable state. When the Iterative-Implement loop catches a Python-specific anti-pattern that the mechanical enforcer misses, the Style Expert MUST NOT edit this file directly: it executes the `skill-evolve` skill, which validates the drafted heuristic, requires explicit human approval, and appends it to the `style-python-edge-cases.md` quarantine file beside this skill. Auditing reviewers proactively Read that file if it exists.)*
+## 3. Quarantined Edge Cases & SkillOpt Protocol
+1. Read companion [style-python-edge-cases.md](./style-python-edge-cases.md) via `Read` and verify the localized diff against all recorded heuristics.
+2. **Immutable `SKILL.md` Mandate**: Never append new rules directly to `SKILL.md`. If you detect a recurring Python-specific anti-pattern missed by the mechanical linter, Read and execute `.codex/skills/skill-evolve/SKILL.md` to propose appending a 1-2 sentence heuristic to `style-python-edge-cases.md`.
 
-- **N+1 Query Anti-Pattern**: Avoid executing `SELECT` queries iteratively inside a loop (e.g., `for` loop). This creates severe performance degradation. Consolidate into a single query using an `IN` clause to fetch relevant records in one batch.
-
-## 4. Verdict Signalling
-End every review with a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`, followed by a one-paragraph causal justification citing evidence (linter output, anchor citations, or learned edge cases).
+## 4. Output Contract (VeriHarness & BARS Rubric Gate)
+Emit a `<RUBRIC_SCORE>` JSON block grading at least 3 domain criteria on the `0..3` Behaviorally Anchored Rating Scale (`"evidence"` lexically before `"score"`, `min_score >= 2`, `total_score >= ceil(0.75 * 3 * n)`, `cobb_douglas >= 0.75`, validated by `rubric_grade_gate.py`) before your final verdict line. Conclude your review with `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Every `[VERDICT: REJECT]` MUST include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`.

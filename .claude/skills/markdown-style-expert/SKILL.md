@@ -24,5 +24,7 @@ You are the authoritative evaluator for Markdown formatting and structural integ
     - When evaluating an appended heuristic for a quarantine file (`[skillname]-edge-cases.md`), you must check the file's size and length.
     - **Deduplication Pass**: If the quarantine file contains more than 10 heuristics, you MUST execute a deduplication and consolidation pass. Rewrite the existing heuristics to merge overlapping concepts and eliminate redundancies before allowing the new heuristic to be appended.
 
-4. **Verdict Signalling**:
-    - End every review with a line containing exactly `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`, followed by a one-paragraph causal justification citing evidence (style-guide violations found, heuristic length counts, or quarantine-file metrics).
+4. **Verdict Signalling, BARS Rubric & VeriHarness Output Contract**:
+    - Read companion [markdown-style-expert-edge-cases.md](./markdown-style-expert-edge-cases.md) via `Read` before finalizing your audit. Never append new rules directly to `SKILL.md` (use `.claude/skills/skill-evolve/SKILL.md` to propose appending to `markdown-style-expert-edge-cases.md`).
+    - Emit a `<RUBRIC_SCORE>` JSON block grading at least 3 domain criteria on the `0..3` Behaviorally Anchored Rating Scale (`"evidence"` lexically before `"score"`, `min_score >= 2`, `total_score >= ceil(0.75 * 3 * n)`, `cobb_douglas >= 0.75`, validated by `rubric_grade_gate.py`) before your final verdict line.
+    - Conclude your review with an explicit `[VERDICT: APPROVE]` or `[VERDICT: REJECT]`. Every `[VERDICT: REJECT]` MUST include a `<REJECTION_EVIDENCE>` block with `FILE_AND_LINE`, `REPRODUCIBLE_CHECK`, and `FALSIFIABLE_FIX`.

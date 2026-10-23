@@ -1,9 +1,14 @@
-# Both .claude/ and .agents/ trees are LF-canonical (validator INV-1/INV-6 enforce it).
+# Tri-harness trees (.agents/, .claude/, .codex/) are LF-canonical (validator INV-1/INV-6 enforce it).
 .claude/** text eol=lf
 .agents/** text eol=lf
+.codex/** text eol=lf
 .github/** text eol=lf
+docs/** text eol=lf
 CLAUDE.md text eol=lf
+CODEX.md text eol=lf
 README.md text eol=lf
 .mcp.json text eol=lf
 .pre-commit-config.yaml text eol=lf
 .gitattributes text eol=lf
+.gitignore text eol=lf
+LICENSE text eol=lf

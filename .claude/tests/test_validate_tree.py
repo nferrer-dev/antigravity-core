@@ -539,6 +539,44 @@ class LiveTree(unittest.TestCase):
             self.assertEqual(res_bad.returncode, 2)
             self.assertIn("rubric-score-threshold-gate", res_bad.stderr)
 
+    def test_coherence_bake_f_agy_01_to_02_claude(self):
+        auditor_skills = (
+            "style-cpp",
+            "style-go",
+            "style-java",
+            "style-js",
+            "style-python",
+            "style-rust",
+            "security-auditor",
+            "markdown-style-expert",
+        )
+        for skill in auditor_skills:
+            skill_txt = (
+                REPO_ROOT / ".claude" / "skills" / skill / "SKILL.md"
+            ).read_text(encoding="utf-8")
+            self.assertIn("<RUBRIC_SCORE>", skill_txt, skill)
+            self.assertIn("<REJECTION_EVIDENCE>", skill_txt, skill)
+
+        expected_companions = auditor_skills + (
+            "coherence-bake",
+            "comprehend-problem",
+            "debate",
+            "iterative-implement",
+        )
+        for skill in expected_companions:
+            ec_path = (
+                REPO_ROOT
+                / ".claude"
+                / "skills"
+                / skill
+                / ("%s-edge-cases.md" % skill)
+            )
+            self.assertTrue(ec_path.is_file(), str(ec_path))
+            lines = ec_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(
+                lines[0].strip(), "# Edge Cases & Heuristics: %s" % skill
+            )
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

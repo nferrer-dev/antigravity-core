@@ -1218,6 +1218,26 @@ def check_inv6_encoding(root):
 def check_inv7_edge_cases(root):
     violations = []
     suffix = "-edge-cases.md"
+    skills_dir = root / ".agents" / "skills"
+    for skill in (
+        "coherence-bake",
+        "comprehend-problem",
+        "debate",
+        "iterative-implement",
+        "markdown-style-expert",
+        "security-auditor",
+        "style-cpp",
+        "style-go",
+        "style-java",
+        "style-js",
+        "style-python",
+        "style-rust",
+    ):
+        s_dir = skills_dir / skill
+        if (s_dir / "SKILL.md").is_file() and not (s_dir / (skill + suffix)).is_file():
+            violations.append(
+                "INV-7: %s: missing companion %s%s" % (_rel(root, s_dir), skill, suffix)
+            )
     for path in sorted((root / ".agents").rglob("*" + suffix)):
         label = _rel(root, path)
         stem = path.name[: -len(suffix)]
@@ -1246,6 +1266,10 @@ def check_inv7_edge_cases(root):
             violations.append(
                 "INV-7: %s: must use flat top-level bullets without H2/H3 subheadings"
                 % label
+            )
+        if len(bullets) < 1:
+            violations.append(
+                "INV-7: %s: must contain at least 1 flat '- ' heuristic bullet" % label
             )
         if len(bullets) > 10:
             violations.append(
@@ -1455,6 +1479,26 @@ def check_inv10_skill_security(root):
         text = path.read_bytes().decode("utf-8", errors="replace")
         for err in scan_skill_security(text, label):
             violations.append("INV-10: %s" % err)
+        if path.name == "SKILL.md" and path.parent.name in (
+            "style-cpp",
+            "style-go",
+            "style-java",
+            "style-js",
+            "style-python",
+            "style-rust",
+            "security-auditor",
+            "markdown-style-expert",
+        ):
+            if "<RUBRIC_SCORE>" not in text:
+                violations.append(
+                    "INV-10: %s: Stage 4 auditor skill missing <RUBRIC_SCORE> contract"
+                    % label
+                )
+            if "<REJECTION_EVIDENCE>" not in text:
+                violations.append(
+                    "INV-10: %s: Stage 4 auditor skill missing <REJECTION_EVIDENCE> contract"
+                    % label
+                )
     for test_py in sorted((root / ".agents" / "tests").glob("test_*.py")):
         t_label = _rel(root, test_py)
         t_text = test_py.read_bytes().decode("utf-8", errors="replace")

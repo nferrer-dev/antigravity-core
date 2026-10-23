@@ -114,8 +114,10 @@ class LiveTree(unittest.TestCase):
     def _run_codex_brc_guard(self, payload_dict):
         guard = REPO_ROOT / ".codex" / "hooks" / "brc-guard.ps1"
         with tempfile.TemporaryDirectory() as default_tmp:
+            (Path(default_tmp) / ".codex").mkdir(parents=True, exist_ok=True)
             effective = dict(payload_dict)
             effective.setdefault("cwd", default_tmp)
+            env = dict(os.environ, CODEX_PROJECT_DIR=str(effective["cwd"]))
             return subprocess.run(
                 [
                     "powershell",
@@ -130,6 +132,7 @@ class LiveTree(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=10,
+                env=env,
             )
 
     def test_brc_guard_multi_header_apply_patch_and_mac_guards(self):
@@ -501,6 +504,44 @@ class LiveTree(unittest.TestCase):
             )
             self.assertEqual(res_bad.returncode, 2)
             self.assertIn("rubric-score-threshold-gate", res_bad.stderr)
+
+    def test_coherence_bake_f_agy_01_to_02_codex(self):
+        auditor_skills = (
+            "style-cpp",
+            "style-go",
+            "style-java",
+            "style-js",
+            "style-python",
+            "style-rust",
+            "security-auditor",
+            "markdown-style-expert",
+        )
+        for skill in auditor_skills:
+            skill_txt = (
+                REPO_ROOT / ".codex" / "skills" / skill / "SKILL.md"
+            ).read_text(encoding="utf-8")
+            self.assertIn("<RUBRIC_SCORE>", skill_txt, skill)
+            self.assertIn("<REJECTION_EVIDENCE>", skill_txt, skill)
+
+        expected_companions = auditor_skills + (
+            "coherence-bake",
+            "comprehend-problem",
+            "debate",
+            "iterative-implement",
+        )
+        for skill in expected_companions:
+            ec_path = (
+                REPO_ROOT
+                / ".codex"
+                / "skills"
+                / skill
+                / ("%s-edge-cases.md" % skill)
+            )
+            self.assertTrue(ec_path.is_file(), str(ec_path))
+            lines = ec_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(
+                lines[0].strip(), "# Edge Cases & Heuristics: %s" % skill
+            )
 
 
 class Meta(unittest.TestCase):

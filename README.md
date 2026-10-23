@@ -152,7 +152,8 @@ Antigravity executes these protocols via the 20 dynamic skills in
 ### Stage Orchestration
 
 - `comprehend-problem`: The Stage 0 Epistemic Router for deterministic problem
-  modeling (`chiasmus_poc.py --out`, `blackboard_swarm_poc.py --out`).
+  modeling (`chiasmus_poc.py --out`, `blackboard_swarm_poc.py --out`) and the
+  universal `0..3` BARS qualitative judgment gate (`rubric_grade_gate.py`).
 - `brainstorm-solutions`: Stage 1 Divergent Brainstorming via
   zero-shared-context swarms (ADHD & ReDNA frameworks).
 - `debate` & `technical-debate`: The canonical Level 4 Map-Reduce engines for

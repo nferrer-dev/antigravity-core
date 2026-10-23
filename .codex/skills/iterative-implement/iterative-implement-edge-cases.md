@@ -1,5 +1,4 @@
 # Edge Cases & Heuristics: iterative-implement
 
-This is the quarantine file for learned heuristics of the `iterative-implement` skill. Entries are appended exclusively by the `skill-evolve` skill after markdown-style-expert validation and explicit human approval — never edited by hand mid-loop.
-
-Per the Lazy Evaluation rule, standard code-generating agents must NOT read this file during successful execution; read it only on failure, ambiguity, or reviewer rejection in this domain. Auditing reviewers (e.g., the Language-Specific Style Expert) are exempt and must read it proactively.
+- **Quarantine File Mutation Guard**: Append learned heuristics exclusively via the `skill-evolve` workflow after `markdown-style-expert` validation and explicit human approval; never edit `SKILL.md` or `*-edge-cases.md` directly mid-loop.
+- **Lazy Evaluation Discipline**: Standard code-generating agents must read companion `*-edge-cases.md` files only upon domain failure, ambiguity, or reviewer rejection, whereas Stage 4 auditing specialists must read them proactively.

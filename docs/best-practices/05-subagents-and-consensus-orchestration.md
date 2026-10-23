@@ -122,7 +122,9 @@ flowchart TD
 
 ## 4. Execution-Grounded Rejections (`VeriHarness`) & Anti-Reward-Hacking (`Meta ACH`)
 
-### 4.1 VeriHarness `<REJECTION_EVIDENCE>` Gate (`arXiv:2602.09420`)
+### 4.1 VeriHarness `<REJECTION_EVIDENCE>` & Universal `0..3` BARS `<RUBRIC_SCORE>` Gate (`arXiv:2602.09420`, `arXiv:2405.01535`, `arXiv:2403.18771`)
+
+Following Kim et al. ([`arXiv:2405.01535`](https://arxiv.org/abs/2405.01535), *Prometheus 2*) and Lee et al. ([`arXiv:2403.18771`](https://arxiv.org/abs/2403.18771), *CheckEval*), every qualitative judgment across Stages 0-5 is graded via [`rubric_grade_gate.py`](../../.agents/skills/comprehend-problem/scripts/rubric_grade_gate.py) (`rubric-score-threshold-gate` in `brc-guard.ps1`) using a `<RUBRIC_SCORE>` JSON block over at least 3 domain criteria on a `0..3` Behaviorally Anchored Rating Scale (`"evidence"` lexically preceding `"score"`, `min_score >= 2`, `total_score >= ceil(0.75 * 3 * n)`, and non-compensatory Cobb-Douglas score `>= 0.75`).
 
 Following Jin et al. ([`arXiv:2602.09420`](https://arxiv.org/abs/2602.09420),
 *VeriHarness*), subjective or ungrounded `[VERDICT: REJECT]` votes are discarded
@@ -205,6 +207,14 @@ rejects:
     *"RewardHackingAgents: Empirical Analysis of Specification Gaming in Coding Agents."*
     `arXiv:2603.11337`.
     [https://arxiv.org/abs/2603.11337](https://arxiv.org/abs/2603.11337)
+13. **Kim, S., Suk, J., Longpre, S., Lin, B. Y., Shin, J., Welleck, S., Neubig, G., Lee, M., Lee, K., & Seo, M. (EMNLP 2024).**
+    *"Prometheus 2: An Open Source Language Model Specialized in Evaluating Other Language Models."*
+    `arXiv:2405.01535`.
+    [https://arxiv.org/abs/2405.01535](https://arxiv.org/abs/2405.01535)
+14. **Lee, Y., Kim, J., Kim, J., & Jung, K. (EMNLP 2024).**
+    *"CheckEval: A Reliable LLM-as-a-Judge Framework for Evaluating Text Generation Using Checklists."*
+    `arXiv:2403.18771`.
+    [https://arxiv.org/abs/2403.18771](https://arxiv.org/abs/2403.18771)
 
 ### OpenAI Codex Declarative Subagents (`.codex/agents/*.toml`)
 

@@ -2392,6 +2392,51 @@ class LiveTree(unittest.TestCase):
         out_good_msg = json.loads(res_good_msg.stdout.strip())
         self.assertEqual(out_good_msg["decision"], "allow")
 
+    def test_coherence_bake_f_agy_01_to_04(self):
+        auditor_skills = (
+            "style-cpp",
+            "style-go",
+            "style-java",
+            "style-js",
+            "style-python",
+            "style-rust",
+            "security-auditor",
+            "markdown-style-expert",
+        )
+        for skill in auditor_skills:
+            skill_txt = (
+                REPO_ROOT / ".agents" / "skills" / skill / "SKILL.md"
+            ).read_text(encoding="utf-8")
+            self.assertIn("<RUBRIC_SCORE>", skill_txt, skill)
+            self.assertIn("<REJECTION_EVIDENCE>", skill_txt, skill)
+
+        ci_txt = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("python .codex/tests/validate_tree.py", ci_txt)
+        self.assertIn(".codex/tests", ci_txt)
+
+        pre_txt = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+        self.assertIn("antigravity-validate-codex-tree", pre_txt)
+        self.assertIn("python .codex/tests/validate_tree.py", pre_txt)
+
+        gitattr_txt = (REPO_ROOT / ".gitattributes").read_text(encoding="utf-8")
+        self.assertIn(".codex/** text eol=lf", gitattr_txt)
+        self.assertIn("CODEX.md text eol=lf", gitattr_txt)
+
+        readme_txt = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("rubric_grade_gate.py", readme_txt)
+
+        doc05_txt = (
+            REPO_ROOT
+            / "docs"
+            / "best-practices"
+            / "05-subagents-and-consensus-orchestration.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("rubric_grade_gate.py", doc05_txt)
+        self.assertIn("https://arxiv.org/abs/2405.01535", doc05_txt)
+        self.assertIn("https://arxiv.org/abs/2403.18771", doc05_txt)
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

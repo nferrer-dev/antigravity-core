@@ -25,11 +25,17 @@ jobs:
       - name: Validate .claude tree invariants
         run: python .claude/tests/validate_tree.py
 
+      - name: Validate .codex tree invariants
+        run: python .codex/tests/validate_tree.py
+
       - name: Run .agents unit test suite
         run: python -m unittest discover -s .agents/tests -p "test_*.py" -v
 
       - name: Run .claude unit test suite
         run: python -m unittest discover -s .claude/tests -p "test_*.py" -v
+
+      - name: Run .codex unit test suite
+        run: python -m unittest discover -s .codex/tests -p "test_*.py" -v
 
       - name: Run secret scanner self-test
         run: python .agents/scripts/secret_scan.py --self-test

@@ -16,9 +16,13 @@ repos:
         entry: python .claude/tests/validate_tree.py
         language: system
         pass_filenames: false
+      - id: antigravity-validate-codex-tree
+        name: Validate .codex Tree Invariants
+        entry: python .codex/tests/validate_tree.py
+        language: system
+        pass_filenames: false
       - id: antigravity-sync-global-config-check
-        name: Verify Global Config Sync (.agents -> ~/.gemini/config & .claude -> ~/.claude)
+        name: Verify Global Config Sync (.agents -> ~/.gemini/config, .claude -> ~/.claude, .codex -> ~/.codex)
         entry: python .agents/scripts/sync_global_config.py --check
         language: system
         pass_filenames: false
-

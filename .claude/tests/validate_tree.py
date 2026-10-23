@@ -520,6 +520,26 @@ def check_inv6_encoding(root):
 def check_inv7_edge_cases(root):
     violations = []
     suffix = "-edge-cases.md"
+    skills_dir = root / ".claude" / "skills"
+    for skill in (
+        "coherence-bake",
+        "comprehend-problem",
+        "debate",
+        "iterative-implement",
+        "markdown-style-expert",
+        "security-auditor",
+        "style-cpp",
+        "style-go",
+        "style-java",
+        "style-js",
+        "style-python",
+        "style-rust",
+    ):
+        s_dir = skills_dir / skill
+        if (s_dir / "SKILL.md").is_file() and not (s_dir / (skill + suffix)).is_file():
+            violations.append(
+                "INV-7: %s: missing companion %s%s" % (_rel(root, s_dir), skill, suffix)
+            )
     for path in sorted((root / ".claude").rglob("*" + suffix)):
         label = _rel(root, path)
         stem = path.name[: -len(suffix)]
@@ -537,7 +557,22 @@ def check_inv7_edge_cases(root):
                 "INV-7: %s: %d lines exceeds 150-line ACE compaction cap"
                 % (label, len(lines))
             )
+        expected_h1 = "# Edge Cases & Heuristics: %s" % stem
+        if not lines or lines[0].strip() != expected_h1:
+            violations.append(
+                "INV-7: %s: must begin with canonical H1 %r" % (label, expected_h1)
+            )
         bullets = [ln for ln in lines[1:] if ln.startswith("- ")]
+        subheadings = [ln for ln in lines[1:] if ln.startswith("#")]
+        if subheadings:
+            violations.append(
+                "INV-7: %s: must use flat top-level bullets without H2/H3 subheadings"
+                % label
+            )
+        if len(bullets) < 1:
+            violations.append(
+                "INV-7: %s: must contain at least 1 flat '- ' heuristic bullet" % label
+            )
         if len(bullets) > 10:
             violations.append(
                 "INV-7: %s: contains %d heuristics (exceeds 10-heuristic cap)"
@@ -744,6 +779,26 @@ def check_inv10_skill_security(root):
         text = path.read_bytes().decode("utf-8", errors="replace")
         for err in scan_skill_security(text, label):
             violations.append("INV-10: %s" % err)
+        if path.name == "SKILL.md" and path.parent.name in (
+            "style-cpp",
+            "style-go",
+            "style-java",
+            "style-js",
+            "style-python",
+            "style-rust",
+            "security-auditor",
+            "markdown-style-expert",
+        ):
+            if "<RUBRIC_SCORE>" not in text:
+                violations.append(
+                    "INV-10: %s: Stage 4 auditor skill missing <RUBRIC_SCORE> contract"
+                    % label
+                )
+            if "<REJECTION_EVIDENCE>" not in text:
+                violations.append(
+                    "INV-10: %s: Stage 4 auditor skill missing <REJECTION_EVIDENCE> contract"
+                    % label
+                )
     for test_py in sorted((root / ".claude" / "tests").glob("test_*.py")):
         t_label = _rel(root, test_py)
         t_text = test_py.read_bytes().decode("utf-8", errors="replace")
