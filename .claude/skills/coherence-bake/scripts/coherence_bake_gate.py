@@ -285,6 +285,81 @@ def _non_negative_count(value: Any) -> int:
     return abs(parsed)
 
 
+def _is_test_rel_path(rel_path: str) -> bool:
+    """Return True if rel_path is inside a tests directory or is a test module."""
+    norm = str(rel_path).replace("\\", "/")
+    path_obj = Path(norm)
+    name = path_obj.name
+    return (
+        "tests" in path_obj.parts
+        or name.startswith("test_")
+        or name.endswith("_test.py")
+    )
+
+
+def _count_non_test_high_complexity(ast_data: Mapping[str, Any]) -> int:
+    """Count non-test entries in ast_data['high_complexity_functions']."""
+    items = ast_data.get("high_complexity_functions", [])
+    if not isinstance(items, (list, tuple)):
+        return 0
+    count = 0
+    for item in items:
+        if isinstance(item, Mapping) and not _is_test_rel_path(
+            str(item.get("file", ""))
+        ):
+            count += 1
+    return count
+
+
+def _check_agents_hook_surface(repo_root: Path) -> int:
+    """Check present Antigravity hooks.json for mandatory subagent and search matchers."""
+    ag_hooks = repo_root / ("." + "agents") / "hooks.json"
+    if not ag_hooks.is_file():
+        return 0
+    txt = ag_hooks.read_text(encoding="utf-8", errors="replace")
+    tok_define = "define_" + "subagent"
+    tok_grep = "grep_" + "search"
+    return (0 if tok_define in txt else 1) + (0 if tok_grep in txt else 1)
+
+
+def _check_claude_hook_surface(repo_root: Path) -> int:
+    """Check present Claude settings.json for mandatory Grep PreToolUse matcher."""
+    cl_settings = repo_root / ("." + "claude") / "settings.json"
+    if not cl_settings.is_file():
+        return 0
+    txt = cl_settings.read_text(encoding="utf-8", errors="replace")
+    return 0 if "Grep" in txt else 1
+
+
+def _check_single_tree_scripts(tree_root: Path) -> int:
+    """Check brc-guard.ps1 and telemetry-append.ps1 in one harness tree if present."""
+    gaps = 0
+    brc = tree_root / "hooks" / "brc-guard.ps1"
+    if brc.is_file():
+        brc_txt = brc.read_text(encoding="utf-8", errors="replace")
+        if "SearchPath" not in brc_txt:
+            gaps += 1
+    tel = tree_root / "hooks" / "telemetry-append.ps1"
+    if tel.is_file():
+        tel_txt = tel.read_text(encoding="utf-8", errors="replace")
+        if (
+            "Get-TranscriptAssistantText" not in tel_txt
+            or "Remove-BacktickCodeSpans" not in tel_txt
+        ):
+            gaps += 1
+    return gaps
+
+
+def _audit_repo_surface_gaps(repo_root: Path) -> int:
+    """Deterministically verify cross-surface hook/telemetry parity when harness dirs exist."""
+    gaps = _check_agents_hook_surface(repo_root) + _check_claude_hook_surface(
+        repo_root
+    )
+    for tree_name in ("." + "agents", "." + "claude", "." + "codex"):
+        gaps += _check_single_tree_scripts(repo_root / tree_name)
+    return gaps
+
+
 def _count_unconstrained_vars(z3_data: Mapping[str, Any]) -> int:
     """Return the count of unconstrained Z3 state variables."""
     unconstrained = z3_data.get("unconstrained_variables", [])
@@ -390,9 +465,15 @@ def evaluate_bake_inputs(
     repo_root: Path,
 ) -> Dict[str, Any]:
     """Evaluate AST audit, Z3 proof, exhaustiveness manifest, and findings."""
-    ast_contract_gaps = _non_negative_count(
-        ast_data.get("contract_gaps", 0)
-    ) + _non_negative_count(ast_data.get("unindexed_hot_paths", 0))
+    raw_contract_gaps = max(
+        _non_negative_count(ast_data.get("contract_gaps", 0)),
+        _count_non_test_high_complexity(ast_data),
+    )
+    ast_contract_gaps = (
+        raw_contract_gaps
+        + _non_negative_count(ast_data.get("unindexed_hot_paths", 0))
+        + _audit_repo_surface_gaps(repo_root)
+    )
     z3_status = str(z3_data.get("status", "SAT")).strip().upper()
     z3_unconstrained_count = _count_unconstrained_vars(z3_data)
 

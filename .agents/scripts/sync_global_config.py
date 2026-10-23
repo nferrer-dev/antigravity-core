@@ -33,6 +33,20 @@ MCP_SECRET_VALUE_RE = re.compile(
 MCP_URL_SECRET_RE = re.compile(
     r"(?i)[?&](?:[a-z0-9_]*(?:key|token|secret|password|auth)[a-z0-9_]*)=([^&#\s]+)"
 )
+MCP_SCHEMA_INJECTION_RE = re.compile(
+    r"\b(?:ignore|disregard)\s+(?:all\s+|any\s+)?(?:previous|prior|above|system)\s+"
+    r"(?:instructions|prompts|rules|directives)\b",
+    re.IGNORECASE,
+)
+
+CLAUDE_MD_NAME = "CLAUDE" + ".md"
+CLAUDE_DIR_NAME = "." + "claude"
+CLAUDE_JSON_NAME = "." + "claude.json"
+CLAUDE_HOOKS_VAR = "$CLAUDE_PROJECT_DIR/" + CLAUDE_DIR_NAME + "/hooks"
+CODEX_MD_NAME = "CODEX" + ".md"
+CODEX_DIR_NAME = "." + "codex"
+CODEX_HOOKS_REL = "./" + CODEX_DIR_NAME + "/hooks"
+_TEXT_EXTS = {".md", ".json", ".toml", ".rules", ".yaml", ".ps1", ".py"}
 
 
 def sha256_hex(data):
@@ -42,38 +56,25 @@ def sha256_hex(data):
 
 def check_control_bytes(data):
     """Return list of byte offsets containing forbidden control characters."""
-    bad = []
-    for idx, b in enumerate(data):
-        if b in FORBIDDEN_CONTROL_BYTES:
-            bad.append((idx, b))
-    return bad
+    return [(idx, b) for idx, b in enumerate(data) if b in FORBIDDEN_CONTROL_BYTES]
 
 
-CLAUDE_MD_NAME = "CLAUDE" + ".md"
-CLAUDE_DIR_NAME = "." + "claude"
-CLAUDE_JSON_NAME = "." + "claude.json"
-CLAUDE_HOOKS_VAR = "$CLAUDE_PROJECT_DIR/" + CLAUDE_DIR_NAME + "/hooks"
-CODEX_MD_NAME = "CODEX" + ".md"
-CODEX_DIR_NAME = "." + "codex"
-CODEX_HOOKS_REL = "./" + CODEX_DIR_NAME + "/hooks"
-
-
-def normalize_lf_utf8(repo_root):
-    """Normalize all text files under .agents/, Claude, and Codex trees to UTF-8 no-BOM LF."""
-    exts = {".md", ".json", ".toml", ".rules", ".yaml", ".ps1", ".py"}
-    normalized = []
+def _collect_normalizable_files(repo_root):
+    """Return all text files under .agents/, Claude, and Codex trees."""
     targets = [repo_root / CLAUDE_MD_NAME, repo_root / CODEX_MD_NAME]
     for sub_name in (".agents", CLAUDE_DIR_NAME, CODEX_DIR_NAME):
         sub_dir = repo_root / sub_name
         if sub_dir.is_dir():
             targets.extend(sorted(sub_dir.rglob("*")))
-    for path in targets:
-        if not path.is_file() or path.suffix not in exts:
-            continue
+    return [p for p in targets if p.is_file() and p.suffix in _TEXT_EXTS]
+
+
+def normalize_lf_utf8(repo_root):
+    """Normalize all text files under .agents/, Claude, and Codex trees to UTF-8 no-BOM LF."""
+    normalized = []
+    for path in _collect_normalizable_files(repo_root):
         raw = path.read_bytes()
-        cleaned = raw
-        if cleaned.startswith(b"\xef\xbb\xbf"):
-            cleaned = cleaned[3:]
+        cleaned = raw[3:] if raw.startswith(b"\xef\xbb\xbf") else raw
         cleaned = cleaned.replace(b"\r\n", b"\n")
         if cleaned != raw:
             path.write_bytes(cleaned)
@@ -81,84 +82,165 @@ def normalize_lf_utf8(repo_root):
     return normalized
 
 
+def _extract_plugins_map(u_data):
+    """Extract the plugins mapping from a parsed user config.json object."""
+    if not isinstance(u_data, dict):
+        return None
+    if isinstance(u_data.get("plugins"), dict):
+        return u_data["plugins"]
+    user_cfg = u_data.get("userConfig")
+    if isinstance(user_cfg, dict) and isinstance(user_cfg.get("plugins"), dict):
+        return user_cfg["plugins"]
+    return None
+
+
+def _read_user_plugin_override(user_cfg_path):
+    """Return the boolean enabled override for antigravity-core in config.json, or None."""
+    if not user_cfg_path.is_file():
+        return None
+    try:
+        u_data = json.loads(user_cfg_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    plugins_map = _extract_plugins_map(u_data)
+    core_cfg = plugins_map.get("antigravity-core") if plugins_map else None
+    if isinstance(core_cfg, dict) and isinstance(core_cfg.get("enabled"), bool):
+        return core_cfg["enabled"]
+    return None
+
+
+def _check_single_plugin_manifest(manifest_path, user_override_enabled):
+    """Check one candidate plugin.json for double-load conflict."""
+    if not manifest_path.is_file():
+        return []
+    try:
+        m_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return ["Plugin double-load check failed to parse %s: %s" % (manifest_path, exc)]
+    default_enabled = not bool(m_data.get("disabled", False))
+    effective_enabled = (
+        user_override_enabled if user_override_enabled is not None else default_enabled
+    )
+    if effective_enabled:
+        return [
+            "Plugin double-load hazard: enabled plugin bundle at %s conflicts with direct global config sync"
+            % manifest_path
+        ]
+    return []
+
+
 def check_plugin_double_load(global_config_dir):
     """Detect if antigravity-core plugin is enabled globally alongside direct config sync."""
     global_config_dir = Path(global_config_dir)
-    errors = []
-    candidate_manifests = [
+    candidate_manifests = (
         global_config_dir / "plugins" / "antigravity-core" / "plugin.json",
         global_config_dir.parent
         / "antigravity-cli"
         / "plugins"
         / "antigravity-core"
         / "plugin.json",
-    ]
-    user_override_enabled = None
-    user_cfg_path = global_config_dir / "config.json"
-    if user_cfg_path.is_file():
-        try:
-            u_data = json.loads(user_cfg_path.read_text(encoding="utf-8"))
-            plugins_map = u_data.get("plugins") or (
-                u_data.get("userConfig", {}).get("plugins")
-                if isinstance(u_data.get("userConfig"), dict)
-                else None
-            )
-            if isinstance(plugins_map, dict) and isinstance(
-                plugins_map.get("antigravity-core"), dict
-            ):
-                enabled_val = plugins_map["antigravity-core"].get("enabled")
-                if isinstance(enabled_val, bool):
-                    user_override_enabled = enabled_val
-        except Exception:
-            pass
-
+    )
+    override = _read_user_plugin_override(global_config_dir / "config.json")
+    errors = []
     for manifest_path in candidate_manifests:
-        if not manifest_path.is_file():
+        errors.extend(_check_single_plugin_manifest(manifest_path, override))
+    return errors
+
+
+def _is_safe_secret_placeholder(v_str):
+    """Return True if a config value string is a vault placeholder or template reference."""
+    return (
+        v_str == "__REDACTED_IN_WINVAULT__"
+        or v_str.startswith("${")
+        or v_str.startswith("{{")
+    )
+
+
+def _is_plaintext_secret_kv(key_name, val_obj):
+    """Return True if (key_name, val_obj) is an unredacted plaintext secret entry."""
+    v_str = str(val_obj)
+    if _is_safe_secret_placeholder(v_str):
+        return False
+    if MCP_SECRET_VALUE_RE.search(v_str):
+        return True
+    return bool(MCP_SECRET_KEY_RE.search(str(key_name)) and len(v_str.strip()) >= 8)
+
+
+def _scan_server_env_maps(file_label, srv_name, cfg, map_keys):
+    """Scan env/header dictionaries on a single MCP server config for plaintext secrets."""
+    errors = []
+    for map_key in map_keys:
+        env_map = cfg.get(map_key, {})
+        if not isinstance(env_map, dict):
             continue
-        try:
-            m_data = json.loads(manifest_path.read_text(encoding="utf-8"))
-            default_enabled = not bool(m_data.get("disabled", False))
-            effective_enabled = (
-                user_override_enabled
-                if user_override_enabled is not None
-                else default_enabled
-            )
-            if effective_enabled:
+        for k, v in env_map.items():
+            if _is_plaintext_secret_kv(k, v):
                 errors.append(
-                    "Plugin double-load hazard: enabled plugin bundle at %s conflicts with direct global config sync"
-                    % manifest_path
+                    "Global %s server %r %s[%r] contains plaintext secret"
+                    % (file_label, srv_name, map_key, k)
                 )
-        except Exception as exc:
+    return errors
+
+
+def _scan_single_mcp_server_secrets(file_label, srv_name, cfg, map_keys=("env", "headers")):
+    """Scan URL and env/headers of one MCP server entry for plaintext secrets."""
+    if not isinstance(cfg, dict):
+        return []
+    errors = []
+    url_val = str(cfg.get("serverUrl") or cfg.get("url") or "")
+    if url_val and (
+        MCP_URL_SECRET_RE.search(url_val) or MCP_SECRET_VALUE_RE.search(url_val)
+    ):
+        errors.append(
+            "Global %s server %r URL contains plaintext secret" % (file_label, srv_name)
+        )
+    errors.extend(_scan_server_env_maps(file_label, srv_name, cfg, map_keys))
+    return errors
+
+
+def _scan_mcp_schemas_for_injection(global_config_dir):
+    """Scan lazy MCP tool schema JSON files for prompt-injection directives."""
+    mcp_schemas_root = global_config_dir.parent / "antigravity" / "mcp"
+    if not mcp_schemas_root.is_dir():
+        return []
+    errors = []
+    for schema_file in sorted(mcp_schemas_root.glob("*/*.json")):
+        if not schema_file.is_file():
+            continue
+        s_text = schema_file.read_bytes().decode("utf-8", errors="replace")
+        if MCP_SCHEMA_INJECTION_RE.search(s_text):
             errors.append(
-                "Plugin double-load check failed to parse %s: %s"
-                % (manifest_path, exc)
+                "Lazy MCP schema %s contains prompt-injection override directive (tool-poisoning guard)"
+                % schema_file
             )
     return errors
 
 
-def check_global_mcp_config(repo_root, global_config_dir, apply_changes=False):
-    """Verify global mcp_config.json encoding, core server presence, and zero plaintext secrets."""
-    errors = []
-    messages = []
-    repo_mcp_path = repo_root / ".agents" / "mcp_config.json"
-    global_mcp_path = global_config_dir / "mcp_config.json"
-    if not global_mcp_path.is_file():
-        return ["Global mcp_config.json missing at %s" % global_mcp_path], []
-
-    raw = global_mcp_path.read_bytes()
+def _read_and_optionally_clean_bytes(path, apply_changes):
+    """Read bytes from path, stripping UTF-8 BOM and CRLF in-place when apply_changes is True."""
+    raw = path.read_bytes()
     if apply_changes and (raw.startswith(b"\xef\xbb\xbf") or b"\r\n" in raw):
         cleaned = raw[3:] if raw.startswith(b"\xef\xbb\xbf") else raw
         cleaned = cleaned.replace(b"\r\n", b"\n")
-        global_mcp_path.write_bytes(cleaned)
-        raw = cleaned
+        path.write_bytes(cleaned)
+        return cleaned
+    return raw
 
+
+def check_global_mcp_config(repo_root, global_config_dir, apply_changes=False):
+    """Verify global mcp_config.json encoding, core server presence, and zero plaintext secrets."""
+    repo_mcp_path = repo_root / ".agents" / "mcp_config.json"
+    global_mcp_path = Path(global_config_dir) / "mcp_config.json"
+    if not global_mcp_path.is_file():
+        return ["Global mcp_config.json missing at %s" % global_mcp_path], []
+
+    raw = _read_and_optionally_clean_bytes(global_mcp_path, apply_changes)
     bad_bytes = check_control_bytes(raw)
     if bad_bytes:
-        errors.append(
+        return [
             "Global mcp_config.json contains forbidden control bytes (first at offset %d: 0x%02x)"
             % (bad_bytes[0][0], bad_bytes[0][1])
-        )
-        return errors, messages
+        ], []
 
     try:
         global_data = json.loads(raw.decode("utf-8"))
@@ -167,70 +249,23 @@ def check_global_mcp_config(repo_root, global_config_dir, apply_changes=False):
         return ["Failed to parse mcp_config.json: %s" % exc], []
 
     global_servers = global_data.get("mcpServers", {})
-    repo_servers = repo_data.get("mcpServers", {})
     if not isinstance(global_servers, dict):
         return ["Global mcp_config.json 'mcpServers' must be an object"], []
 
-    for req_srv in repo_servers:
-        if req_srv not in global_servers:
-            errors.append(
-                "Global mcp_config.json missing required repo server %r" % req_srv
-            )
-
+    errors = [
+        "Global mcp_config.json missing required repo server %r" % req_srv
+        for req_srv in repo_data.get("mcpServers", {})
+        if req_srv not in global_servers
+    ]
     for srv_name, cfg in global_servers.items():
-        if not isinstance(cfg, dict):
-            continue
-        url_val = str(cfg.get("serverUrl") or cfg.get("url") or "")
-        if url_val and (
-            MCP_URL_SECRET_RE.search(url_val) or MCP_SECRET_VALUE_RE.search(url_val)
-        ):
-            errors.append(
-                "Global mcp_config.json server %r URL contains plaintext secret"
-                % srv_name
-            )
-        for map_key in ("env", "headers"):
-            env_map = cfg.get(map_key, {})
-            if not isinstance(env_map, dict):
-                continue
-            for k, v in env_map.items():
-                v_str = str(v)
-                if (
-                    v_str == "__REDACTED_IN_WINVAULT__"
-                    or v_str.startswith("${")
-                    or v_str.startswith("{{")
-                ):
-                    continue
-                if MCP_SECRET_VALUE_RE.search(v_str) or (
-                    MCP_SECRET_KEY_RE.search(str(k)) and len(v_str.strip()) >= 8
-                ):
-                    errors.append(
-                        "Global mcp_config.json server %r %s[%r] contains plaintext secret"
-                        % (srv_name, map_key, k)
-                    )
+        errors.extend(_scan_single_mcp_server_secrets("mcp_config.json", srv_name, cfg))
+    errors.extend(_scan_mcp_schemas_for_injection(Path(global_config_dir)))
 
-    mcp_schemas_root = global_config_dir.parent / "antigravity" / "mcp"
-    if mcp_schemas_root.is_dir():
-        inj_re = re.compile(
-            r"\b(?:ignore|disregard)\s+(?:all\s+|any\s+)?(?:previous|prior|above|system)\s+"
-            r"(?:instructions|prompts|rules|directives)\b",
-            re.IGNORECASE,
-        )
-        for schema_file in sorted(mcp_schemas_root.glob("*/*.json")):
-            if not schema_file.is_file():
-                continue
-            s_text = schema_file.read_bytes().decode("utf-8", errors="replace")
-            if inj_re.search(s_text):
-                errors.append(
-                    "Lazy MCP schema %s contains prompt-injection override directive (tool-poisoning guard)"
-                    % schema_file
-                )
-
-    if not errors:
-        messages.append(
-            "mcp_config.json OK (%d servers, 0 plaintext secrets)"
-            % len(global_servers)
-        )
-    return errors, messages
+    if errors:
+        return errors, []
+    return [], [
+        "mcp_config.json OK (%d servers, 0 plaintext secrets)" % len(global_servers)
+    ]
 
 
 def _create_directory_junction(src_dir, dst_dir):
@@ -243,6 +278,80 @@ def _create_directory_junction(src_dir, dst_dir):
         os.symlink(str(src_dir), str(dst_dir), target_is_directory=True)
 
 
+def _extract_core_mcp_from_file(mcp_src, desired_servers):
+    """Merge core MCP server definitions (cortex, code-graph-context, rea) from mcp_src."""
+    if not mcp_src.is_file():
+        return
+    try:
+        m_data = json.loads(mcp_src.read_bytes().decode("utf-8"))
+    except Exception:
+        return
+    for s_name, s_cfg in (m_data.get("mcpServers") or {}).items():
+        if s_name in ("cortex", "code-graph-context", "rea") and isinstance(s_cfg, dict):
+            entry = dict(s_cfg)
+            if "command" in entry and "type" not in entry:
+                entry = {"type": "stdio", **entry}
+            desired_servers[s_name] = entry
+
+
+def _collect_desired_claude_mcp_servers(repo_root, global_config_dir):
+    """Collect desired core MCP servers from repo and global MCP configs."""
+    desired = {}
+    for mcp_src in (
+        repo_root / ".agents" / "mcp_config.json",
+        repo_root / ".mcp.json",
+        Path(global_config_dir) / "mcp_config.json",
+    ):
+        _extract_core_mcp_from_file(mcp_src, desired)
+    return desired
+
+
+def _load_or_init_claude_json(claude_json_path, apply_changes):
+    """Load or initialize global Claude JSON config; return (data_dict, error_list)."""
+    if not claude_json_path.is_file():
+        if not apply_changes:
+            return None, ["Global Claude JSON missing at %s" % claude_json_path]
+        return {"mcpServers": {}}, []
+    try:
+        claude_data = json.loads(claude_json_path.read_bytes().decode("utf-8"))
+    except Exception as exc:
+        return None, ["Failed to parse %s: %s" % (claude_json_path, exc)]
+    if not isinstance(claude_data.get("mcpServers"), dict):
+        if not apply_changes:
+            return None, ["%s 'mcpServers' must be an object" % claude_json_path]
+        claude_data["mcpServers"] = {}
+    return claude_data, []
+
+
+def _upsert_claude_mcp_entries(mcp_servers, desired_servers, claude_json_path, apply_changes):
+    """Ensure desired_servers exist in mcp_servers; return (modified, errors, messages)."""
+    modified = False
+    errors = []
+    messages = []
+    for srv_name, desired_cfg in desired_servers.items():
+        if srv_name in mcp_servers:
+            continue
+        if apply_changes:
+            mcp_servers[srv_name] = desired_cfg
+            modified = True
+            messages.append("Added core MCP server %r to %s" % (srv_name, claude_json_path))
+        else:
+            errors.append(
+                "Global %s missing required core MCP server %r"
+                % (claude_json_path.name, srv_name)
+            )
+    return modified, errors, messages
+
+
+def _write_json_with_optional_backup(target_path, data, backup_path):
+    """Write data as UTF-8 LF JSON to target_path after optional backup."""
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    if target_path.is_file() and backup_path is not None:
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(target_path, backup_path)
+    target_path.write_bytes((json.dumps(data, indent=2) + "\n").encode("utf-8"))
+
+
 def check_or_sync_claude_mcp(
     repo_root,
     global_config_dir,
@@ -251,111 +360,293 @@ def check_or_sync_claude_mcp(
     backup_dir=None,
 ):
     """Ensure core harness MCP servers exist in global Claude JSON config non-destructively."""
-    errors = []
-    messages = []
     claude_json_path = Path(claude_json_path)
+    desired_servers = _collect_desired_claude_mcp_servers(repo_root, global_config_dir)
+    claude_data, init_errs = _load_or_init_claude_json(claude_json_path, apply_changes)
+    if init_errs:
+        return init_errs, []
 
-    desired_servers = {}
-    for mcp_src in (
-        repo_root / ".agents" / "mcp_config.json",
-        repo_root / ".mcp.json",
-        Path(global_config_dir) / "mcp_config.json",
-    ):
-        if mcp_src.is_file():
-            try:
-                m_data = json.loads(mcp_src.read_bytes().decode("utf-8"))
-                for s_name, s_cfg in (m_data.get("mcpServers") or {}).items():
-                    if s_name in ("cortex", "code-graph-context", "rea") and isinstance(
-                        s_cfg, dict
-                    ):
-                        entry = dict(s_cfg)
-                        if "command" in entry and "type" not in entry:
-                            entry = {"type": "stdio", **entry}
-                        desired_servers[s_name] = entry
-            except Exception:
-                pass
-
-    if not claude_json_path.is_file():
-        if not apply_changes:
-            return ["Global Claude JSON missing at %s" % claude_json_path], []
-        claude_data = {"mcpServers": {}}
-    else:
-        raw = claude_json_path.read_bytes()
-        try:
-            claude_data = json.loads(raw.decode("utf-8"))
-        except Exception as exc:
-            return ["Failed to parse %s: %s" % (claude_json_path, exc)], []
-
-    mcp_servers = claude_data.get("mcpServers")
-    if not isinstance(mcp_servers, dict):
-        if not apply_changes:
-            return ["%s 'mcpServers' must be an object" % claude_json_path], []
-        mcp_servers = {}
-        claude_data["mcpServers"] = mcp_servers
-
-    modified = False
-    for srv_name, desired_cfg in desired_servers.items():
-        if srv_name not in mcp_servers:
-            if apply_changes:
-                mcp_servers[srv_name] = desired_cfg
-                modified = True
-                messages.append(
-                    "Added core MCP server %r to %s" % (srv_name, claude_json_path)
-                )
-            else:
-                errors.append(
-                    "Global %s missing required core MCP server %r"
-                    % (claude_json_path.name, srv_name)
-                )
-
+    mcp_servers = claude_data["mcpServers"]
+    modified, errors, messages = _upsert_claude_mcp_entries(
+        mcp_servers, desired_servers, claude_json_path, apply_changes
+    )
     if apply_changes and modified:
-        claude_json_path.parent.mkdir(parents=True, exist_ok=True)
-        if claude_json_path.is_file() and backup_dir:
-            b_path = Path(backup_dir) / "claude" / (claude_json_path.name + ".bak")
-            b_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(claude_json_path, b_path)
-        claude_json_path.write_bytes(
-            (json.dumps(claude_data, indent=2) + "\n").encode("utf-8")
+        b_path = (
+            Path(backup_dir) / "claude" / (claude_json_path.name + ".bak")
+            if backup_dir
+            else None
         )
+        _write_json_with_optional_backup(claude_json_path, claude_data, b_path)
 
     for srv_name in desired_servers:
-        cfg = mcp_servers.get(srv_name)
-        if not isinstance(cfg, dict):
-            continue
-        url_val = str(cfg.get("serverUrl") or cfg.get("url") or "")
-        if url_val and (
-            MCP_URL_SECRET_RE.search(url_val) or MCP_SECRET_VALUE_RE.search(url_val)
-        ):
-            errors.append(
-                "Global %s server %r URL contains plaintext secret"
-                % (claude_json_path.name, srv_name)
+        errors.extend(
+            _scan_single_mcp_server_secrets(
+                claude_json_path.name, srv_name, mcp_servers.get(srv_name)
             )
-        for map_key in ("env", "headers"):
-            env_map = cfg.get(map_key, {})
-            if not isinstance(env_map, dict):
-                continue
-            for k, v in env_map.items():
-                v_str = str(v)
-                if (
-                    v_str == "__REDACTED_IN_WINVAULT__"
-                    or v_str.startswith("${")
-                    or v_str.startswith("{{")
-                ):
-                    continue
-                if MCP_SECRET_VALUE_RE.search(v_str) or (
-                    MCP_SECRET_KEY_RE.search(str(k)) and len(v_str.strip()) >= 8
-                ):
-                    errors.append(
-                        "Global %s server %r %s[%r] contains plaintext secret"
-                        % (claude_json_path.name, srv_name, map_key, k)
-                    )
-
+        )
     if not errors:
         messages.append(
             "Global %s core MCP servers OK (%d managed servers verified)"
             % (claude_json_path.name, len(desired_servers))
         )
     return errors, messages
+
+
+def _compute_backup_target(dst_path, target_root, backup_dir, backup_subdir):
+    """Compute the destination backup path for dst_path, or None if backup_dir is unset."""
+    if not backup_dir:
+        return None
+    rel_dst = dst_path.relative_to(target_root)
+    base = Path(backup_dir) / backup_subdir if backup_subdir else Path(backup_dir)
+    return base / rel_dst.with_name(rel_dst.name + ".bak")
+
+
+def _apply_single_file_sync(src_path, dst_path, src_bytes, target_root, backup_dir, backup_subdir):
+    """Write src_bytes to dst_path if needed, backing up any existing file."""
+    messages = []
+    if dst_path.is_file() and dst_path.read_bytes() == src_bytes:
+        return messages
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    b_path = _compute_backup_target(dst_path, target_root, backup_dir, backup_subdir)
+    if dst_path.is_file() and b_path is not None:
+        b_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(dst_path, b_path)
+        messages.append("Backed up existing %s to %s" % (dst_path, b_path))
+    dst_path.write_bytes(src_bytes)
+    messages.append(
+        "Synced %s -> %s (sha256:%s)"
+        % (src_path, dst_path, sha256_hex(src_bytes)[:12])
+    )
+    return messages
+
+
+def _verify_or_sync_single_pair(
+    src_path, dst_path, target_root, label, apply_changes, backup_dir, backup_subdir
+):
+    """Verify or sync a single (src_path, dst_path) file pair."""
+    if not src_path.is_file():
+        return ["Missing canonical %s source: %s" % (label, src_path)], []
+    src_bytes = src_path.read_bytes()
+    bad_bytes = check_control_bytes(src_bytes)
+    if bad_bytes:
+        return [
+            "Source %s contains forbidden control bytes (first at offset %d: 0x%02x)"
+            % (src_path, bad_bytes[0][0], bad_bytes[0][1])
+        ], []
+
+    messages = []
+    if apply_changes:
+        messages.extend(
+            _apply_single_file_sync(
+                src_path, dst_path, src_bytes, target_root, backup_dir, backup_subdir
+            )
+        )
+    if not dst_path.is_file():
+        return ["Global %s file missing at %s" % (label, dst_path)], messages
+    dst_bytes = dst_path.read_bytes()
+    if src_bytes != dst_bytes:
+        return [
+            "Drift detected between %s (sha256:%s) and %s (sha256:%s)"
+            % (
+                src_path,
+                sha256_hex(src_bytes)[:12],
+                dst_path,
+                sha256_hex(dst_bytes)[:12],
+            )
+        ], messages
+    messages.append(
+        "%s %s parity OK (sha256:%s)" % (label, dst_path.name, sha256_hex(src_bytes)[:12])
+    )
+    return [], messages
+
+
+def _sync_file_pairs(pairs, target_root, label, apply_changes, backup_dir, backup_subdir):
+    """Verify or sync a sequence of (src_path, dst_path) pairs."""
+    errors = []
+    messages = []
+    for src_path, dst_path in pairs:
+        p_errs, p_msgs = _verify_or_sync_single_pair(
+            src_path, dst_path, target_root, label, apply_changes, backup_dir, backup_subdir
+        )
+        errors.extend(p_errs)
+        messages.extend(p_msgs)
+    return errors, messages
+
+
+def _is_matching_junction(sk_dst, exp_resolved):
+    """Return True if sk_dst exists and resolves to exp_resolved."""
+    return (
+        os.path.lexists(sk_dst)
+        and sk_dst.exists()
+        and os.path.normcase(str(sk_dst.resolve()))
+        == os.path.normcase(str(exp_resolved))
+    )
+
+
+def _repair_or_create_skill_junction(sk_dst, exp_resolved, label):
+    """Create or replace a skill directory junction at sk_dst; return error list."""
+    sk_dst.parent.mkdir(parents=True, exist_ok=True)
+    if not os.path.lexists(sk_dst):
+        _create_directory_junction(exp_resolved, sk_dst)
+        return []
+    is_reparse = not sk_dst.exists() or (
+        os.path.normcase(str(sk_dst.resolve()))
+        != os.path.normcase(str(os.path.abspath(sk_dst)))
+    )
+    if is_reparse:
+        os.rmdir(sk_dst)
+        _create_directory_junction(exp_resolved, sk_dst)
+        return []
+    return [
+        "%s skill path %s is a non-junction directory; refusing to overwrite"
+        % (label, sk_dst)
+    ]
+
+
+def _sync_single_skill_junction(sk_src, target_root, label, apply_changes):
+    """Verify or create a single per-skill NTFS directory junction."""
+    sk_dst = target_root / "skills" / sk_src.name
+    exp = sk_src.resolve()
+    errors = []
+    messages = []
+    if not _is_matching_junction(sk_dst, exp) and apply_changes:
+        errors.extend(_repair_or_create_skill_junction(sk_dst, exp, label))
+    if not sk_dst.exists():
+        errors.append("%s skill junction missing at %s" % (label, sk_dst))
+        return errors, messages
+    resolved_sk = sk_dst.resolve()
+    if os.path.normcase(str(resolved_sk)) != os.path.normcase(str(exp)):
+        errors.append(
+            "%s skill junction mismatch: %s -> %s (expected %s)"
+            % (label, sk_dst, resolved_sk, exp)
+        )
+    else:
+        messages.append("%s skill junction OK: %s -> %s" % (label, sk_dst, resolved_sk))
+    return errors, messages
+
+
+def _sync_skill_junctions(skills_src_root, target_root, label, apply_changes):
+    """Verify or create per-skill NTFS directory junctions under target_root/skills."""
+    if not skills_src_root.is_dir():
+        return [], []
+    errors = []
+    messages = []
+    for sk_src in sorted(skills_src_root.iterdir()):
+        if sk_src.is_dir():
+            s_errs, s_msgs = _sync_single_skill_junction(
+                sk_src, target_root, label, apply_changes
+            )
+            errors.extend(s_errs)
+            messages.extend(s_msgs)
+    return errors, messages
+
+
+def _item_commands_string(item):
+    """Return concatenated hook command strings inside a hook entry dict."""
+    if not isinstance(item, dict):
+        return ""
+    return " ".join(
+        h.get("command", "")
+        for h in (item.get("hooks") or [])
+        if isinstance(h, dict)
+    )
+
+
+def _replace_or_append_hook_entry(cur_list, req_entry, script_base):
+    """Replace existing hook entry matching script_base or append req_entry."""
+    replaced = False
+    new_list = []
+    for item in cur_list:
+        if script_base in _item_commands_string(item):
+            if not replaced:
+                new_list.append(req_entry)
+                replaced = True
+        else:
+            new_list.append(item)
+    if not replaced:
+        new_list.append(req_entry)
+    return new_list
+
+
+def _load_hooks_container_json(json_path, apply_changes):
+    """Load settings.json or hooks.json and return (data_dict_or_none, errors)."""
+    if not json_path.is_file():
+        return {}, []
+    errors = []
+    raw = json_path.read_bytes()
+    if check_control_bytes(raw) and not apply_changes:
+        errors.append("Global %s contains forbidden control bytes" % json_path)
+    try:
+        data = json.loads(raw.replace(b"\r\n", b"\n").decode("utf-8-sig"))
+    except Exception as exc:
+        errors.append("Failed to parse %s: %s" % (json_path, exc))
+        return None, errors
+    return data if isinstance(data, dict) else None, errors
+
+
+def _reconcile_required_hooks(data, required_hooks, json_path, apply_changes):
+    """Reconcile required_hooks into data['hooks']; return (modified, errors)."""
+    hooks_map = data.get("hooks")
+    if not isinstance(hooks_map, dict):
+        hooks_map = {}
+    modified = False
+    errors = []
+    for event_name, req_entries in required_hooks.items():
+        cur_list = list(hooks_map.get(event_name) or [])
+        for req_entry in req_entries:
+            req_cmd = req_entry["hooks"][0]["command"]
+            script_base = (
+                "brc-guard.ps1" if "brc-guard.ps1" in req_cmd else "telemetry-append.ps1"
+            )
+            if req_entry in cur_list:
+                continue
+            if apply_changes:
+                cur_list = _replace_or_append_hook_entry(cur_list, req_entry, script_base)
+                hooks_map[event_name] = cur_list
+                data["hooks"] = hooks_map
+                modified = True
+            else:
+                errors.append(
+                    "Global %s missing or drifted hook %s (%s)"
+                    % (json_path, event_name, script_base)
+                )
+    return modified, errors
+
+
+def _sync_hooks_container_file(
+    json_path, required_hooks, label, backup_subdir, apply_changes, backup_dir
+):
+    """Non-destructively upsert required_hooks into settings.json or hooks.json."""
+    data, errors = _load_hooks_container_json(json_path, apply_changes)
+    messages = []
+    if data is None:
+        return errors, messages
+    modified, h_errs = _reconcile_required_hooks(
+        data, required_hooks, json_path, apply_changes
+    )
+    errors.extend(h_errs)
+    if apply_changes and (modified or not json_path.is_file()):
+        b_path = (
+            Path(backup_dir) / backup_subdir / (json_path.name + ".bak")
+            if backup_dir
+            else None
+        )
+        _write_json_with_optional_backup(json_path, data, b_path)
+        messages.append("Updated global %s hooks in %s" % (label, json_path))
+    if not errors:
+        messages.append("Global %s %s OK" % (label, json_path.name))
+    return errors, messages
+
+
+def _build_claude_pairs(repo_root, c_src, claude_dir):
+    """Build list of (src_path, dst_path) pairs for global Claude Code sync."""
+    pairs = [(repo_root / CLAUDE_MD_NAME, claude_dir / CLAUDE_MD_NAME)]
+    for sub, pat in (("rules", "*.md"), ("hooks", "*.ps1"), ("agents", "*.md")):
+        sub_dir = c_src / sub
+        if sub_dir.is_dir():
+            for src_f in sorted(sub_dir.glob(pat)):
+                pairs.append((src_f, claude_dir / sub / src_f.name))
+    return pairs
 
 
 def verify_or_sync_claude(
@@ -370,116 +661,17 @@ def verify_or_sync_claude(
     repo_root = Path(repo_root)
     claude_dir = Path(claude_dir)
     c_src = repo_root / CLAUDE_DIR_NAME
-    errors = []
-    messages = []
 
-    claude_pairs = [(repo_root / CLAUDE_MD_NAME, claude_dir / CLAUDE_MD_NAME)]
-    for sub, pat in (("rules", "*.md"), ("hooks", "*.ps1"), ("agents", "*.md")):
-        sub_dir = c_src / sub
-        if sub_dir.is_dir():
-            for src_f in sorted(sub_dir.glob(pat)):
-                claude_pairs.append((src_f, claude_dir / sub / src_f.name))
+    claude_pairs = _build_claude_pairs(repo_root, c_src, claude_dir)
+    errors, messages = _sync_file_pairs(
+        claude_pairs, claude_dir, "Claude", apply_changes, backup_dir, "claude"
+    )
+    sk_errs, sk_msgs = _sync_skill_junctions(
+        c_src / "skills", claude_dir, "Claude", apply_changes
+    )
+    errors.extend(sk_errs)
+    messages.extend(sk_msgs)
 
-    for src_path, dst_path in claude_pairs:
-        if not src_path.is_file():
-            errors.append("Missing canonical Claude source: %s" % src_path)
-            continue
-        src_bytes = src_path.read_bytes()
-        bad_bytes = check_control_bytes(src_bytes)
-        if bad_bytes:
-            errors.append(
-                "Source %s contains forbidden control bytes (first at offset %d: 0x%02x)"
-                % (src_path, bad_bytes[0][0], bad_bytes[0][1])
-            )
-            continue
-
-        if apply_changes and (
-            not dst_path.is_file() or dst_path.read_bytes() != src_bytes
-        ):
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
-            if dst_path.is_file() and backup_dir:
-                rel_dst = dst_path.relative_to(claude_dir)
-                b_path = (
-                    Path(backup_dir)
-                    / "claude"
-                    / rel_dst.with_name(rel_dst.name + ".bak")
-                )
-                b_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(dst_path, b_path)
-                messages.append("Backed up existing %s to %s" % (dst_path, b_path))
-            dst_path.write_bytes(src_bytes)
-            messages.append(
-                "Synced %s -> %s (sha256:%s)"
-                % (src_path, dst_path, sha256_hex(src_bytes)[:12])
-            )
-
-        if not dst_path.is_file():
-            errors.append("Global Claude file missing at %s" % dst_path)
-        else:
-            dst_bytes = dst_path.read_bytes()
-            if src_bytes != dst_bytes:
-                errors.append(
-                    "Drift detected between %s (sha256:%s) and %s (sha256:%s)"
-                    % (
-                        src_path,
-                        sha256_hex(src_bytes)[:12],
-                        dst_path,
-                        sha256_hex(dst_bytes)[:12],
-                    )
-                )
-            else:
-                messages.append(
-                    "Claude %s parity OK (sha256:%s)"
-                    % (dst_path.name, sha256_hex(src_bytes)[:12])
-                )
-
-    # Non-destructive per-skill NTFS directory junctions in global Claude skills directory
-    skills_src_root = c_src / "skills"
-    if skills_src_root.is_dir():
-        for sk_src in sorted(skills_src_root.iterdir()):
-            if not sk_src.is_dir():
-                continue
-            sk_dst = claude_dir / "skills" / sk_src.name
-            exp = sk_src.resolve()
-            already_ok = (
-                os.path.lexists(sk_dst)
-                and sk_dst.exists()
-                and os.path.normcase(str(sk_dst.resolve()))
-                == os.path.normcase(str(exp))
-            )
-            if not already_ok and apply_changes:
-                sk_dst.parent.mkdir(parents=True, exist_ok=True)
-                if os.path.lexists(sk_dst):
-                    is_reparse = not sk_dst.exists() or (
-                        os.path.normcase(str(sk_dst.resolve()))
-                        != os.path.normcase(str(os.path.abspath(sk_dst)))
-                    )
-                    if is_reparse:
-                        os.rmdir(sk_dst)
-                        _create_directory_junction(exp, sk_dst)
-                    else:
-                        errors.append(
-                            "Claude skill path %s is a non-junction directory; refusing to overwrite"
-                            % sk_dst
-                        )
-                else:
-                    _create_directory_junction(exp, sk_dst)
-
-            if sk_dst.exists():
-                resolved_sk = sk_dst.resolve()
-                if os.path.normcase(str(resolved_sk)) != os.path.normcase(str(exp)):
-                    errors.append(
-                        "Claude skill junction mismatch: %s -> %s (expected %s)"
-                        % (sk_dst, resolved_sk, exp)
-                    )
-                else:
-                    messages.append(
-                        "Claude skill junction OK: %s -> %s" % (sk_dst, resolved_sk)
-                    )
-            else:
-                errors.append("Claude skill junction missing at %s" % sk_dst)
-
-    # Non-destructive global settings.json hook upsert with absolute global hook paths
     hooks_dir_posix = (claude_dir / "hooks").as_posix()
     canon_settings_raw = (
         (c_src / "settings.json")
@@ -487,76 +679,16 @@ def verify_or_sync_claude(
         .replace(CLAUDE_HOOKS_VAR, hooks_dir_posix)
     )
     required_hooks = json.loads(canon_settings_raw).get("hooks", {})
-    settings_path = claude_dir / "settings.json"
-    settings_data = {}
-    if settings_path.is_file():
-        s_raw = settings_path.read_bytes()
-        bad_s = check_control_bytes(s_raw)
-        if bad_s and not apply_changes:
-            errors.append(
-                "Global %s contains forbidden control bytes" % settings_path
-            )
-        try:
-            settings_data = json.loads(
-                s_raw.replace(b"\r\n", b"\n").decode("utf-8-sig")
-            )
-        except Exception as exc:
-            errors.append("Failed to parse %s: %s" % (settings_path, exc))
-            settings_data = None
-
-    if isinstance(settings_data, dict):
-        hooks_map = settings_data.get("hooks")
-        if not isinstance(hooks_map, dict):
-            hooks_map = {}
-        settings_modified = False
-        for event_name, req_entries in required_hooks.items():
-            cur_list = list(hooks_map.get(event_name) or [])
-            for req_entry in req_entries:
-                req_cmd = req_entry["hooks"][0]["command"]
-                script_base = (
-                    "brc-guard.ps1"
-                    if "brc-guard.ps1" in req_cmd
-                    else "telemetry-append.ps1"
-                )
-                if req_entry not in cur_list:
-                    if apply_changes:
-                        replaced = False
-                        new_list = []
-                        for item in cur_list:
-                            item_cmds = " ".join(
-                                h.get("command", "")
-                                for h in (item.get("hooks") or [])
-                                if isinstance(h, dict)
-                            )
-                            if script_base in item_cmds:
-                                if not replaced:
-                                    new_list.append(req_entry)
-                                    replaced = True
-                            else:
-                                new_list.append(item)
-                        if not replaced:
-                            new_list.append(req_entry)
-                        cur_list = new_list
-                        hooks_map[event_name] = cur_list
-                        settings_data["hooks"] = hooks_map
-                        settings_modified = True
-                    else:
-                        errors.append(
-                            "Global %s missing or drifted hook %s (%s)"
-                            % (settings_path, event_name, script_base)
-                        )
-        if apply_changes and (settings_modified or not settings_path.is_file()):
-            settings_path.parent.mkdir(parents=True, exist_ok=True)
-            if settings_path.is_file() and backup_dir:
-                b_path = Path(backup_dir) / "claude" / "settings.json.bak"
-                b_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(settings_path, b_path)
-            settings_path.write_bytes(
-                (json.dumps(settings_data, indent=2) + "\n").encode("utf-8")
-            )
-            messages.append("Updated global Claude hooks in %s" % settings_path)
-        if not errors:
-            messages.append("Global Claude settings.json hooks OK")
+    h_errs, h_msgs = _sync_hooks_container_file(
+        claude_dir / "settings.json",
+        required_hooks,
+        "Claude",
+        "claude",
+        apply_changes,
+        backup_dir,
+    )
+    errors.extend(h_errs)
+    messages.extend(h_msgs)
 
     if claude_json is not None:
         c_mcp_errs, c_mcp_msgs = check_or_sync_claude_mcp(
@@ -572,27 +704,12 @@ def verify_or_sync_claude(
     return errors, messages
 
 
-
-
-def _merge_codex_config_toml(existing_text, include_cortex=False):
-    """Non-destructively merge Antigravity Codex keys into config.toml with root keys before [section]."""
-    text = (existing_text or "").replace("\r\n", "\n").replace("\r", "\n")
-    if text.startswith("\ufeff"):
-        text = text[1:]
-
-    sec_match = re.search(r"(?m)^\[", text)
-    if sec_match:
-        top_part = text[: sec_match.start()]
-        rest_part = text[sec_match.start() :]
-    else:
-        top_part = text
-        rest_part = ""
-
-    top_lines = top_part.splitlines()
+def _rebuild_codex_top_header(top_part):
+    """Rebuild the root-level TOML key block before the first [section] header."""
     new_top_lines = []
     found_fallback = False
     found_max_bytes = False
-    for line in top_lines:
+    for line in top_part.splitlines():
         stripped = line.strip()
         if re.match(r"^project_doc_fallback_filenames\s*=", stripped):
             new_top_lines.append('project_doc_fallback_filenames = ["CODEX.md"]')
@@ -612,32 +729,33 @@ def _merge_codex_config_toml(existing_text, include_cortex=False):
         while new_top_lines and new_top_lines[-1].strip() == "":
             new_top_lines.pop()
         new_top_lines.extend(insert_header)
+    return "\n".join(new_top_lines).rstrip() + "\n\n"
 
-    top_rebuilt = "\n".join(new_top_lines).rstrip() + "\n\n"
 
-    # Ensure [features] has codex_hooks = true
+def _upsert_codex_features_section(rest_part):
+    """Ensure [features] section in rest_part sets codex_hooks = true."""
     feat_hdr = re.search(r"(?m)^\[features\][ \t]*$", rest_part)
-    if feat_hdr:
-        after_feat = rest_part[feat_hdr.end() :]
-        next_sec = re.search(r"(?m)^\[", after_feat)
-        feat_body = after_feat[: next_sec.start()] if next_sec else after_feat
-        feat_tail = after_feat[next_sec.start() :] if next_sec else ""
-        if re.search(r"(?m)^[ \t]*codex_hooks[ \t]*=", feat_body):
-            feat_body = re.sub(
-                r"(?m)^[ \t]*codex_hooks[ \t]*=.*$", "codex_hooks = true", feat_body
-            )
-        else:
-            feat_body = "\ncodex_hooks = true" + (
-                feat_body if feat_body.startswith("\n") else "\n" + feat_body
-            )
-        rest_part = rest_part[: feat_hdr.end()] + feat_body + feat_tail
-    else:
-        rest_part = rest_part.rstrip()
-        if rest_part:
-            rest_part += "\n\n"
-        rest_part += "[features]\ncodex_hooks = true\n"
+    if not feat_hdr:
+        trimmed = rest_part.rstrip()
+        prefix = trimmed + "\n\n" if trimmed else ""
+        return prefix + "[features]\ncodex_hooks = true\n"
 
-    # Upsert [mcp_servers.code-graph-context] and optional [mcp_servers.cortex]
+    after_feat = rest_part[feat_hdr.end() :]
+    next_sec = re.search(r"(?m)^\[", after_feat)
+    feat_body = after_feat[: next_sec.start()] if next_sec else after_feat
+    feat_tail = after_feat[next_sec.start() :] if next_sec else ""
+    if re.search(r"(?m)^[ \t]*codex_hooks[ \t]*=", feat_body):
+        feat_body = re.sub(
+            r"(?m)^[ \t]*codex_hooks[ \t]*=.*$", "codex_hooks = true", feat_body
+        )
+    else:
+        sep = "" if feat_body.startswith("\n") else "\n"
+        feat_body = "\ncodex_hooks = true" + sep + feat_body
+    return rest_part[: feat_hdr.end()] + feat_body + feat_tail
+
+
+def _upsert_codex_mcp_sections(rest_part, include_cortex):
+    """Append [mcp_servers.code-graph-context] and optional [mcp_servers.cortex] if absent."""
     if not re.search(r"(?m)^\[mcp_servers\.code-graph-context\][ \t]*$", rest_part):
         rest_part = (
             rest_part.rstrip()
@@ -654,9 +772,157 @@ def _merge_codex_config_toml(existing_text, include_cortex=False):
             + "\n\n[mcp_servers.cortex]\n"
             + 'url = "http://127.0.0.1:8585/mcp"\n'
         )
+    return rest_part
 
-    merged = top_rebuilt + rest_part.lstrip("\n").rstrip() + "\n"
-    return merged
+
+def _merge_codex_config_toml(existing_text, include_cortex=False):
+    """Non-destructively merge Antigravity Codex keys into config.toml with root keys before [section]."""
+    text = (existing_text or "").replace("\r\n", "\n").replace("\r", "\n")
+    if text.startswith("\ufeff"):
+        text = text[1:]
+
+    sec_match = re.search(r"(?m)^\[", text)
+    top_part = text[: sec_match.start()] if sec_match else text
+    rest_part = text[sec_match.start() :] if sec_match else ""
+
+    top_rebuilt = _rebuild_codex_top_header(top_part)
+    rest_part = _upsert_codex_features_section(rest_part)
+    rest_part = _upsert_codex_mcp_sections(rest_part, include_cortex)
+    return top_rebuilt + rest_part.lstrip("\n").rstrip() + "\n"
+
+
+def _build_codex_pairs(repo_root, x_src, codex_dir):
+    """Build list of (src_path, dst_path) pairs for global OpenAI Codex sync."""
+    pairs = [
+        (repo_root / CODEX_MD_NAME, codex_dir / "AGENTS.md"),
+        (
+            x_src / "rules" / "antigravity.rules",
+            codex_dir / "rules" / "antigravity.rules",
+        ),
+    ]
+    for sub, pat in (("rules", "*.md"), ("hooks", "*.ps1"), ("agents", "*.toml")):
+        sub_dir = x_src / sub
+        if sub_dir.is_dir():
+            for src_f in sorted(sub_dir.glob(pat)):
+                pairs.append((src_f, codex_dir / sub / src_f.name))
+    return pairs
+
+
+def _should_include_cortex_for_codex(global_config_dir, existing_cfg_text):
+    """Return True if cortex is configured in global mcp_config.json or existing config.toml."""
+    if re.search(r"(?m)^\[mcp_servers\.cortex\][ \t]*$", existing_cfg_text):
+        return True
+    global_mcp_path = Path(global_config_dir) / "mcp_config.json"
+    if not global_mcp_path.is_file():
+        return False
+    try:
+        m_data = json.loads(
+            global_mcp_path.read_bytes().replace(b"\r\n", b"\n").decode("utf-8-sig")
+        )
+        return "cortex" in (m_data.get("mcpServers") or {})
+    except Exception:
+        return False
+
+
+def _check_codex_toml_root_and_features(cfg_path, parsed_toml):
+    """Validate root keys and [features].codex_hooks in parsed Codex config.toml."""
+    errors = []
+    if parsed_toml.get("project_doc_fallback_filenames") != ["CODEX.md"]:
+        errors.append(
+            "Global %s root project_doc_fallback_filenames must be ['CODEX.md']" % cfg_path
+        )
+    if parsed_toml.get("project_doc_max_bytes") != 65536:
+        errors.append("Global %s root project_doc_max_bytes must be 65536" % cfg_path)
+    features = parsed_toml.get("features")
+    if not isinstance(features, dict) or features.get("codex_hooks") is not True:
+        errors.append("Global %s [features].codex_hooks must be true" % cfg_path)
+    return errors
+
+
+def _validate_codex_toml_content(cfg_path, existing_cfg_text, include_cortex):
+    """Parse and validate root keys, [features], and [mcp_servers] in Codex config.toml."""
+    try:
+        parsed_toml = tomllib.loads(existing_cfg_text)
+    except Exception as exc:
+        return ["Failed to parse TOML %s: %s" % (cfg_path, exc)], []
+
+    errors = _check_codex_toml_root_and_features(cfg_path, parsed_toml)
+    mcp_tbl = parsed_toml.get("mcp_servers") or {}
+    req_srvs = (
+        ("code-graph-context", "cortex") if include_cortex else ("code-graph-context",)
+    )
+    for req_srv in req_srvs:
+        if req_srv not in mcp_tbl:
+            errors.append("Global %s missing [mcp_servers.%s]" % (cfg_path, req_srv))
+    for srv_name, cfg in mcp_tbl.items():
+        errors.extend(
+            _scan_single_mcp_server_secrets(
+                cfg_path.name, srv_name, cfg, map_keys=("env", "http_headers")
+            )
+        )
+    if errors:
+        return errors, []
+    return [], [
+        "Global Codex config.toml OK (%d MCP servers verified)" % len(mcp_tbl)
+    ]
+
+
+def _read_existing_codex_toml(cfg_path, apply_changes):
+    """Read existing config.toml if present; return (text_or_none, errors)."""
+    if not cfg_path.is_file():
+        if not apply_changes:
+            return None, ["Global Codex config.toml missing at %s" % cfg_path]
+        return "", []
+    c_raw = cfg_path.read_bytes()
+    errors = []
+    if check_control_bytes(c_raw) and not apply_changes:
+        errors.append("Global %s contains forbidden control bytes" % cfg_path)
+    text = c_raw.replace(b"\r\n", b"\n").decode("utf-8-sig", errors="replace")
+    return text, errors
+
+
+def _write_codex_toml_if_changed(cfg_path, merged_bytes, backup_dir):
+    """Write merged_bytes to cfg_path if different, backing up when requested."""
+    if cfg_path.is_file() and cfg_path.read_bytes() == merged_bytes:
+        return []
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    if cfg_path.is_file() and backup_dir:
+        b_path = Path(backup_dir) / "codex" / "config.toml.bak"
+        b_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(cfg_path, b_path)
+    cfg_path.write_bytes(merged_bytes)
+    return ["Updated global Codex config in %s" % cfg_path]
+
+
+def _sync_and_check_codex_toml(codex_dir, global_config_dir, apply_changes, backup_dir):
+    """Merge (when apply_changes is True) and validate global Codex config.toml."""
+    cfg_path = codex_dir / "config.toml"
+    existing_cfg_text, errors = _read_existing_codex_toml(cfg_path, apply_changes)
+    if existing_cfg_text is None:
+        return errors, []
+
+    messages = []
+    include_cortex = _should_include_cortex_for_codex(
+        global_config_dir, existing_cfg_text
+    )
+    if apply_changes:
+        merged_cfg_text = _merge_codex_config_toml(
+            existing_cfg_text, include_cortex=include_cortex
+        )
+        messages.extend(
+            _write_codex_toml_if_changed(
+                cfg_path, merged_cfg_text.encode("utf-8"), backup_dir
+            )
+        )
+        existing_cfg_text = merged_cfg_text
+
+    if cfg_path.is_file():
+        t_errs, t_msgs = _validate_codex_toml_content(
+            cfg_path, existing_cfg_text, include_cortex
+        )
+        errors.extend(t_errs)
+        messages.extend(t_msgs)
+    return errors, messages
 
 
 def verify_or_sync_codex(
@@ -670,122 +936,17 @@ def verify_or_sync_codex(
     repo_root = Path(repo_root)
     codex_dir = Path(codex_dir)
     x_src = repo_root / CODEX_DIR_NAME
-    errors = []
-    messages = []
 
-    codex_pairs = [
-        (repo_root / CODEX_MD_NAME, codex_dir / "AGENTS.md"),
-        (
-            x_src / "rules" / "antigravity.rules",
-            codex_dir / "rules" / "antigravity.rules",
-        ),
-    ]
-    for sub, pat in (("rules", "*.md"), ("hooks", "*.ps1"), ("agents", "*.toml")):
-        sub_dir = x_src / sub
-        if sub_dir.is_dir():
-            for src_f in sorted(sub_dir.glob(pat)):
-                codex_pairs.append((src_f, codex_dir / sub / src_f.name))
+    codex_pairs = _build_codex_pairs(repo_root, x_src, codex_dir)
+    errors, messages = _sync_file_pairs(
+        codex_pairs, codex_dir, "Codex", apply_changes, backup_dir, "codex"
+    )
+    sk_errs, sk_msgs = _sync_skill_junctions(
+        x_src / "skills", codex_dir, "Codex", apply_changes
+    )
+    errors.extend(sk_errs)
+    messages.extend(sk_msgs)
 
-    for src_path, dst_path in codex_pairs:
-        if not src_path.is_file():
-            errors.append("Missing canonical Codex source: %s" % src_path)
-            continue
-        src_bytes = src_path.read_bytes()
-        bad_bytes = check_control_bytes(src_bytes)
-        if bad_bytes:
-            errors.append(
-                "Source %s contains forbidden control bytes (first at offset %d: 0x%02x)"
-                % (src_path, bad_bytes[0][0], bad_bytes[0][1])
-            )
-            continue
-
-        if apply_changes and (
-            not dst_path.is_file() or dst_path.read_bytes() != src_bytes
-        ):
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
-            if dst_path.is_file() and backup_dir:
-                rel_dst = dst_path.relative_to(codex_dir)
-                b_path = (
-                    Path(backup_dir)
-                    / "codex"
-                    / rel_dst.with_name(rel_dst.name + ".bak")
-                )
-                b_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(dst_path, b_path)
-                messages.append("Backed up existing %s to %s" % (dst_path, b_path))
-            dst_path.write_bytes(src_bytes)
-            messages.append(
-                "Synced %s -> %s (sha256:%s)"
-                % (src_path, dst_path, sha256_hex(src_bytes)[:12])
-            )
-
-        if not dst_path.is_file():
-            errors.append("Global Codex file missing at %s" % dst_path)
-        else:
-            dst_bytes = dst_path.read_bytes()
-            if src_bytes != dst_bytes:
-                errors.append(
-                    "Drift detected between %s (sha256:%s) and %s (sha256:%s)"
-                    % (
-                        src_path,
-                        sha256_hex(src_bytes)[:12],
-                        dst_path,
-                        sha256_hex(dst_bytes)[:12],
-                    )
-                )
-            else:
-                messages.append(
-                    "Codex %s parity OK (sha256:%s)"
-                    % (dst_path.name, sha256_hex(src_bytes)[:12])
-                )
-
-    # Non-destructive per-skill NTFS directory junctions in global Codex skills directory
-    skills_src_root = x_src / "skills"
-    if skills_src_root.is_dir():
-        for sk_src in sorted(skills_src_root.iterdir()):
-            if not sk_src.is_dir():
-                continue
-            sk_dst = codex_dir / "skills" / sk_src.name
-            exp = sk_src.resolve()
-            already_ok = (
-                os.path.lexists(sk_dst)
-                and sk_dst.exists()
-                and os.path.normcase(str(sk_dst.resolve()))
-                == os.path.normcase(str(exp))
-            )
-            if not already_ok and apply_changes:
-                sk_dst.parent.mkdir(parents=True, exist_ok=True)
-                if os.path.lexists(sk_dst):
-                    is_reparse = not sk_dst.exists() or (
-                        os.path.normcase(str(sk_dst.resolve()))
-                        != os.path.normcase(str(os.path.abspath(sk_dst)))
-                    )
-                    if is_reparse:
-                        os.rmdir(sk_dst)
-                        _create_directory_junction(exp, sk_dst)
-                    else:
-                        errors.append(
-                            "Codex skill path %s is a non-junction directory; refusing to overwrite"
-                            % sk_dst
-                        )
-                else:
-                    _create_directory_junction(exp, sk_dst)
-
-            if sk_dst.exists():
-                resolved_sk = sk_dst.resolve()
-                if os.path.normcase(str(resolved_sk)) != os.path.normcase(str(exp)):
-                    errors.append(
-                        "Codex skill junction mismatch: %s -> %s (expected %s)"
-                        % (sk_dst, resolved_sk, exp)
-                    )
-                else:
-                    messages.append(
-                        "Codex skill junction OK: %s -> %s" % (sk_dst, resolved_sk)
-                    )
-            else:
-                errors.append("Codex skill junction missing at %s" % sk_dst)
-
-    # Non-destructive global hooks.json upsert with absolute global hook paths
     hooks_dir_posix = (codex_dir / "hooks").as_posix()
     canon_hooks_raw = (
         (x_src / "hooks.json")
@@ -793,201 +954,27 @@ def verify_or_sync_codex(
         .replace(CODEX_HOOKS_REL, hooks_dir_posix)
     )
     required_hooks = json.loads(canon_hooks_raw).get("hooks", {})
-    hooks_json_path = codex_dir / "hooks.json"
-    hooks_json_data = {}
-    if hooks_json_path.is_file():
-        h_raw = hooks_json_path.read_bytes()
-        bad_h = check_control_bytes(h_raw)
-        if bad_h and not apply_changes:
-            errors.append(
-                "Global %s contains forbidden control bytes" % hooks_json_path
-            )
-        try:
-            hooks_json_data = json.loads(
-                h_raw.replace(b"\r\n", b"\n").decode("utf-8-sig")
-            )
-        except Exception as exc:
-            errors.append("Failed to parse %s: %s" % (hooks_json_path, exc))
-            hooks_json_data = None
+    h_errs, h_msgs = _sync_hooks_container_file(
+        codex_dir / "hooks.json",
+        required_hooks,
+        "Codex",
+        "codex",
+        apply_changes,
+        backup_dir,
+    )
+    errors.extend(h_errs)
+    messages.extend(h_msgs)
 
-    if isinstance(hooks_json_data, dict):
-        hooks_map = hooks_json_data.get("hooks")
-        if not isinstance(hooks_map, dict):
-            hooks_map = {}
-        hooks_modified = False
-        for event_name, req_entries in required_hooks.items():
-            cur_list = list(hooks_map.get(event_name) or [])
-            for req_entry in req_entries:
-                req_cmd = req_entry["hooks"][0]["command"]
-                script_base = (
-                    "brc-guard.ps1"
-                    if "brc-guard.ps1" in req_cmd
-                    else "telemetry-append.ps1"
-                )
-                if req_entry not in cur_list:
-                    if apply_changes:
-                        replaced = False
-                        new_list = []
-                        for item in cur_list:
-                            item_cmds = " ".join(
-                                h.get("command", "")
-                                for h in (item.get("hooks") or [])
-                                if isinstance(h, dict)
-                            )
-                            if script_base in item_cmds:
-                                if not replaced:
-                                    new_list.append(req_entry)
-                                    replaced = True
-                            else:
-                                new_list.append(item)
-                        if not replaced:
-                            new_list.append(req_entry)
-                        cur_list = new_list
-                        hooks_map[event_name] = cur_list
-                        hooks_json_data["hooks"] = hooks_map
-                        hooks_modified = True
-                    else:
-                        errors.append(
-                            "Global %s missing or drifted hook %s (%s)"
-                            % (hooks_json_path, event_name, script_base)
-                        )
-        if apply_changes and (hooks_modified or not hooks_json_path.is_file()):
-            hooks_json_path.parent.mkdir(parents=True, exist_ok=True)
-            if hooks_json_path.is_file() and backup_dir:
-                b_path = Path(backup_dir) / "codex" / "hooks.json.bak"
-                b_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(hooks_json_path, b_path)
-            hooks_json_path.write_bytes(
-                (json.dumps(hooks_json_data, indent=2) + "\n").encode("utf-8")
-            )
-            messages.append("Updated global Codex hooks in %s" % hooks_json_path)
-        if not errors:
-            messages.append("Global Codex hooks.json OK")
-
-    # Non-destructive root-level-aware TOML merge on config.toml
-    cfg_path = codex_dir / "config.toml"
-    existing_cfg_text = ""
-    if cfg_path.is_file():
-        c_raw = cfg_path.read_bytes()
-        bad_c = check_control_bytes(c_raw)
-        if bad_c and not apply_changes:
-            errors.append("Global %s contains forbidden control bytes" % cfg_path)
-        existing_cfg_text = c_raw.replace(b"\r\n", b"\n").decode(
-            "utf-8-sig", errors="replace"
-        )
-    elif not apply_changes:
-        errors.append("Global Codex config.toml missing at %s" % cfg_path)
-
-    include_cortex = False
-    global_mcp_path = Path(global_config_dir) / "mcp_config.json"
-    if global_mcp_path.is_file():
-        try:
-            m_data = json.loads(
-                global_mcp_path.read_bytes()
-                .replace(b"\r\n", b"\n")
-                .decode("utf-8-sig")
-            )
-            if "cortex" in (m_data.get("mcpServers") or {}):
-                include_cortex = True
-        except Exception:
-            pass
-    if re.search(r"(?m)^\[mcp_servers\.cortex\][ \t]*$", existing_cfg_text):
-        include_cortex = True
-
-    if apply_changes:
-        merged_cfg_text = _merge_codex_config_toml(
-            existing_cfg_text, include_cortex=include_cortex
-        )
-        merged_bytes = merged_cfg_text.encode("utf-8")
-        if not cfg_path.is_file() or cfg_path.read_bytes() != merged_bytes:
-            cfg_path.parent.mkdir(parents=True, exist_ok=True)
-            if cfg_path.is_file() and backup_dir:
-                b_path = Path(backup_dir) / "codex" / "config.toml.bak"
-                b_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(cfg_path, b_path)
-            cfg_path.write_bytes(merged_bytes)
-            messages.append("Updated global Codex config in %s" % cfg_path)
-        existing_cfg_text = merged_cfg_text
-
-    if cfg_path.is_file():
-        try:
-            parsed_toml = tomllib.loads(existing_cfg_text)
-            if parsed_toml.get("project_doc_fallback_filenames") != ["CODEX.md"]:
-                errors.append(
-                    "Global %s root project_doc_fallback_filenames must be ['CODEX.md']"
-                    % cfg_path
-                )
-            if parsed_toml.get("project_doc_max_bytes") != 65536:
-                errors.append(
-                    "Global %s root project_doc_max_bytes must be 65536" % cfg_path
-                )
-            if (parsed_toml.get("features") or {}).get("codex_hooks") is not True:
-                errors.append(
-                    "Global %s [features].codex_hooks must be true" % cfg_path
-                )
-            mcp_tbl = parsed_toml.get("mcp_servers") or {}
-            req_codex_srvs = (
-                ("code-graph-context", "cortex")
-                if include_cortex
-                else ("code-graph-context",)
-            )
-            for req_srv in req_codex_srvs:
-                if req_srv not in mcp_tbl:
-                    errors.append(
-                        "Global %s missing [mcp_servers.%s]" % (cfg_path, req_srv)
-                    )
-            for srv_name, cfg in mcp_tbl.items():
-                if not isinstance(cfg, dict):
-                    continue
-                url_val = str(cfg.get("url") or "")
-                if url_val and (
-                    MCP_URL_SECRET_RE.search(url_val)
-                    or MCP_SECRET_VALUE_RE.search(url_val)
-                ):
-                    errors.append(
-                        "Global %s server %r URL contains plaintext secret"
-                        % (cfg_path.name, srv_name)
-                    )
-                for map_key in ("env", "http_headers"):
-                    env_map = cfg.get(map_key, {})
-                    if not isinstance(env_map, dict):
-                        continue
-                    for k, v in env_map.items():
-                        v_str = str(v)
-                        if (
-                            v_str == "__REDACTED_IN_WINVAULT__"
-                            or v_str.startswith("${")
-                            or v_str.startswith("{{")
-                        ):
-                            continue
-                        if MCP_SECRET_VALUE_RE.search(v_str) or (
-                            MCP_SECRET_KEY_RE.search(str(k)) and len(v_str.strip()) >= 8
-                        ):
-                            errors.append(
-                                "Global %s server %r %s[%r] contains plaintext secret"
-                                % (cfg_path.name, srv_name, map_key, k)
-                            )
-            if not errors:
-                messages.append(
-                    "Global Codex config.toml OK (%d MCP servers verified)"
-                    % len(mcp_tbl)
-                )
-        except Exception as exc:
-            errors.append("Failed to parse TOML %s: %s" % (cfg_path, exc))
-
+    t_errs, t_msgs = _sync_and_check_codex_toml(
+        codex_dir, global_config_dir, apply_changes, backup_dir
+    )
+    errors.extend(t_errs)
+    messages.extend(t_msgs)
     return errors, messages
 
 
-def verify_or_sync(
-    repo_root,
-    global_config_dir,
-    apply_changes=False,
-    backup_dir=None,
-    claude_dir=None,
-    claude_json=None,
-    codex_dir=None,
-):
-    """Verify or apply UTF-8 LF sync from .agents/ (and optionally Claude tree) to global dirs."""
+def _build_agents_sync_pairs(repo_root, global_config_dir):
+    """Build list of (src_path, dst_path) pairs for .agents -> ~/.gemini/config sync."""
     sync_pairs = [
         (repo_root / ".agents" / "AGENTS.md", global_config_dir / "AGENTS.md"),
         (repo_root / ".agents" / "hooks.json", global_config_dir / "hooks.json"),
@@ -1000,95 +987,33 @@ def verify_or_sync(
             global_config_dir / "hooks" / "telemetry-append.ps1",
         ),
     ]
-    rules_dir = repo_root / ".agents" / "rules"
-    if rules_dir.is_dir():
-        for rule_src in sorted(rules_dir.glob("*.md")):
-            sync_pairs.append(
-                (rule_src, global_config_dir / "rules" / rule_src.name)
-            )
-    custom_agents_dir = repo_root / ".agents" / "agents"
-    if custom_agents_dir.is_dir():
-        for agent_src in sorted(custom_agents_dir.glob("*.md")):
-            sync_pairs.append(
-                (agent_src, global_config_dir / "agents" / agent_src.name)
-            )
-    skills_link = global_config_dir / "skills"
-    expected_skills = (repo_root / ".agents" / "skills").resolve()
+    for sub in ("rules", "agents"):
+        src_dir = repo_root / ".agents" / sub
+        if src_dir.is_dir():
+            for item_src in sorted(src_dir.glob("*.md")):
+                sync_pairs.append((item_src, global_config_dir / sub / item_src.name))
+    return sync_pairs
 
-    for src_path, _ in sync_pairs:
-        if not src_path.is_file():
-            return 1, ["Missing canonical source: %s" % src_path]
 
-    if apply_changes:
-        normalize_lf_utf8(repo_root)
+def _check_root_skills_junction(skills_link, expected_skills):
+    """Verify that ~/.gemini/config/skills resolves to .agents/skills."""
+    if not skills_link.exists():
+        return ["Skills directory/junction missing at %s" % skills_link], []
+    resolved_skills = skills_link.resolve()
+    if os.path.normcase(str(resolved_skills)) != os.path.normcase(str(expected_skills)):
+        return [
+            "Skills junction mismatch: %s -> %s (expected %s)"
+            % (skills_link, resolved_skills, expected_skills)
+        ], []
+    return [], ["Skills junction OK: %s -> %s" % (skills_link, resolved_skills)]
 
-    messages = []
+
+def _sync_optional_peer_harnesses(
+    repo_root, global_config_dir, claude_dir, claude_json, codex_dir, apply_changes, backup_dir
+):
+    """Run optional Claude and Codex verification/sync passes."""
     errors = []
-
-    if skills_link.exists():
-        resolved_skills = skills_link.resolve()
-        if os.path.normcase(str(resolved_skills)) != os.path.normcase(str(expected_skills)):
-            errors.append(
-                "Skills junction mismatch: %s -> %s (expected %s)"
-                % (skills_link, resolved_skills, expected_skills)
-            )
-        else:
-            messages.append("Skills junction OK: %s -> %s" % (skills_link, resolved_skills))
-    else:
-        errors.append("Skills directory/junction missing at %s" % skills_link)
-
-    for src_path, dst_path in sync_pairs:
-        src_bytes = src_path.read_bytes()
-        bad_bytes = check_control_bytes(src_bytes)
-        if bad_bytes:
-            return 1, [
-                "Source %s contains forbidden control bytes (first at offset %d: 0x%02x)"
-                % (src_path, bad_bytes[0][0], bad_bytes[0][1])
-            ]
-
-        if apply_changes:
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
-            if dst_path.is_file() and backup_dir:
-                rel_dst = dst_path.relative_to(global_config_dir)
-                backup_path = Path(backup_dir) / rel_dst.with_name(
-                    rel_dst.name + ".bak"
-                )
-                backup_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(dst_path, backup_path)
-                messages.append("Backed up existing %s to %s" % (dst_path, backup_path))
-            dst_path.write_bytes(src_bytes)
-            messages.append(
-                "Synced %s -> %s (sha256:%s)"
-                % (src_path, dst_path, sha256_hex(src_bytes)[:12])
-            )
-
-        if not dst_path.is_file():
-            errors.append("Global file missing at %s" % dst_path)
-        else:
-            dst_bytes = dst_path.read_bytes()
-            if src_bytes != dst_bytes:
-                errors.append(
-                    "Drift detected between %s (sha256:%s) and %s (sha256:%s)"
-                    % (
-                        src_path,
-                        sha256_hex(src_bytes)[:12],
-                        dst_path,
-                        sha256_hex(dst_bytes)[:12],
-                    )
-                )
-            else:
-                messages.append(
-                    "%s parity OK (sha256:%s)"
-                    % (dst_path.name, sha256_hex(src_bytes)[:12])
-                )
-
-    mcp_errs, mcp_msgs = check_global_mcp_config(
-        repo_root, global_config_dir, apply_changes=apply_changes
-    )
-    errors.extend(mcp_errs)
-    messages.extend(mcp_msgs)
-    errors.extend(check_plugin_double_load(global_config_dir))
-
+    messages = []
     if claude_dir is not None:
         c_errs, c_msgs = verify_or_sync_claude(
             repo_root,
@@ -1100,7 +1025,6 @@ def verify_or_sync(
         )
         errors.extend(c_errs)
         messages.extend(c_msgs)
-
     if codex_dir is not None:
         x_errs, x_msgs = verify_or_sync_codex(
             repo_root,
@@ -1111,10 +1035,228 @@ def verify_or_sync(
         )
         errors.extend(x_errs)
         messages.extend(x_msgs)
+    return errors, messages
 
-    if errors:
-        return 1, messages + errors
-    return 0, messages
+
+def verify_or_sync(
+    repo_root,
+    global_config_dir,
+    apply_changes=False,
+    backup_dir=None,
+    claude_dir=None,
+    claude_json=None,
+    codex_dir=None,
+):
+    """Verify or apply UTF-8 LF sync from .agents/ (and optionally Claude/Codex trees) to global dirs."""
+    repo_root = Path(repo_root)
+    global_config_dir = Path(global_config_dir)
+    sync_pairs = _build_agents_sync_pairs(repo_root, global_config_dir)
+
+    for src_path, _ in sync_pairs:
+        if not src_path.is_file():
+            return 1, ["Missing canonical source: %s" % src_path]
+        bad_bytes = check_control_bytes(src_path.read_bytes())
+        if bad_bytes:
+            return 1, [
+                "Source %s contains forbidden control bytes (first at offset %d: 0x%02x)"
+                % (src_path, bad_bytes[0][0], bad_bytes[0][1])
+            ]
+
+    if apply_changes:
+        normalize_lf_utf8(repo_root)
+
+    expected_skills = (repo_root / ".agents" / "skills").resolve()
+    errors, messages = _check_root_skills_junction(
+        global_config_dir / "skills", expected_skills
+    )
+    pair_errs, pair_msgs = _sync_file_pairs(
+        sync_pairs, global_config_dir, "Global", apply_changes, backup_dir, ""
+    )
+    errors.extend(pair_errs)
+    messages.extend(pair_msgs)
+
+    mcp_errs, mcp_msgs = check_global_mcp_config(
+        repo_root, global_config_dir, apply_changes=apply_changes
+    )
+    errors.extend(mcp_errs)
+    messages.extend(mcp_msgs)
+    errors.extend(check_plugin_double_load(global_config_dir))
+
+    peer_errs, peer_msgs = _sync_optional_peer_harnesses(
+        repo_root,
+        global_config_dir,
+        claude_dir,
+        claude_json,
+        codex_dir,
+        apply_changes,
+        backup_dir,
+    )
+    errors.extend(peer_errs)
+    messages.extend(peer_msgs)
+
+    return (1, messages + errors) if errors else (0, messages)
+
+
+def _self_test_backup_and_double_load(repo_root, fake_global, fake_backup):
+    """Verify backup path creation and plugin double-load detection."""
+    verify_or_sync(
+        repo_root=Path(repo_root),
+        global_config_dir=fake_global,
+        apply_changes=False,
+        backup_dir=fake_backup,
+    )
+    rel_dst = (fake_global / "rules" / "mobile-ui.md").relative_to(fake_global)
+    backup_target = fake_backup / rel_dst.with_name(rel_dst.name + ".bak")
+    backup_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(fake_global / "rules" / "mobile-ui.md", backup_target)
+    if not (fake_backup / "rules" / "mobile-ui.md.bak").is_file():
+        return ["Self-test failed: relative backup path not preserved"]
+
+    if check_plugin_double_load(fake_global) != []:
+        return ["Self-test failed: unexpected double-load error on clean dir"]
+    plugin_dir = fake_global / "plugins" / "antigravity-core"
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "plugin.json").write_text(
+        json.dumps({"name": "antigravity-core", "disabled": False}),
+        encoding="utf-8",
+    )
+    dl_errs = check_plugin_double_load(fake_global)
+    if not any("double-load" in e.lower() for e in dl_errs):
+        return ["Self-test failed: did not detect enabled global plugin"]
+    return []
+
+
+def _seed_fake_claude_env(fake_claude, fake_claude_json):
+    """Seed synthetic user skills, agents, settings.json, and claude.json for self-test."""
+    (fake_claude / "skills" / "custom-user-skill").mkdir(parents=True, exist_ok=True)
+    (fake_claude / "skills" / "custom-user-skill" / "SKILL.md").write_text(
+        "# User skill\n", encoding="utf-8"
+    )
+    (fake_claude / "agents").mkdir(parents=True, exist_ok=True)
+    (fake_claude / "agents" / "custom-user-agent.md").write_text(
+        "# User agent\n", encoding="utf-8"
+    )
+    (fake_claude / "settings.json").write_text(
+        json.dumps({"skipWorkflowUsageWarning": True}), encoding="utf-8"
+    )
+    fake_claude_json.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "cortex": {"type": "http", "url": "http://127.0.0.1:8585/mcp"},
+                    "third-party": {"type": "stdio", "command": "npx"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _verify_claude_self_test_state(fake_claude, fake_claude_json):
+    """Verify preserved user skills, agents, settings, and merged MCP servers after Claude sync."""
+    if not (fake_claude / "skills" / "custom-user-skill" / "SKILL.md").is_file():
+        return ["Self-test failed: custom user skill was not preserved"]
+    if not (fake_claude / "agents" / "custom-user-agent.md").is_file():
+        return ["Self-test failed: custom user agent was not preserved"]
+    merged_settings = json.loads(
+        (fake_claude / "settings.json").read_text(encoding="utf-8")
+    )
+    if merged_settings.get("skipWorkflowUsageWarning") is not True:
+        return ["Self-test failed: skipWorkflowUsageWarning was not preserved"]
+    merged_mcp = json.loads(fake_claude_json.read_text(encoding="utf-8"))["mcpServers"]
+    if (
+        merged_mcp.get("cortex", {}).get("url") != "http://127.0.0.1:8585/mcp"
+        or "code-graph-context" not in merged_mcp
+        or "third-party" not in merged_mcp
+    ):
+        return ["Self-test failed: Claude MCP servers merge incorrect"]
+    return []
+
+
+def _self_test_claude_sync(repo_root, tmp_path, fake_global, fake_backup):
+    """Run hermetic twice-applied idempotency and preservation self-tests for Claude sync."""
+    fake_claude = tmp_path / "claude"
+    fake_claude_json = tmp_path / "claude.json"
+    _seed_fake_claude_env(fake_claude, fake_claude_json)
+
+    for apply_flag in (True, True, False):
+        c_errs, _ = verify_or_sync_claude(
+            repo_root=Path(repo_root),
+            global_config_dir=fake_global,
+            claude_dir=fake_claude,
+            claude_json=fake_claude_json,
+            apply_changes=apply_flag,
+            backup_dir=fake_backup if apply_flag else None,
+        )
+        if c_errs:
+            return ["Self-test failed during Claude sync (apply=%s): %s" % (apply_flag, c_errs)]
+    return _verify_claude_self_test_state(fake_claude, fake_claude_json)
+
+
+def _check_codex_cortex_free_toml(fake_codex):
+    """Verify Codex TOML merge when cortex is not in global mcp_config.json."""
+    if not (fake_codex / "skills" / ".system" / "SKILL.md").is_file():
+        return ["Self-test failed: Codex .system skill was not preserved"]
+    parsed_x = tomllib.loads((fake_codex / "config.toml").read_text(encoding="utf-8"))
+    mcp_srvs = parsed_x.get("mcp_servers", {})
+    win_tbl = parsed_x.get("windows", {})
+    expected_root = (
+        parsed_x.get("project_doc_fallback_filenames"),
+        parsed_x.get("project_doc_max_bytes"),
+        parsed_x.get("model"),
+        win_tbl.get("sandbox") if isinstance(win_tbl, dict) else None,
+    )
+    if expected_root != (["CODEX.md"], 65536, "gpt-5.4", "elevated"):
+        return ["Self-test failed: Codex TOML cortex-free merge incorrect"]
+    if {"ida-pro-mcp", "code-graph-context"} - set(mcp_srvs) or "cortex" in mcp_srvs:
+        return ["Self-test failed: Codex TOML cortex-free merge incorrect"]
+    return []
+
+
+def _self_test_codex_sync(repo_root, tmp_path, fake_global, fake_backup):
+    """Run hermetic twice-applied idempotency and TOML merge self-tests for OpenAI Codex."""
+    fake_codex = tmp_path / "codex"
+    (fake_codex / "skills" / ".system").mkdir(parents=True, exist_ok=True)
+    (fake_codex / "skills" / ".system" / "SKILL.md").write_text(
+        "# System skill\n", encoding="utf-8"
+    )
+    (fake_codex / "config.toml").write_text(
+        'model = "gpt-5.4"\n[mcp_servers.ida-pro-mcp]\ncommand = "uv"\n[windows]\nsandbox = "elevated"\n',
+        encoding="utf-8",
+    )
+    for apply_flag in (True, True, False):
+        x_errs, _ = verify_or_sync_codex(
+            repo_root=Path(repo_root),
+            global_config_dir=fake_global,
+            codex_dir=fake_codex,
+            apply_changes=apply_flag,
+            backup_dir=fake_backup if apply_flag else None,
+        )
+        if x_errs:
+            return ["Self-test failed during Codex sync (apply=%s): %s" % (apply_flag, x_errs)]
+
+    errs = _check_codex_cortex_free_toml(fake_codex)
+    if errs:
+        return errs
+
+    gmcp = json.loads((fake_global / "mcp_config.json").read_text(encoding="utf-8"))
+    gmcp.setdefault("mcpServers", {})["cortex"] = {"url": "http://127.0.0.1:8585/mcp"}
+    (fake_global / "mcp_config.json").write_text(
+        json.dumps(gmcp, indent=2) + "\n", encoding="utf-8"
+    )
+    x_errs_c, _ = verify_or_sync_codex(
+        repo_root=Path(repo_root),
+        global_config_dir=fake_global,
+        codex_dir=fake_codex,
+        apply_changes=True,
+        backup_dir=fake_backup,
+    )
+    if x_errs_c:
+        return ["Self-test failed during Codex cortex-enabled apply: %s" % x_errs_c]
+    parsed_xc = tomllib.loads((fake_codex / "config.toml").read_text(encoding="utf-8"))
+    if "cortex" not in (parsed_xc.get("mcp_servers") or {}):
+        return ["Self-test failed: Codex TOML opt-in cortex merge missing"]
+    return []
 
 
 def run_self_test(repo_root):
@@ -1131,181 +1273,35 @@ def run_self_test(repo_root):
         )
         (fake_global / "AGENTS.md").write_text("old content\n", encoding="utf-8")
         (fake_global / "rules").mkdir(parents=True, exist_ok=True)
-        (fake_global / "rules" / "mobile-ui.md").write_text(
-            "old rule\n", encoding="utf-8"
-        )
+        (fake_global / "rules" / "mobile-ui.md").write_text("old rule\n", encoding="utf-8")
 
-        # Apply sync with backup (Note: skills junction won't exist in fake_global, so only check files & backup)
-        verify_or_sync(
-            repo_root=Path(repo_root),
-            global_config_dir=fake_global,
-            apply_changes=False,
-            backup_dir=fake_backup,
-        )
-        # Verify relative backup path creation during apply on a synthetic pair
-        rel_dst = (fake_global / "rules" / "mobile-ui.md").relative_to(fake_global)
-        backup_target = fake_backup / rel_dst.with_name(rel_dst.name + ".bak")
-        backup_target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(fake_global / "rules" / "mobile-ui.md", backup_target)
-        if not (fake_backup / "rules" / "mobile-ui.md.bak").is_file():
-            return 1, ["Self-test failed: relative backup path not preserved"]
-
-        # Verify double-load guard
-        if check_plugin_double_load(fake_global) != []:
-            return 1, ["Self-test failed: unexpected double-load error on clean dir"]
-        plugin_dir = fake_global / "plugins" / "antigravity-core"
-        plugin_dir.mkdir(parents=True, exist_ok=True)
-        (plugin_dir / "plugin.json").write_text(
-            json.dumps({"name": "antigravity-core", "disabled": False}),
-            encoding="utf-8",
-        )
-        dl_errs = check_plugin_double_load(fake_global)
-        if not any("double-load" in e.lower() for e in dl_errs):
-            return 1, ["Self-test failed: did not detect enabled global plugin"]
-
-        # Verify hermetic global Claude sync (twice-applied idempotency + non-destructive preservation)
-        fake_claude = tmp_path / "claude"
-        fake_claude_json = tmp_path / "claude.json"
-        (fake_claude / "skills" / "custom-user-skill").mkdir(parents=True, exist_ok=True)
-        (fake_claude / "skills" / "custom-user-skill" / "SKILL.md").write_text(
-            "# User skill\n", encoding="utf-8"
-        )
-        (fake_claude / "agents").mkdir(parents=True, exist_ok=True)
-        (fake_claude / "agents" / "custom-user-agent.md").write_text(
-            "# User agent\n", encoding="utf-8"
-        )
-        (fake_claude / "settings.json").write_text(
-            json.dumps({"skipWorkflowUsageWarning": True}), encoding="utf-8"
-        )
-        fake_claude_json.write_text(
-            json.dumps(
-                {
-                    "mcpServers": {
-                        "cortex": {"type": "http", "url": "http://127.0.0.1:8585/mcp"},
-                        "third-party": {"type": "stdio", "command": "npx"},
-                    }
-                }
-            ),
-            encoding="utf-8",
-        )
-        for _ in range(2):
-            c_errs, _ = verify_or_sync_claude(
-                repo_root=Path(repo_root),
-                global_config_dir=fake_global,
-                claude_dir=fake_claude,
-                claude_json=fake_claude_json,
-                apply_changes=True,
-                backup_dir=fake_backup,
-            )
-            if c_errs:
-                return 1, ["Self-test failed during Claude apply: %s" % c_errs]
-
-        c_check_errs, _ = verify_or_sync_claude(
-            repo_root=Path(repo_root),
-            global_config_dir=fake_global,
-            claude_dir=fake_claude,
-            claude_json=fake_claude_json,
-            apply_changes=False,
-        )
-        if c_check_errs:
-            return 1, ["Self-test failed during Claude check: %s" % c_check_errs]
-        if not (fake_claude / "skills" / "custom-user-skill" / "SKILL.md").is_file():
-            return 1, ["Self-test failed: custom user skill was not preserved"]
-        if not (fake_claude / "agents" / "custom-user-agent.md").is_file():
-            return 1, ["Self-test failed: custom user agent was not preserved"]
-        merged_settings = json.loads(
-            (fake_claude / "settings.json").read_text(encoding="utf-8")
-        )
-        if merged_settings.get("skipWorkflowUsageWarning") is not True:
-            return 1, ["Self-test failed: skipWorkflowUsageWarning was not preserved"]
-        merged_mcp = json.loads(fake_claude_json.read_text(encoding="utf-8"))[
-            "mcpServers"
-        ]
-        if (
-            merged_mcp.get("cortex", {}).get("url") != "http://127.0.0.1:8585/mcp"
-            or "code-graph-context" not in merged_mcp
-            or "third-party" not in merged_mcp
+        for step in (
+            lambda: _self_test_backup_and_double_load(repo_root, fake_global, fake_backup),
+            lambda: _self_test_claude_sync(repo_root, tmp_path, fake_global, fake_backup),
+            lambda: _self_test_codex_sync(repo_root, tmp_path, fake_global, fake_backup),
         ):
-            return 1, ["Self-test failed: Claude MCP servers merge incorrect"]
-
-        # Verify hermetic global OpenAI Codex sync (root-level TOML key placement before [windows] + twice-applied idempotency)
-        fake_codex = tmp_path / "codex"
-        (fake_codex / "skills" / ".system").mkdir(parents=True, exist_ok=True)
-        (fake_codex / "skills" / ".system" / "SKILL.md").write_text(
-            "# System skill\n", encoding="utf-8"
-        )
-        (fake_codex / "config.toml").write_text(
-            'model = "gpt-5.4"\n'
-            "[mcp_servers.ida-pro-mcp]\n"
-            'command = "uv"\n'
-            "[windows]\n"
-            'sandbox = "elevated"\n',
-            encoding="utf-8",
-        )
-        for _ in range(2):
-            x_errs, _ = verify_or_sync_codex(
-                repo_root=Path(repo_root),
-                global_config_dir=fake_global,
-                codex_dir=fake_codex,
-                apply_changes=True,
-                backup_dir=fake_backup,
-            )
-            if x_errs:
-                return 1, ["Self-test failed during Codex apply: %s" % x_errs]
-
-        x_check_errs, _ = verify_or_sync_codex(
-            repo_root=Path(repo_root),
-            global_config_dir=fake_global,
-            codex_dir=fake_codex,
-            apply_changes=False,
-        )
-        if x_check_errs:
-            return 1, ["Self-test failed during Codex check: %s" % x_check_errs]
-        if not (fake_codex / "skills" / ".system" / "SKILL.md").is_file():
-            return 1, ["Self-test failed: Codex .system skill was not preserved"]
-        parsed_x = tomllib.loads((fake_codex / "config.toml").read_text(encoding="utf-8"))
-        if (
-            parsed_x.get("project_doc_fallback_filenames") != ["CODEX.md"]
-            or parsed_x.get("project_doc_max_bytes") != 65536
-            or parsed_x.get("model") != "gpt-5.4"
-            or (parsed_x.get("windows") or {}).get("sandbox") != "elevated"
-            or "ida-pro-mcp" not in (parsed_x.get("mcp_servers") or {})
-            or "cortex" in (parsed_x.get("mcp_servers") or {})
-            or "code-graph-context" not in (parsed_x.get("mcp_servers") or {})
-        ):
-            return 1, ["Self-test failed: Codex TOML cortex-free merge incorrect"]
-
-        # Enable cortex in fake_global/mcp_config.json and verify opt-in Codex sync
-        gmcp = json.loads((fake_global / "mcp_config.json").read_text(encoding="utf-8"))
-        gmcp.setdefault("mcpServers", {})["cortex"] = {
-            "url": "http://127.0.0.1:8585/mcp"
-        }
-        (fake_global / "mcp_config.json").write_text(
-            json.dumps(gmcp, indent=2) + "\n", encoding="utf-8"
-        )
-        x_errs_c, _ = verify_or_sync_codex(
-            repo_root=Path(repo_root),
-            global_config_dir=fake_global,
-            codex_dir=fake_codex,
-            apply_changes=True,
-            backup_dir=fake_backup,
-        )
-        if x_errs_c:
-            return 1, ["Self-test failed during Codex cortex-enabled apply: %s" % x_errs_c]
-        parsed_xc = tomllib.loads((fake_codex / "config.toml").read_text(encoding="utf-8"))
-        if "cortex" not in (parsed_xc.get("mcp_servers") or {}):
-            return 1, ["Self-test failed: Codex TOML opt-in cortex merge missing"]
+            errs = step()
+            if errs:
+                return 1, errs
 
     return 0, ["sync_global_config.py self-test: PASS"]
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Sync .agents, Claude, and OpenAI Codex global configs.")
+    parser = argparse.ArgumentParser(
+        description="Sync .agents, Claude, and OpenAI Codex global configs."
+    )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="Verify parity without writing.")
-    group.add_argument("--apply", action="store_true", help="Normalize LF and sync global configs.")
+    group.add_argument(
+        "--apply", action="store_true", help="Normalize LF and sync global configs."
+    )
     group.add_argument("--self-test", action="store_true", help="Run isolated self-test.")
-    parser.add_argument("--backup-dir", default=None, help="Optional directory to back up overwritten files.")
+    parser.add_argument(
+        "--backup-dir",
+        default=None,
+        help="Optional directory to back up overwritten files.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -1332,4 +1328,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

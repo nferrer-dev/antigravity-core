@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|PowerShell|Read|read_file|Edit|edit_file|Write|write_file|MultiEdit|SendMessage|Agent|Task|WebFetch|mcp__cortex__.*",
+        "matcher": "Bash|PowerShell|Read|read_file|Grep|Edit|edit_file|Write|write_file|MultiEdit|SendMessage|Agent|Task|WebFetch|mcp__cortex__.*",
         "hooks": [
           {
             "type": "command",

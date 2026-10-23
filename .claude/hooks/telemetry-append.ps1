@@ -11,6 +11,61 @@
 # Telemetry must never block work: this script ALWAYS exits 0.
 # PowerShell 5.1 compatible. ASCII only.
 
+function Remove-BacktickCodeSpans {
+    param([string]$InputText)
+    if ([string]::IsNullOrWhiteSpace($InputText)) { return '' }
+    $cleaned = [regex]::Replace($InputText, '(?s)```.*?```', ' ')
+    $cleaned = [regex]::Replace($cleaned, '`[^`\r\n]+`', ' ')
+    return $cleaned
+}
+
+function Get-TranscriptAssistantText {
+    param([string]$TranscriptPath)
+    if ([string]::IsNullOrWhiteSpace($TranscriptPath) -or -not (Test-Path -LiteralPath $TranscriptPath)) {
+        return ''
+    }
+    $tail = @(Get-Content -LiteralPath $TranscriptPath -Tail 40 -Encoding UTF8 -ErrorAction Stop)
+    $plainLines = New-Object System.Collections.Generic.List[string]
+    for ($i = $tail.Count - 1; $i -ge 0; $i--) {
+        $line = [string]$tail[$i]
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $trimmed = $line.Trim()
+        if ($trimmed.StartsWith('{')) {
+            try {
+                $obj = $trimmed | ConvertFrom-Json
+                if ($null -eq $obj) { continue }
+                if ($obj.PSObject.Properties['source'] -and ([string]$obj.source) -in @('USER_EXPLICIT', 'SYSTEM', 'TOOL')) { continue }
+                if ($obj.PSObject.Properties['type'] -and ([string]$obj.type) -in @('USER_INPUT', 'TOOL_RESPONSE', 'tool_use', 'tool_result', 'function_call', 'function_call_output')) { continue }
+                if ($obj.PSObject.Properties['role'] -and ([string]$obj.role) -in @('user', 'tool', 'system')) { continue }
+                foreach ($f in @('content', 'last_assistant_message', 'last_message', 'message', 'text')) {
+                    $p = $obj.PSObject.Properties[$f]
+                    if ($p -and $null -ne $p.Value) {
+                        if ($p.Value -is [string] -and -not [string]::IsNullOrWhiteSpace([string]$p.Value)) {
+                            return [string]$p.Value
+                        }
+                        if ($p.Value -is [System.Collections.IEnumerable] -and -not ($p.Value -is [string])) {
+                            $parts = @()
+                            foreach ($item in $p.Value) {
+                                if ($item -is [string]) { $parts += $item }
+                                elseif ($null -ne $item -and $item.PSObject.Properties['text'] -and (-not $item.PSObject.Properties['type'] -or [string]$item.type -eq 'text')) {
+                                    $parts += [string]$item.text
+                                }
+                            }
+                            $joined = ($parts -join "`n").Trim()
+                            if ($joined) { return $joined }
+                        }
+                    }
+                }
+            } catch {
+                $plainLines.Insert(0, $line)
+            }
+        } else {
+            $plainLines.Insert(0, $line)
+        }
+    }
+    return ($plainLines -join "`n")
+}
+
 try {
     $raw = [Console]::In.ReadToEnd()
     $payload = $raw | ConvertFrom-Json
@@ -22,12 +77,10 @@ try {
         if ($prop -and $prop.Value) { $text = [string]$prop.Value; break }
     }
     if (-not $text -and $payload.transcript_path -and (Test-Path -LiteralPath $payload.transcript_path)) {
-        # Transcripts are UTF-8; without -Encoding UTF8, PS 5.1 reads ANSI and
-        # mangles multi-byte chars (em-dash -> mojibake) in appended traces.
-        $tail = Get-Content -LiteralPath $payload.transcript_path -Tail 40 -Encoding UTF8 -ErrorAction Stop
-        $text = $tail -join "`n"
+        $text = Get-TranscriptAssistantText -TranscriptPath ([string]$payload.transcript_path)
     }
 
+    $text = Remove-BacktickCodeSpans -InputText $text
     if ($text) {
         $markers = @(
             '[VERDICT: REJECT]',

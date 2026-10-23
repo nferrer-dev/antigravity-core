@@ -1466,6 +1466,27 @@ def scan_test_integrity(source_text, label):
 
 
 
+def _compute_func_mccabe(func_node):
+    complexity = 1
+    branch_types = (
+        ast.If,
+        ast.For,
+        ast.AsyncFor,
+        ast.While,
+        ast.ExceptHandler,
+        ast.With,
+        ast.AsyncWith,
+        ast.IfExp,
+        ast.comprehension,
+    )
+    for child in ast.walk(func_node):
+        if isinstance(child, branch_types):
+            complexity += 1
+        elif isinstance(child, ast.BoolOp):
+            complexity += max(0, len(child.values) - 1)
+    return complexity
+
+
 def _check_rubric_schema_and_script_parity(root):
     violations = []
     req_keys = ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"')
@@ -1496,6 +1517,24 @@ def _check_rubric_schema_and_script_parity(root):
                     violations.append(
                         "INV-10: %s/%s: SHA-256 drift vs .agents/%s"
                         % (tree_name, rel_script, rel_script)
+                    )
+    prod_py_files = list((root / ".agents" / "scripts").glob("*.py")) + list(
+        (root / ".agents" / "skills").glob("*/scripts/*.py")
+    )
+    for py_path in sorted(set(prod_py_files)):
+        if not py_path.is_file():
+            continue
+        try:
+            tree = ast.parse(py_path.read_bytes().decode("utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                comp = _compute_func_mccabe(node)
+                if comp > 9:
+                    violations.append(
+                        "INV-10: %s: function %s has McCabe complexity %d > 9"
+                        % (_rel(root, py_path), node.name, comp)
                     )
     return violations
 

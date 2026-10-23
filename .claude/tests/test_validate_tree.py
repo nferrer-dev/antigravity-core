@@ -699,6 +699,65 @@ class LiveTree(unittest.TestCase):
                 "subagent-taint-delegation-guard", res_taint_agent.stderr
             )
 
+    def test_coherence_bake_r5_f_agy_r5_01_to_04_claude(self):
+        import os
+
+        settings = json.loads(
+            (REPO_ROOT / ".claude" / "settings.json").read_text(encoding="utf-8")
+        )
+        matcher = settings["hooks"]["PreToolUse"][0]["matcher"]
+        self.assertIn("Grep", matcher)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            res_grep = self._run_claude_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Grep",
+                    "tool_input": {"SearchPath": str(tmp_path / ".env")},
+                }
+            )
+            self.assertEqual(res_grep.returncode, 2)
+
+            tel_root = tmp_path / "tel_isolated"
+            tel_root.mkdir(parents=True, exist_ok=True)
+            transcript = tel_root / "transcript.jsonl"
+            transcript.write_text(
+                json.dumps(
+                    {
+                        "role": "assistant",
+                        "content": "Code span `[VERDICT: REJECT]` only.",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            tel_hook = REPO_ROOT / ".claude" / "hooks" / "telemetry-append.ps1"
+            subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(tel_hook),
+                ],
+                input=json.dumps(
+                    {
+                        "hook_event_name": "Stop",
+                        "transcript_path": str(transcript),
+                    }
+                ),
+                env={**os.environ, "CLAUDE_PROJECT_DIR": str(tel_root)},
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            tel_file = tel_root / ".claude" / "telemetry" / "agentic_telemetry.md"
+            self.assertFalse(tel_file.exists())
+
+
 
 
 class Meta(unittest.TestCase):

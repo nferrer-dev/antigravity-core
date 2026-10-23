@@ -21,6 +21,15 @@ from pathlib import Path
 
 DEFAULT_SERVICE = "antigravity-mcp"
 REDACTED_MARKER = "__REDACTED_IN_WINVAULT__"
+_SECRET_PREFIXES = (
+    "sk-",
+    "ghp_",
+    "github_pat_",
+    "AIzaSy",
+    "GOCSPX-",
+    "fc-",
+    "tvly-",
+)
 
 SECRET_ENV_NAME_RE = re.compile(
     r"(?i)(API[_-]?KEY|TOKEN|SECRET|PASSWORD|API[_-]?HASH|PRIVATE[_-]?KEY|CREDENTIAL)"
@@ -58,12 +67,55 @@ def is_secret_env_entry(key_name, val):
         return False
     if SECRET_ENV_NAME_RE.search(key_name):
         return True
-    if len(val) >= 24 and any(
-        val.startswith(prefix)
-        for prefix in ("sk-", "ghp_", "github_pat_", "AIzaSy", "GOCSPX-", "fc-", "tvly-")
-    ):
-        return True
-    return False
+    return len(val) >= 24 and val.startswith(_SECRET_PREFIXES)
+
+
+def _persist_and_record_secret(service, server_name, key_name, secret_val, migrated):
+    """Store secret_val in vault, verify round-trip, and append transcript-safe metadata."""
+    store_in_vault(service, key_name, secret_val)
+    if read_from_vault(service, key_name) != secret_val:
+        raise RuntimeError(
+            "Vault verification failed for key %r (server %r)" % (key_name, server_name)
+        )
+    migrated.append(
+        {
+            "server": server_name,
+            "key_name": key_name,
+            "fingerprint": sha256_prefix(secret_val),
+            "vault_service": service,
+            "vault_verified": True,
+        }
+    )
+
+
+def _remediate_server_env(server_name, server_cfg, service, migrated):
+    """Migrate secret env entries in server_cfg['env'] to the OS vault."""
+    env_map = server_cfg.get("env")
+    if not isinstance(env_map, dict):
+        return
+    for key_name, val in list(env_map.items()):
+        if is_secret_env_entry(key_name, val):
+            _persist_and_record_secret(service, server_name, key_name, val, migrated)
+            env_map[key_name] = REDACTED_MARKER
+
+
+def _remediate_server_urls(server_name, server_cfg, service, migrated):
+    """Migrate secret query parameters in server_cfg URL fields to the OS vault."""
+    for url_field in ("url", "serverUrl"):
+        url_val = server_cfg.get(url_field)
+        if not isinstance(url_val, str) or not URL_QUERY_SECRET_RE.search(url_val):
+            continue
+
+        def _replace_query_secret(match):
+            prefix, raw_secret = match.group(1), match.group(2)
+            q_key = prefix.lstrip("?&").rstrip("=")
+            if raw_secret != REDACTED_MARKER:
+                _persist_and_record_secret(
+                    service, server_name, q_key, raw_secret, migrated
+                )
+            return prefix + REDACTED_MARKER
+
+        server_cfg[url_field] = URL_QUERY_SECRET_RE.sub(_replace_query_secret, url_val)
 
 
 def remediate_config_file(config_path, service=DEFAULT_SERVICE):
@@ -72,14 +124,9 @@ def remediate_config_file(config_path, service=DEFAULT_SERVICE):
     redacted_path = path.with_name(path.name + ".deprecated-redacted")
 
     if not path.is_file():
-        if redacted_path.is_file():
-            return {
-                "status": "already_remediated",
-                "redacted_path": str(redacted_path),
-                "migrated_keys": [],
-            }
+        status = "already_remediated" if redacted_path.is_file() else "not_found"
         return {
-            "status": "not_found",
+            "status": status,
             "redacted_path": str(redacted_path),
             "migrated_keys": [],
         }
@@ -89,57 +136,9 @@ def remediate_config_file(config_path, service=DEFAULT_SERVICE):
     migrated = []
 
     for server_name, server_cfg in servers.items():
-        if not isinstance(server_cfg, dict):
-            continue
-        env_map = server_cfg.get("env")
-        if isinstance(env_map, dict):
-            for k, v in list(env_map.items()):
-                if is_secret_env_entry(k, v):
-                    store_in_vault(service, k, v)
-                    verified = read_from_vault(service, k) == v
-                    if not verified:
-                        raise RuntimeError(
-                            "Vault verification failed for key %r (server %r)"
-                            % (k, server_name)
-                        )
-                    migrated.append(
-                        {
-                            "server": server_name,
-                            "key_name": k,
-                            "fingerprint": sha256_prefix(v),
-                            "vault_service": service,
-                            "vault_verified": True,
-                        }
-                    )
-                    env_map[k] = REDACTED_MARKER
-
-        for url_field in ("url", "serverUrl"):
-            url_val = server_cfg.get(url_field)
-            if isinstance(url_val, str) and URL_QUERY_SECRET_RE.search(url_val):
-                def _replace_query_secret(match):
-                    prefix, raw_secret = match.group(1), match.group(2)
-                    q_key = prefix.lstrip("?&").rstrip("=")
-                    if raw_secret != REDACTED_MARKER:
-                        store_in_vault(service, q_key, raw_secret)
-                        verified = read_from_vault(service, q_key) == raw_secret
-                        if not verified:
-                            raise RuntimeError(
-                                "Vault verification failed for URL key %r" % q_key
-                            )
-                        migrated.append(
-                            {
-                                "server": server_name,
-                                "key_name": q_key,
-                                "fingerprint": sha256_prefix(raw_secret),
-                                "vault_service": service,
-                                "vault_verified": True,
-                            }
-                        )
-                    return prefix + REDACTED_MARKER
-
-                server_cfg[url_field] = URL_QUERY_SECRET_RE.sub(
-                    _replace_query_secret, url_val
-                )
+        if isinstance(server_cfg, dict):
+            _remediate_server_env(server_name, server_cfg, service, migrated)
+            _remediate_server_urls(server_name, server_cfg, service, migrated)
 
     redacted_bytes = (json.dumps(data, indent=2) + "\n").encode("utf-8")
     redacted_path.write_bytes(redacted_bytes)

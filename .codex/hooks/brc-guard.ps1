@@ -453,7 +453,7 @@ if ($toolName -eq 'apply_patch') {
 
 # ---- 2. Standard File-Access Tools (Read, Edit, Write, MultiEdit) ----
 $filePath = ''
-foreach ($pf in @('file_path', 'path', 'Path', 'notebook_path', 'TargetFile', 'AbsolutePath')) {
+foreach ($pf in @('file_path', 'path', 'Path', 'notebook_path', 'TargetFile', 'AbsolutePath', 'SearchPath')) {
     if ($toolInput.PSObject.Properties[$pf] -and $null -ne $toolInput.$pf) {
         $filePath = [string]$toolInput.$pf
         break

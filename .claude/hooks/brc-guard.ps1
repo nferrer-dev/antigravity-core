@@ -56,27 +56,42 @@ function Test-SessionWebTainted {
 function Write-GuardTelemetry {
     param([string]$Decision, [string]$Rule, [string]$Excerpt)
     try {
-        if ($null -ne $script:PayloadObj -and $script:PayloadObj.PSObject.Properties['artifactDirectoryPath']) {
+        $telPath = $null
+        if ($null -ne $script:PayloadObj -and $script:PayloadObj.PSObject.Properties['artifactDirectoryPath'] -and $script:PayloadObj.artifactDirectoryPath) {
             $artDir = [string]$script:PayloadObj.artifactDirectoryPath
             if (-not [string]::IsNullOrWhiteSpace($artDir) -and (Test-Path -LiteralPath $artDir)) {
                 $telPath = Join-Path $artDir 'agentic_telemetry.md'
-                $sig = "| PreToolUse Guard ($Rule) | $Decision | $Excerpt"
-                if (Test-Path -LiteralPath $telPath) {
-                    $existing = @(Get-Content -LiteralPath $telPath -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -and $_.Trim() -ne '' })
-                    if ($existing.Count -gt 0) {
-                        $last = [string]$existing[$existing.Count - 1]
-                        if ($last.IndexOf($sig, [System.StringComparison]::Ordinal) -ge 0) {
-                            return
-                        }
+            }
+        } else {
+            $baseDir = $env:CLAUDE_PROJECT_DIR
+            if (-not $baseDir -and $null -ne $script:PayloadObj -and $script:PayloadObj.PSObject.Properties['cwd'] -and $script:PayloadObj.cwd) {
+                $baseDir = [string]$script:PayloadObj.cwd
+            }
+            if ($baseDir -and (Test-Path -LiteralPath (Join-Path $baseDir '.claude'))) {
+                $telDir = Join-Path $baseDir '.claude\telemetry'
+                if (-not (Test-Path -LiteralPath $telDir)) {
+                    New-Item -ItemType Directory -Path $telDir -Force | Out-Null
+                }
+                $telPath = Join-Path $telDir 'agentic_telemetry.md'
+            }
+        }
+        if ($telPath) {
+            $sig = "| PreToolUse Guard ($Rule) | $Decision | $Excerpt"
+            if (Test-Path -LiteralPath $telPath) {
+                $existing = @(Get-Content -LiteralPath $telPath -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -and $_.Trim() -ne '' })
+                if ($existing.Count -gt 0) {
+                    $last = [string]$existing[$existing.Count - 1]
+                    if ($last.IndexOf($sig, [System.StringComparison]::Ordinal) -ge 0) {
+                        return
                     }
                 }
-                $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-                $entryBody = "- [$stamp] $sig"
-                $chainTag = Get-TelemetryChainTag -FilePath $telPath -EntryBody $entryBody
-                $line = "$entryBody [chain:$chainTag]`n"
-                $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-                [System.IO.File]::AppendAllText($telPath, $line, $utf8NoBom)
             }
+            $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+            $entryBody = "- [$stamp] $sig"
+            $chainTag = Get-TelemetryChainTag -FilePath $telPath -EntryBody $entryBody
+            $line = "$entryBody [chain:$chainTag]`n"
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::AppendAllText($telPath, $line, $utf8NoBom)
         }
     } catch {
         # Never block guard execution on telemetry write failure.
@@ -148,7 +163,7 @@ function Get-WriteContentString {
 
 # ---- Check file-access tools (Read, Edit, Write, MultiEdit) ----
 $filePath = ''
-foreach ($pf in @('file_path', 'path', 'Path', 'notebook_path', 'TargetFile', 'AbsolutePath')) {
+foreach ($pf in @('file_path', 'path', 'Path', 'notebook_path', 'TargetFile', 'AbsolutePath', 'SearchPath')) {
     if ($toolInput.PSObject.Properties[$pf] -and $null -ne $toolInput.$pf) {
         $filePath = [string]$toolInput.$pf
         break

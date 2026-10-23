@@ -32,30 +32,56 @@ function Get-TelemetryChainTag {
     }
 }
 
+function Test-SessionWebTainted {
+    param($Payload)
+    if ($null -eq $Payload) { return $false }
+    if ($Payload.PSObject.Properties['artifactDirectoryPath'] -and $Payload.artifactDirectoryPath) {
+        $p1 = Join-Path (Join-Path ([string]$Payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
+        if (Test-Path -LiteralPath $p1) { return $true }
+    }
+    if ($Payload.PSObject.Properties['cwd'] -and $Payload.cwd) {
+        $cwdStr = [string]$Payload.cwd
+        $p2 = Join-Path (Join-Path $cwdStr '.agents') '.untrusted_web_taint.json'
+        if (Test-Path -LiteralPath $p2) { return $true }
+        $p3 = Join-Path (Join-Path $cwdStr 'scratch') '.untrusted_web_taint.json'
+        if (Test-Path -LiteralPath $p3) { return $true }
+    }
+    return $false
+}
+
 function Write-GuardTelemetry {
     param([string]$Decision, [string]$Rule, [string]$Excerpt)
     try {
-        if ($null -ne $script:PayloadObj -and $script:PayloadObj.PSObject.Properties['artifactDirectoryPath']) {
+        $telPath = $null
+        if ($null -ne $script:PayloadObj -and $script:PayloadObj.PSObject.Properties['artifactDirectoryPath'] -and $script:PayloadObj.artifactDirectoryPath) {
             $artDir = [string]$script:PayloadObj.artifactDirectoryPath
             if (-not [string]::IsNullOrWhiteSpace($artDir) -and (Test-Path -LiteralPath $artDir)) {
                 $telPath = Join-Path $artDir 'agentic_telemetry.md'
-                $sig = "| PreToolUse Guard ($Rule) | $Decision | $Excerpt"
-                if (Test-Path -LiteralPath $telPath) {
-                    $existing = @(Get-Content -LiteralPath $telPath -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -and $_.Trim() -ne '' })
-                    if ($existing.Count -gt 0) {
-                        $last = [string]$existing[$existing.Count - 1]
-                        if ($last.IndexOf($sig, [System.StringComparison]::Ordinal) -ge 0) {
-                            return
-                        }
+            }
+        } elseif ($null -ne $script:PayloadObj -and $script:PayloadObj.PSObject.Properties['cwd'] -and $script:PayloadObj.cwd) {
+            $cwdDir = [string]$script:PayloadObj.cwd
+            $agSub = Join-Path $cwdDir '.agents'
+            if (Test-Path -LiteralPath $agSub) {
+                $telPath = Join-Path $agSub 'agentic_telemetry.md'
+            }
+        }
+        if ($telPath) {
+            $sig = "| PreToolUse Guard ($Rule) | $Decision | $Excerpt"
+            if (Test-Path -LiteralPath $telPath) {
+                $existing = @(Get-Content -LiteralPath $telPath -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -and $_.Trim() -ne '' })
+                if ($existing.Count -gt 0) {
+                    $last = [string]$existing[$existing.Count - 1]
+                    if ($last.IndexOf($sig, [System.StringComparison]::Ordinal) -ge 0) {
+                        return
                     }
                 }
-                $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-                $entryBody = "- [$stamp] $sig"
-                $chainTag = Get-TelemetryChainTag -FilePath $telPath -EntryBody $entryBody
-                $line = "$entryBody [chain:$chainTag]`n"
-                $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-                [System.IO.File]::AppendAllText($telPath, $line, $utf8NoBom)
             }
+            $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+            $entryBody = "- [$stamp] $sig"
+            $chainTag = Get-TelemetryChainTag -FilePath $telPath -EntryBody $entryBody
+            $line = "$entryBody [chain:$chainTag]`n"
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::AppendAllText($telPath, $line, $utf8NoBom)
         }
     } catch {
         # Never block guard execution on telemetry write failure.
@@ -146,7 +172,7 @@ if ($null -ne $argsObj) {
             break
         }
     }
-    foreach ($pathField in @('AbsolutePath', 'TargetFile', 'file_path', 'path', 'Path')) {
+    foreach ($pathField in @('AbsolutePath', 'TargetFile', 'file_path', 'path', 'Path', 'SearchPath')) {
         if ($argsObj.PSObject.Properties[$pathField] -and $null -ne $argsObj.$pathField) {
             $filePath = [string]$argsObj.$pathField
             break
@@ -443,7 +469,7 @@ function Test-InvalidRubricScoreBlock {
 }
 
 $isWriteTool = $toolName -match '^(write_to_file|write_file|(?:multi_)?replace_file_content|edit_file|(?:Multi)?Edit|Write)$'
-$isReadOrWriteTool = $isWriteTool -or ($toolName -match '^(view_file|read_file|Read)$')
+$isReadOrWriteTool = $isWriteTool -or ($toolName -match '^(view_file|read_file|Read|grep_search|Grep)$')
 
 if ($isReadOrWriteTool -and (Test-SecretFilePath $filePath)) {
     Emit-Deny 'secret-file-access' $filePath
@@ -473,14 +499,44 @@ if ($isWriteTool -and (Test-InvalidRubricScoreBlock (Get-WriteContentString $arg
     Emit-Deny 'rubric-score-threshold-gate' 'RUBRIC_SCORE block failed validation (require evidence before score, min_score >= 2, and total_score >= threshold for APPROVE/PROCEED)'
 }
 
-if ($isWriteTool -and ($filePath -match '(?i)\.md$') -and $payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
-    $taintMdPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
-    if (Test-Path -LiteralPath $taintMdPath) {
-        $mdBody = Get-WriteContentString $argsObj
-        if ($mdBody -match '!\[[^\]]*\]\(\s*https?://') {
-            Emit-ForceAsk 'untrusted-web-markdown-image-exfil' 'Writing external Markdown image URL while session is web-tainted requires confirmation'
+if ($isWriteTool -and ($filePath -match '(?i)\.md$') -and (Test-SessionWebTainted $payload)) {
+    $mdBody = Get-WriteContentString $argsObj
+    if ($mdBody -match '!\[[^\]]*\]\(\s*https?://') {
+        Emit-ForceAsk 'untrusted-web-markdown-image-exfil' 'Writing external Markdown image URL while session is web-tainted requires confirmation'
+    }
+}
+
+if ($toolName -eq 'define_subagent' -and $null -ne $argsObj) {
+    $sysPrompt = ''
+    foreach ($pf in @('SystemPrompt', 'Description')) {
+        if ($argsObj.PSObject.Properties[$pf] -and $null -ne $argsObj.$pf) {
+            $sysPrompt += "`n" + [string]$argsObj.$pf
         }
     }
+    if (-not [string]::IsNullOrWhiteSpace($sysPrompt)) {
+        $sLines = @($sysPrompt.Trim() -split "\r?\n")
+        if ($sLines.Count -gt 200) {
+            Emit-Deny 'subagent-mvc-prompt-cap' 'define_subagent SystemPrompt exceeds 200-line MVC cap'
+        }
+        if (($sysPrompt -match '(sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AIzaSy[A-Za-z0-9_-]{33}|fc-[a-f0-9]{32}|tvly-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,})') -or
+            ($sysPrompt -match '(?i)(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)|<\s*system\s*>)')) {
+            Emit-Deny 'subagent-message-injection-guard' 'Blocked secret token or prompt-injection override directive in define_subagent'
+        }
+    }
+    $writeEnabled = ($argsObj.PSObject.Properties['EnableWriteTools'] -and $argsObj.EnableWriteTools -eq $true)
+    $defDesc = ''
+    foreach ($df in @('Name', 'Description')) {
+        if ($argsObj.PSObject.Properties[$df] -and $null -ne $argsObj.$df) {
+            $defDesc += ' ' + [string]$argsObj.$df
+        }
+    }
+    if ($writeEnabled -and $defDesc -match '(?i)(Style Expert|Security Auditor|Code Health Agent|Idea Skeptic|System Architect|Requirements Engineer|Scope Reviewer|Cortex Librarian|Codebase Explorer)') {
+        Emit-Deny 'subagent-role-least-privilege' 'Read-only auditor/explorer subagent definition must not set EnableWriteTools=true'
+    }
+    if ($writeEnabled -and (Test-SessionWebTainted $payload)) {
+        Emit-ForceAsk 'subagent-taint-delegation-guard' 'Defining write-capable subagent while session is web-tainted requires confirmation'
+    }
+    Emit-Allow
 }
 
 if ($toolName -eq 'send_message' -and $null -ne $argsObj) {
@@ -514,11 +570,7 @@ if ($toolName -eq 'invoke_subagent' -and $null -ne $argsObj) {
     } elseif ($argsObj.PSObject.Properties['TypeName'] -or $argsObj.PSObject.Properties['Role'] -or $argsObj.PSObject.Properties['Prompt']) {
         $subList = @($argsObj)
     }
-    $hasWebTaint = $false
-    if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
-        $taintSubPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
-        if (Test-Path -LiteralPath $taintSubPath) { $hasWebTaint = $true }
-    }
+    $hasWebTaint = Test-SessionWebTainted $payload
     foreach ($sub in $subList) {
         if ($null -eq $sub) { continue }
         if ($sub.PSObject.Properties['Prompt'] -and $null -ne $sub.Prompt) {
@@ -539,8 +591,8 @@ if ($toolName -eq 'invoke_subagent' -and $null -ne $argsObj) {
         if ($subType -ieq 'self' -and $subRole -match '(?i)(Style Expert|Security Auditor|Code Health Agent|Idea Skeptic|System Architect|Requirements Engineer|Scope Reviewer|Cortex Librarian|Codebase Explorer)') {
             Emit-Deny 'subagent-role-least-privilege' "Read-only auditor/explorer role '$subRole' must not be spawned with write-capable TypeName='self'"
         }
-        if ($hasWebTaint -and $subType -ieq 'self') {
-            Emit-ForceAsk 'subagent-taint-delegation-guard' "Spawning write-capable subagent '$subRole' (TypeName='self') while session is web-tainted requires confirmation"
+        if ($hasWebTaint -and ($subType -notmatch '(?i)^(stage3-design-reviewer|stage4-code-auditor|cortex-librarian|explorer|research)$')) {
+            Emit-ForceAsk 'subagent-taint-delegation-guard' "Spawning write-capable subagent '$subRole' (TypeName='$subType') while session is web-tainted requires confirmation"
         }
     }
 }
@@ -577,11 +629,8 @@ if (($toolName -eq 'call_mcp_tool' -or $toolName -match '^mcp__cortex__') -and $
             ($mcpPayloadStr -match '(?i)(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)|<\s*system\s*>|\[VERDICT:\s*APPROVE\])')) {
             Emit-Deny 'cortex-memory-poisoning-guard' 'Blocked attempt to persist secret or prompt-injection directive into Cortex long-term memory'
         }
-        if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
-            $taintCheckPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
-            if (Test-Path -LiteralPath $taintCheckPath) {
-                Emit-ForceAsk 'untrusted-web-memory-taint' "Cortex $mcpTool requires confirmation while session is tainted by external web content"
-            }
+        if (Test-SessionWebTainted $payload) {
+            Emit-ForceAsk 'untrusted-web-memory-taint' "Cortex $mcpTool requires confirmation while session is tainted by external web content"
         }
     }
     Emit-Allow
@@ -600,21 +649,24 @@ if ($toolName -match '^(read_url_content|WebFetch)$' -and $null -ne $argsObj) {
             Emit-Deny 'ssrf-local-metadata-url' $targetUrl
         }
         try {
+            $baseDir = $null
             if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
-                $artDir = [string]$payload.artifactDirectoryPath
-                if (Test-Path -LiteralPath $artDir) {
-                    $scratchDir = Join-Path $artDir 'scratch'
-                    if (-not (Test-Path -LiteralPath $scratchDir)) {
-                        New-Item -ItemType Directory -Path $scratchDir -Force | Out-Null
-                    }
-                    $taintFile = Join-Path $scratchDir '.untrusted_web_taint.json'
-                    $taintObj = @{
-                        url = $targetUrl
-                        timestamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-                    } | ConvertTo-Json -Compress
-                    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-                    [System.IO.File]::WriteAllText($taintFile, $taintObj, $utf8NoBom)
+                $baseDir = [string]$payload.artifactDirectoryPath
+            } elseif ($payload.PSObject.Properties['cwd'] -and $payload.cwd) {
+                $baseDir = [string]$payload.cwd
+            }
+            if ($baseDir -and (Test-Path -LiteralPath $baseDir)) {
+                $scratchDir = Join-Path $baseDir 'scratch'
+                if (-not (Test-Path -LiteralPath $scratchDir)) {
+                    New-Item -ItemType Directory -Path $scratchDir -Force | Out-Null
                 }
+                $taintFile = Join-Path $scratchDir '.untrusted_web_taint.json'
+                $taintObj = @{
+                    url = $targetUrl
+                    timestamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                } | ConvertTo-Json -Compress
+                $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                [System.IO.File]::WriteAllText($taintFile, $taintObj, $utf8NoBom)
             }
         } catch {
             # Ignore taint write failure on read-only paths.
@@ -668,12 +720,9 @@ $exempt = '(^|[\s"'';=/\\])(scratch|tmp|temp|node_modules|dist|build|target|\.ve
 
 foreach ($evalCmd in $candidates) {
     # Stateful IFC (Fides) egress check when session is tainted by external web content
-    if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
-        $taintCheckPath = Join-Path (Join-Path ([string]$payload.artifactDirectoryPath) 'scratch') '.untrusted_web_taint.json'
-        if ((Test-Path -LiteralPath $taintCheckPath) -and
-            ($evalCmd -match '(^|[\s;|&(])(curl(\.exe)?|wget(\.exe)?|Invoke-WebRequest|Invoke-RestMethod|iwr|irm|Start-BitsTransfer|scp(\.exe)?|ftp(\.exe)?)\b')) {
-            Emit-ForceAsk 'untrusted-web-egress-taint' $evalCmd
-        }
+    if ((Test-SessionWebTainted $payload) -and
+        ($evalCmd -match '(^|[\s;|&(])(curl(\.exe)?|wget(\.exe)?|Invoke-WebRequest|Invoke-RestMethod|iwr|irm|Start-BitsTransfer|scp(\.exe)?|ftp(\.exe)?)\b')) {
+        Emit-ForceAsk 'untrusted-web-egress-taint' $evalCmd
     }
 
     # Dynamic eval / scriptblock creation block

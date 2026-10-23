@@ -614,6 +614,58 @@ class LiveTree(unittest.TestCase):
             )
             self.assertEqual(res_dup.returncode, 2)
 
+    def test_coherence_bake_r5_f_agy_r5_01_to_04_codex(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            res_grep = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Grep",
+                    "tool_input": {"SearchPath": str(tmp_path / ".env")},
+                }
+            )
+            self.assertEqual(res_grep.returncode, 2)
+
+            tel_root = tmp_path / "tel_isolated"
+            tel_root.mkdir(parents=True, exist_ok=True)
+            transcript = tel_root / "transcript.jsonl"
+            transcript.write_text(
+                json.dumps(
+                    {
+                        "role": "assistant",
+                        "content": "Code span `[VERDICT: REJECT]` only.",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            tel_hook = REPO_ROOT / ".codex" / "hooks" / "telemetry-append.ps1"
+            subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(tel_hook),
+                ],
+                input=json.dumps(
+                    {
+                        "cwd": str(tel_root),
+                        "hook_event_name": "Stop",
+                        "transcript_path": str(transcript),
+                    }
+                ),
+                env={**os.environ, "CODEX_PROJECT_DIR": str(tel_root)},
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            tel_file = tel_root / ".codex" / "telemetry" / "agentic_telemetry.md"
+            self.assertFalse(tel_file.exists())
+
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

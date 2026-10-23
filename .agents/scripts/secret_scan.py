@@ -54,6 +54,8 @@ SAFE_PLACEHOLDERS = {
     "REPLACE_ME",
     "EXAMPLE_TOKEN",
 }
+_PLACEHOLDER_SUBSTRINGS = ("REDACTED", "PLACEHOLDER", "EXAMPLE", "TEST")
+_SELF_SCAN_EXCLUDED_SUFFIXES = ("secret_scan.py", "test_mcp_keyring_launcher.py")
 
 
 def shannon_entropy(text):
@@ -78,50 +80,69 @@ def is_placeholder(val):
     if val in SAFE_PLACEHOLDERS:
         return True
     upper = val.upper()
-    if "REDACTED" in upper or "PLACEHOLDER" in upper or "EXAMPLE" in upper or "TEST" in upper:
-        return True
-    return False
+    return any(tok in upper for tok in _PLACEHOLDER_SUBSTRINGS)
 
 
-def scan_line(line, label, line_no):
-    """Scan a single line of text and return transcript-safe finding dicts."""
+def _has_alnum_mix(val):
+    """Return True if val mixes lowercase, uppercase, and digits."""
+    return (
+        any(c.islower() for c in val)
+        and any(c.isupper() for c in val)
+        and any(c.isdigit() for c in val)
+    )
+
+
+def _has_hex_mix(val):
+    """Return True if val is a >=32-char hexadecimal secret candidate."""
+    return (
+        len(val) >= 32
+        and any(c in "0123456789" for c in val)
+        and any(c in "abcdefABCDEF" for c in val)
+    )
+
+
+def _scan_vendor_rules(line, label, line_no):
+    """Scan a single line against explicit vendor token regexes."""
     findings = []
     for rule_id, pattern in SECRET_RULES:
         for match in pattern.finditer(line):
             val = match.group(0)
-            if is_placeholder(val):
-                continue
-            findings.append(
-                {
-                    "location": "%s:%d" % (label, line_no),
-                    "rule": rule_id,
-                    "fingerprint": fingerprint(val),
-                }
-            )
-    if not findings:
-        for match in GENERIC_ASSIGN_RE.finditer(line):
-            key_name, val = match.group(1), match.group(2)
-            if is_placeholder(val):
-                continue
-            ent = shannon_entropy(val)
-            has_mixed = (
-                any(c.islower() for c in val)
-                and any(c.isupper() for c in val)
-                and any(c.isdigit() for c in val)
-            ) or (
-                any(c in "0123456789" for c in val)
-                and any(c in "abcdefABCDEF" for c in val)
-                and len(val) >= 32
-            )
-            if ent > 4.2 and has_mixed:
+            if not is_placeholder(val):
                 findings.append(
                     {
                         "location": "%s:%d" % (label, line_no),
-                        "rule": "high-entropy-secret(%s,H=%.2f)" % (key_name, ent),
+                        "rule": rule_id,
                         "fingerprint": fingerprint(val),
                     }
                 )
     return findings
+
+
+def _scan_generic_entropy(line, label, line_no):
+    """Scan a single line for high-entropy generic secret assignments."""
+    findings = []
+    for match in GENERIC_ASSIGN_RE.finditer(line):
+        key_name, val = match.group(1), match.group(2)
+        if is_placeholder(val):
+            continue
+        ent = shannon_entropy(val)
+        if ent > 4.2 and (_has_alnum_mix(val) or _has_hex_mix(val)):
+            findings.append(
+                {
+                    "location": "%s:%d" % (label, line_no),
+                    "rule": "high-entropy-secret(%s,H=%.2f)" % (key_name, ent),
+                    "fingerprint": fingerprint(val),
+                }
+            )
+    return findings
+
+
+def scan_line(line, label, line_no):
+    """Scan a single line of text and return transcript-safe finding dicts."""
+    findings = _scan_vendor_rules(line, label, line_no)
+    if findings:
+        return findings
+    return _scan_generic_entropy(line, label, line_no)
 
 
 def scan_text(text, label):
@@ -132,27 +153,38 @@ def scan_text(text, label):
     return results
 
 
+def _iter_scannable_files(raw_p, skip_dirs):
+    """Yield scannable file paths from a file or directory path."""
+    p = Path(raw_p)
+    if p.is_file():
+        yield p
+        return
+    if not p.is_dir():
+        return
+    for child in sorted(p.rglob("*")):
+        if child.is_file() and not any(part in skip_dirs for part in child.parts):
+            yield child
+
+
 def scan_files(paths):
     """Scan a list of file or directory paths."""
     findings = []
     skip_dirs = {".git", "__pycache__", "node_modules", ".venv"}
     for raw_p in paths:
-        p = Path(raw_p)
-        if p.is_dir():
-            for child in sorted(p.rglob("*")):
-                if any(part in skip_dirs for part in child.parts):
-                    continue
-                if child.is_file():
-                    findings.extend(_scan_single_file(child))
-        elif p.is_file():
-            findings.extend(_scan_single_file(p))
+        for child in _iter_scannable_files(raw_p, skip_dirs):
+            findings.extend(_scan_single_file(child))
     return findings
 
 
+def _is_excluded_scanner_path(path_str):
+    """Return True if path_str refers to secret_scan.py or its launcher unit test."""
+    norm = str(path_str).replace("\\", "/")
+    return any(norm.endswith(sfx) for sfx in _SELF_SCAN_EXCLUDED_SUFFIXES)
+
+
 def _scan_single_file(path):
-    # Skip test files and the scanner itself when scanning whole directories
-    norm = str(path).replace("\\", "/")
-    if norm.endswith("/secret_scan.py") or norm.endswith("/test_mcp_keyring_launcher.py"):
+    """Scan a single file on disk unless excluded by self-scan rules."""
+    if _is_excluded_scanner_path(path):
         return []
     try:
         text = path.read_bytes().decode("utf-8", errors="replace")
@@ -161,26 +193,49 @@ def _scan_single_file(path):
     return scan_text(text, str(path))
 
 
+def _run_betterleaks_staged(repo_root):
+    """Run betterleaks on staged git changes if installed on PATH."""
+    betterleaks_bin = shutil.which("betterleaks")
+    if not betterleaks_bin:
+        return []
+    res = subprocess.run(
+        [betterleaks_bin, "git", "--staged", "--redact", "--no-banner"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+    )
+    if res.returncode != 0:
+        return [
+            {
+                "location": "git:staged",
+                "rule": "betterleaks-staged",
+                "fingerprint": "redacted",
+            }
+        ]
+    return []
+
+
+def _parse_staged_diff_lines(diff_stdout):
+    """Scan added lines from git diff --cached unified=0 output."""
+    findings = []
+    current_file = "staged"
+    line_no = 0
+    for raw_line in diff_stdout.splitlines():
+        if raw_line.startswith("+++ b/"):
+            current_file = raw_line[6:].strip()
+        elif raw_line.startswith("@@ "):
+            m = re.search(r"\+(\d+)", raw_line)
+            line_no = int(m.group(1)) if m else 1
+        elif raw_line.startswith("+") and not raw_line.startswith("+++"):
+            if not _is_excluded_scanner_path(current_file):
+                findings.extend(scan_line(raw_line[1:], current_file, line_no))
+            line_no += 1
+    return findings
+
+
 def scan_staged(repo_root):
     """Scan added lines in `git diff --cached` plus delegate to betterleaks if installed."""
-    findings = []
-    betterleaks_bin = shutil.which("betterleaks")
-    if betterleaks_bin:
-        res = subprocess.run(
-            [betterleaks_bin, "git", "--staged", "--redact", "--no-banner"],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-        )
-        if res.returncode != 0:
-            findings.append(
-                {
-                    "location": "git:staged",
-                    "rule": "betterleaks-staged",
-                    "fingerprint": "redacted",
-                }
-            )
-
+    findings = _run_betterleaks_staged(repo_root)
     diff_res = subprocess.run(
         ["git", "diff", "--cached", "--unified=0", "--no-color"],
         cwd=str(repo_root),
@@ -189,20 +244,7 @@ def scan_staged(repo_root):
         encoding="utf-8",
         errors="replace",
     )
-    current_file = "staged"
-    line_no = 0
-    for raw_line in diff_res.stdout.splitlines():
-        if raw_line.startswith("+++ b/"):
-            current_file = raw_line[6:].strip()
-        elif raw_line.startswith("@@ "):
-            m = re.search(r"\+(\d+)", raw_line)
-            line_no = int(m.group(1)) if m else 1
-        elif raw_line.startswith("+") and not raw_line.startswith("+++"):
-            if not current_file.endswith("secret_scan.py") and not current_file.endswith(
-                "test_mcp_keyring_launcher.py"
-            ):
-                findings.extend(scan_line(raw_line[1:], current_file, line_no))
-            line_no += 1
+    findings.extend(_parse_staged_diff_lines(diff_res.stdout))
     return findings
 
 

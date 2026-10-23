@@ -2600,6 +2600,100 @@ class LiveTree(unittest.TestCase):
             "incomplete_exhaustiveness_manifest",
         )
 
+    def test_coherence_bake_r5_f_agy_r5_01_to_04(self):
+        # F-AGY-R5-01: telemetry-append.ps1 ignores tool_calls and backticks
+        tel_hook = REPO_ROOT / ".agents" / "hooks" / "telemetry-append.ps1"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            transcript = tmp_dir / "transcript.jsonl"
+            transcript.write_text(
+                json.dumps(
+                    {
+                        "type": "PLANNER_RESPONSE",
+                        "content": "Invoking subagent with `[VERDICT: REJECT]` in code span.",
+                        "tool_calls": [
+                            {
+                                "name": "invoke_subagent",
+                                "args": {"Prompt": "End with [VERDICT: REJECT]"},
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(tel_hook),
+                ],
+                input=json.dumps(
+                    {
+                        "conversationId": "c1",
+                        "fullyIdle": True,
+                        "transcriptPath": str(transcript),
+                        "artifactDirectoryPath": str(tmp_dir),
+                    }
+                ),
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            self.assertFalse((tmp_dir / "agentic_telemetry.md").exists())
+
+        # F-AGY-R5-02: define_subagent and grep_search in hooks.json & brc-guard.ps1
+        hooks_cfg = json.loads(
+            (REPO_ROOT / ".agents" / "hooks.json").read_text(encoding="utf-8")
+        )
+        matcher = hooks_cfg["brc-and-secret-guard"]["PreToolUse"][0]["matcher"]
+        self.assertIn("define_subagent", matcher)
+        self.assertIn("grep_search", matcher)
+
+        res_grep = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "grep_search",
+                    "args": {"SearchPath": "c:/Projects/app/.env", "Query": ".*"},
+                }
+            }
+        )
+        self.assertEqual(json.loads(res_grep.stdout.strip())["decision"], "deny")
+
+        res_def_sub = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "define_subagent",
+                    "args": {
+                        "Name": "custom-sec",
+                        "Description": "Security Auditor",
+                        "SystemPrompt": "Audit code.",
+                        "EnableWriteTools": True,
+                    },
+                }
+            }
+        )
+        self.assertEqual(json.loads(res_def_sub.stdout.strip())["decision"], "deny")
+
+        # F-AGY-R5-03 & F-AGY-R5-04: 0 non-test functions with complexity >= 10
+        sgp_dir = REPO_ROOT / ".agents" / "skills" / "comprehend-problem" / "scripts"
+        if str(sgp_dir) not in sys.path:
+            sys.path.insert(0, str(sgp_dir))
+        import structural_graph_polyfill as sgp  # noqa: E402
+
+        high_list = sgp.find_high_complexity_functions(str(REPO_ROOT), threshold=10)
+        non_test_high = [
+            item
+            for item in high_list
+            if "tests" not in Path(item["file"]).parts
+        ]
+        self.assertEqual(non_test_high, [])
+
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):
