@@ -30,6 +30,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -968,18 +969,134 @@ def _audit_ci_and_entrypoints(repo_root: Path) -> List[str]:
 
 
 def _extract_web_route_prefixes(repo_root: Path) -> Set[str]:
-    """Extract top-level /<prefix> route segments from src/web/*.py."""
+    """Extract top-level /<prefix> route segments and router prefixes from src/web/*.py."""
     routes_py = repo_root / "src" / "web" / "routes.py"
     if not routes_py.is_file():
         return set()
-    prefixes: Set[str] = {"api"}
+    prefixes: Set[str] = set()
+    pat = re.compile(
+        r'(?:@(?:router|app)\.[a-z]+\(\s*"/([A-Za-z0-9_-]+)'
+        r'|include_router\([^)]*prefix\s*=\s*"/([A-Za-z0-9_-]+)")'
+    )
     for name in ("routes.py", "server.py"):
         fp = repo_root / "src" / "web" / name
         if fp.is_file():
             txt = fp.read_text(encoding="utf-8", errors="replace")
-            for m in re.finditer(r'@(?:router|app)\.[a-z]+\(\s*"/([A-Za-z0-9_-]+)', txt):
-                prefixes.add(m.group(1))
+            for m in pat.finditer(txt):
+                prefixes.add(m.group(1) or m.group(2))
     return prefixes
+
+
+def _audit_frontend_api_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
+    """Verify frontend /api/<seg> calls and next.config.js rewrite tests match backend routes."""
+    gaps: List[str] = []
+    next_cfg = repo_root / "frontend" / "next.config.js"
+    cfg_test = repo_root / "frontend" / "__tests__" / "config.test.ts"
+    if next_cfg.is_file() and cfg_test.is_file():
+        c_txt = next_cfg.read_text(encoding="utf-8", errors="replace")
+        t_txt = cfg_test.read_text(encoding="utf-8", errors="replace")
+        if ("127.0.0.1:5000" in c_txt) != ("127.0.0.1:5000" in t_txt):
+            gaps.append(
+                "frontend/__tests__/config.test.ts: rewrite destination host mismatch vs next.config.js"
+            )
+    fe_src = repo_root / "frontend" / "src"
+    if not fe_src.is_dir():
+        return gaps
+    for fp in sorted(fe_src.rglob("*.ts*")):
+        rel = str(fp.relative_to(repo_root)).replace("\\", "/")
+        txt = fp.read_text(encoding="utf-8", errors="replace")
+        for m in re.finditer(r'["\'`]/api/([A-Za-z0-9_-]+)', txt):
+            if m.group(1) not in prefixes:
+                gaps.append(f"{rel}: frontend calls unmounted route /api/{m.group(1)}")
+    return gaps
+
+
+def _run_frontend_npm_cmd(
+    fe_dir: Path, args: Sequence[str], label: str
+) -> List[str]:
+    """Execute one npm command in frontend/ and flag non-zero exit or JSDOM media errors."""
+    npm_bin = shutil.which("npm")
+    if npm_bin is None:
+        return []
+    try:
+        proc = subprocess.run(
+            [npm_bin, *args],
+            cwd=str(fe_dir),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=90,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return [f"frontend/package.json: {label} execution error ({exc})"]
+    out = f"{proc.stdout or ''}\n{proc.stderr or ''}"
+    gaps: List[str] = []
+    if proc.returncode != 0:
+        gaps.append(f"frontend/package.json: {label} failed (exit {proc.returncode})")
+    if "Not implemented: HTMLMediaElement" in out:
+        gaps.append(
+            "frontend/jest.setup.js: unpolyfilled JSDOM HTMLMediaElement error in tests"
+        )
+    return gaps
+
+
+def _audit_frontend_execution(repo_root: Path) -> List[str]:
+    """Verify frontend node_modules/.bin exists and npm lint + jest pass in git repos."""
+    fe_dir = repo_root / "frontend"
+    if not (fe_dir / "package.json").is_file() or not (repo_root / ".git").exists():
+        return []
+    bin_dir = fe_dir / "node_modules" / ".bin"
+    if not bin_dir.is_dir() or not any(bin_dir.iterdir()):
+        return ["frontend/package.json: frontend/node_modules/.bin is missing or empty"]
+    gaps = _run_frontend_npm_cmd(fe_dir, ("run", "lint"), "npm run lint")
+    gaps.extend(
+        _run_frontend_npm_cmd(fe_dir, ("test", "--", "--watchAll=false"), "npm test")
+    )
+    return gaps
+
+
+def _audit_chroma_collection_parity(repo_root: Path) -> List[str]:
+    """Flag legacy ChromaDB collection names or paths in scripts/*.py."""
+    scripts_dir = repo_root / "scripts"
+    if _has_package_target(repo_root, "recommender") or not scripts_dir.is_dir():
+        return []
+    gaps: List[str] = []
+    for fp in sorted(scripts_dir.glob("*.py")):
+        rel = str(fp.relative_to(repo_root)).replace("\\", "/")
+        txt = fp.read_text(encoding="utf-8", errors="replace")
+        if "promo_collection" in txt or "D:/Archive/chroma_data" in txt or "./chroma_data" in txt:
+            gaps.append(
+                f"{rel}: legacy ChromaDB promo_collection or chroma_data path in script"
+            )
+    return gaps
+
+
+_DEAD_LEGACY_PYPROJECT_PKGS: Tuple[str, ...] = (
+    "spotipy",
+    "flask>=",
+    "spotifyscraper",
+    "tidalapi",
+    "deezer-python",
+    "implicit>=",
+    "arq>=",
+    "authlib>=",
+    "python-jose",
+    "passlib",
+)
+
+
+def _audit_pyproject_deps(repo_root: Path) -> List[str]:
+    """Flag dead legacy song-recommender dependencies in pyproject.toml."""
+    pyproj = repo_root / "pyproject.toml"
+    if _has_package_target(repo_root, "recommender") or not pyproj.is_file():
+        return []
+    txt = pyproj.read_text(encoding="utf-8", errors="replace")
+    return [
+        f"pyproject.toml: dead legacy dependency {pkg}"
+        for pkg in _DEAD_LEGACY_PYPROJECT_PKGS
+        if pkg in txt
+    ]
 
 
 def _audit_nginx_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
@@ -1095,17 +1212,21 @@ def _audit_e2e_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
 
 
 def _audit_cross_surface_contracts(repo_root: Path) -> List[str]:
-    """Audit routes vs nginx/locust/e2e, metrics vs Grafana/docs, Next.js Docker, and Alembic."""
+    """Audit routes vs nginx/locust/e2e/frontend, metrics, Docker, Alembic, scripts, and deps."""
     gaps: List[str] = []
     prefixes = _extract_web_route_prefixes(repo_root)
     if prefixes:
         gaps.extend(_audit_nginx_route_parity(repo_root, prefixes))
         gaps.extend(_audit_locust_route_parity(repo_root, prefixes))
         gaps.extend(_audit_e2e_route_parity(repo_root, prefixes))
+        gaps.extend(_audit_frontend_api_parity(repo_root, prefixes))
     metrics = _extract_exported_metrics(repo_root)
     gaps.extend(_audit_metrics_consumers(repo_root, metrics))
     gaps.extend(_audit_nextjs_docker_contracts(repo_root))
     gaps.extend(_audit_alembic_schema_contracts(repo_root))
+    gaps.extend(_audit_chroma_collection_parity(repo_root))
+    gaps.extend(_audit_pyproject_deps(repo_root))
+    gaps.extend(_audit_frontend_execution(repo_root))
     return gaps
 
 
@@ -1308,14 +1429,13 @@ def _check_redteam_transcript_file(raw_path: Any, repo_root: Path) -> bool:
     target = _resolve_proof_path(raw_path, repo_root)
     if target is None:
         return False
-    lines = [
-        ln.strip()
-        for ln in target.read_text(encoding="utf-8", errors="replace").splitlines()
-        if ln.strip()
-    ]
-    if not lines:
+    raw_txt = target.read_text(encoding="utf-8", errors="replace")
+    lines = [ln.strip() for ln in raw_txt.splitlines() if ln.strip()]
+    if not lines or not all(_is_clean_transcript_line(ln) for ln in lines):
         return False
-    return all(_is_clean_transcript_line(ln) for ln in lines)
+    if (repo_root.resolve() / ".git").exists():
+        return len(lines) >= 2 and '"tool_calls"' in raw_txt
+    return True
 
 
 def _check_disk_closure_proofs(
@@ -1776,9 +1896,22 @@ def _verify_cross_surface_self_test() -> Optional[str]:
             "location /ghost {\n  proxy_pass http://api:8000;\n}\n",
             encoding="utf-8",
         )
+        (root / "scripts").mkdir(parents=True, exist_ok=True)
+        (root / "scripts" / "verify_db.py").write_text(
+            'collection = client.get_collection(name="promo_collection")\n',
+            encoding="utf-8",
+        )
+        (root / "pyproject.toml").write_text(
+            '[project]\ndependencies = ["flask>=3.0.0", "spotipy>=2.23.0"]\n',
+            encoding="utf-8",
+        )
         gaps = _audit_cross_surface_contracts(root)
         if not any("nginx proxies non-existent route /ghost" in g for g in gaps):
             return f"Expected nginx route drift gap, got {gaps}"
+        if not any("promo_collection" in g for g in gaps):
+            return f"Expected scripts/verify_db.py promo_collection gap, got {gaps}"
+        if not any("flask" in g or "spotipy" in g for g in gaps):
+            return f"Expected dead pyproject dependency gap, got {gaps}"
     return None
 
 
