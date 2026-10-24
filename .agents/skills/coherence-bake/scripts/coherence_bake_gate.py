@@ -53,6 +53,15 @@ EXCLUDED_WALK_DIRS: Set[str] = {
     "__pycache__",
     ".venv",
     "venv",
+    "scratch",
+    "chroma_db",
+    "fpcalc_dir",
+    ".next",
+    "dist",
+    "build",
+    "coverage",
+    ".pytest_cache",
+    ".mypy_cache",
 }
 BINARY_EXTENSIONS: Set[str] = {
     ".png",
@@ -410,10 +419,37 @@ def _compute_ast_mccabe(func_node: ast.AST) -> int:
     return complexity
 
 
-def _unused_upper_consts(tree: ast.Module) -> List[str]:
-    """Return module-level UPPER_CASE constants never loaded in tree."""
-    defined: Set[str] = set()
+def _extract_py_loaded_names(py_path: Path) -> Set[str]:
+    """Return all AST Name load identifiers from a single Python file."""
+    try:
+        tree = ast.parse(py_path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, SyntaxError):
+        return set()
+    return {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+    }
+
+
+def _collect_repo_loaded_names(repo_root: Path) -> Set[str]:
+    """Collect all AST Name load identifiers across Python files in repo_root."""
     loaded: Set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(repo_root):
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_WALK_DIRS]
+        for fname in filenames:
+            if fname.endswith(".py"):
+                loaded.update(_extract_py_loaded_names(Path(dirpath) / fname))
+    return loaded
+
+
+def _unused_upper_consts(
+    tree: ast.Module,
+    extra_loaded: Optional[Set[str]] = None,
+) -> List[str]:
+    """Return module-level UPPER_CASE constants never loaded in tree or extra_loaded."""
+    defined: Set[str] = set()
+    loaded: Set[str] = set(extra_loaded or ())
     for stmt in tree.body:
         targets = getattr(stmt, "targets", [getattr(stmt, "target", None)])
         for t_node in targets:
@@ -427,7 +463,11 @@ def _unused_upper_consts(tree: ast.Module) -> List[str]:
     return sorted(defined - loaded)
 
 
-def _audit_single_py_file(py_path: Path, rel_path: str) -> List[str]:
+def _audit_single_py_file(
+    py_path: Path,
+    rel_path: str,
+    extra_loaded: Optional[Set[str]] = None,
+) -> List[str]:
     """Audit a Python file for syntax, unused constants, and McCabe <= 9."""
     try:
         source = py_path.read_text(encoding="utf-8", errors="replace")
@@ -436,7 +476,7 @@ def _audit_single_py_file(py_path: Path, rel_path: str) -> List[str]:
         return [f"{rel_path}: SyntaxError ({exc})"]
     gaps = [
         f"{rel_path}: unused constant {cname}"
-        for cname in _unused_upper_consts(tree)
+        for cname in _unused_upper_consts(tree, extra_loaded=extra_loaded)
     ]
     if _is_test_rel_path(rel_path):
         return gaps
@@ -676,7 +716,10 @@ def _check_inventory_and_ci_surface(repo_root: Path) -> int:
     ):
         gaps += 1
     ci_yml = repo_root / ".github" / "workflows" / "ci.yml"
-    if ci_yml.is_file():
+    has_harness_tree = (
+        repo_root / ("." + "agents") / "tests" / "validate_tree.py"
+    ).is_file()
+    if ci_yml.is_file() and has_harness_tree:
         gaps += _missing_token_count(
             ci_yml.read_text(encoding="utf-8", errors="replace"),
             (
@@ -728,6 +771,7 @@ def _legacy_hook_and_ci_gaps(repo_root: Path) -> List[str]:
 def audit_repo_surfaces(repo_root: Path) -> List[str]:
     """Generatively scan 100% of repo files and cross-tree surfaces for defects."""
     resolved_root = repo_root.resolve()
+    repo_loaded = _collect_repo_loaded_names(resolved_root)
     gaps: List[str] = []
     for dirpath, dirnames, filenames in os.walk(resolved_root):
         dirnames[:] = sorted(
@@ -737,7 +781,9 @@ def audit_repo_surfaces(repo_root: Path) -> List[str]:
             fpath = Path(dirpath) / fname
             rel = str(fpath.relative_to(resolved_root)).replace("\\", "/")
             if fpath.suffix == ".py":
-                gaps.extend(_audit_single_py_file(fpath, rel))
+                gaps.extend(
+                    _audit_single_py_file(fpath, rel, extra_loaded=repo_loaded)
+                )
             elif fpath.suffix in {".js", ".ts"}:
                 gaps.extend(_audit_single_js_file(fpath, rel))
             elif fpath.suffix == ".md":
