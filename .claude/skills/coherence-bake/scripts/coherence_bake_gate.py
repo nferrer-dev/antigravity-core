@@ -374,6 +374,34 @@ def _check_single_tree_scripts(tree_root: Path) -> int:
                 "_compute_func_mccabe",
                 "_check_rubric_schema_and_script_parity",
                 "rules_dir",
+                "[VERDICT: PROCEED_FIX]",
+                "FORBIDDEN_PS1_CALL",
+                "FORBIDDEN_CONTROL_BYTES",
+            ),
+        )
+    return gaps
+
+
+def _check_inventory_and_ci_surface(repo_root: Path) -> int:
+    """Verify cross-tree cortex-librarian parity and CI self-test coverage when present."""
+    gaps = 0
+    ag_agents = repo_root / ("." + "agents") / "agents"
+    if ag_agents.is_dir() and not (ag_agents / "cortex-librarian.md").is_file():
+        gaps += 1
+    cl_skills = repo_root / ("." + "claude") / "skills"
+    if (
+        cl_skills.is_dir()
+        and not (cl_skills / "cortex-librarian" / "SKILL.md").is_file()
+    ):
+        gaps += 1
+    ci_yml = repo_root / ".github" / "workflows" / "ci.yml"
+    if ci_yml.is_file():
+        gaps += _missing_token_count(
+            ci_yml.read_text(encoding="utf-8", errors="replace"),
+            (
+                "coherence_bake_gate.py --self-test",
+                "rubric_grade_gate.py --self-test",
+                "cortex_ingest.test.js",
             ),
         )
     return gaps
@@ -407,6 +435,7 @@ def _audit_repo_surface_gaps(repo_root: Path) -> int:
         _check_agents_hook_surface(repo_root)
         + _check_claude_hook_surface(repo_root)
         + _check_shared_script_parity(repo_root)
+        + _check_inventory_and_ci_surface(repo_root)
     )
     for tree_name in ("." + "agents", "." + "claude", "." + "codex"):
         gaps += _check_single_tree_scripts(repo_root / tree_name)
@@ -473,6 +502,7 @@ def _check_exhaustiveness_manifest(
     zero_counts = (
         _non_negative_count(manifest.get("test_failures", 0)) == 0
         and _non_negative_count(manifest.get("invariant_violations", 0)) == 0
+        and _non_negative_count(manifest.get("redteam_transcript_errors", 0)) == 0
     )
     return "ok" if zero_counts else "incomplete_exhaustiveness_manifest"
 

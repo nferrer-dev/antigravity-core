@@ -2834,6 +2834,50 @@ class LiveTree(unittest.TestCase):
             "ok",
         )
 
+    def test_coherence_bake_r7_f_agy_r7_01_to_04(self):
+        # F-AGY-R7-01: .agents/agents/cortex-librarian.md and EXPECTED_AGENTS_CUSTOM_AGENTS
+        self.assertTrue(hasattr(vt, "EXPECTED_AGENTS_CUSTOM_AGENTS"))
+        self.assertIn("cortex-librarian", vt.EXPECTED_AGENTS_CUSTOM_AGENTS)
+        self.assertTrue(
+            (REPO_ROOT / ".agents" / "agents" / "cortex-librarian.md").is_file()
+        )
+        # F-AGY-R7-02: [VERDICT: PROCEED_FIX] in REQUIRED_TELEMETRY_MARKERS
+        self.assertIn("[VERDICT: PROCEED_FIX]", vt.REQUIRED_TELEMETRY_MARKERS)
+
+        # F-AGY-R7-04: CI self-tests and redteam_transcript_errors in coherence_bake_gate.py
+        ci_text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("coherence_bake_gate.py --self-test", ci_text)
+        self.assertIn("rubric_grade_gate.py --self-test", ci_text)
+        self.assertIn("cortex_ingest.test.js", ci_text)
+
+        cbg_dir = REPO_ROOT / ".agents" / "skills" / "coherence-bake" / "scripts"
+        if str(cbg_dir) not in sys.path:
+            sys.path.insert(0, str(cbg_dir))
+        import coherence_bake_gate as cbg  # noqa: E402
+
+        manifest_err = {
+            "uncapped_discovery": True,
+            "full_suite_executed": True,
+            "closed_loop_reaudit": True,
+            "independent_redteam_reaudit": True,
+            "surfaces_audited": {k: True for k in cbg.REQUIRED_AUDIT_SURFACES},
+            "redteam_rubric_score": {k: 3 for k in cbg.REQUIRED_AUDIT_SURFACES},
+            "redteam_transcript_errors": 1,
+            "test_failures": 0,
+            "invariant_violations": 0,
+        }
+        self.assertEqual(
+            cbg._check_exhaustiveness_manifest(manifest_err, require_manifest=True),
+            "incomplete_exhaustiveness_manifest",
+        )
+        manifest_ok = dict(manifest_err, redteam_transcript_errors=0)
+        self.assertEqual(
+            cbg._check_exhaustiveness_manifest(manifest_ok, require_manifest=True),
+            "ok",
+        )
+
 
 
 class Meta(unittest.TestCase):

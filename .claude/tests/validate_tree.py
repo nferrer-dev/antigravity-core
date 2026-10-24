@@ -38,9 +38,57 @@ FORBIDDEN_TOKENS = (
     "moma_" + "search",
 )
 
+FORBIDDEN_PS1_CALL = "Invoke-" + "Expression"
+
 SCAN_EXTENSIONS = {".md", ".json", ".ps1", ".py"}
 INV8_EXCLUDED_RELPATHS = {".claude/settings.local.json"}
 INV8_EXCLUDED_DIRS = {"tests"}
+
+FORBIDDEN_CONTROL_BYTES = (
+    set(range(0x00, 0x09)) | {0x0B, 0x0C, 0x0D} | set(range(0x0E, 0x20))
+)
+CLAUDE_MD_MAX_BYTES = 18000
+SKILL_MD_MAX_LINES = 500
+
+EXPECTED_CLAUDE_SKILLS = (
+    "brainstorm-solutions",
+    "coherence-bake",
+    "comprehend-problem",
+    "cortex-librarian",
+    "debate",
+    "design-validate",
+    "harness-scaffold",
+    "iterative-implement",
+    "markdown-style-expert",
+    "security-auditor",
+    "skill-evolve",
+    "style-cpp",
+    "style-go",
+    "style-java",
+    "style-js",
+    "style-python",
+    "style-rust",
+    "technical-debate",
+)
+
+INTERNAL_COMMITTEE_SKILLS = (
+    "cortex-librarian",
+    "markdown-style-expert",
+    "security-auditor",
+    "skill-evolve",
+    "style-cpp",
+    "style-go",
+    "style-java",
+    "style-js",
+    "style-python",
+    "style-rust",
+)
+
+EXPECTED_CLAUDE_AGENTS = (
+    "cortex-librarian",
+    "stage3-design-reviewer",
+    "stage4-code-auditor",
+)
 
 PIPELINE_HEADING = "## Stage 0-4 Pipeline"
 RULES_BULLET_RE = re.compile(r"^- \*\*([a-z-]+)\*\* — ", re.MULTILINE)
@@ -87,6 +135,7 @@ REQUIRED_BRC_GUARD_RULES = (
 
 REQUIRED_TELEMETRY_MARKERS = (
     "[VERDICT: REJECT]",
+    "[VERDICT: PROCEED_FIX]",
     "[GLOBAL VERDICT: REJECT]",
     "[GLOBAL VERDICT: PROCEED]",
     "<BLAST_RADIUS>",
@@ -112,6 +161,11 @@ def bom_kind(data):
 def has_nul(data):
     """NUL bytes mark BOM-less UTF-16 masquerading as UTF-8 (gate C)."""
     return b"\x00" in data
+
+
+def has_forbidden_control_bytes(data):
+    """Return True if data contains NUL, bare CR, form-feed, or other control bytes."""
+    return any(b in FORBIDDEN_CONTROL_BYTES for b in data)
 
 
 def parse_frontmatter(data, label):
@@ -347,9 +401,24 @@ def check_inv9_junction(root):
 
 def check_inv1_frontmatter(root):
     violations = []
-    for skill_file in sorted((root / ".claude" / "skills").glob("*/SKILL.md")):
+    skills_root = root / ".claude" / "skills"
+    for expected_skill in EXPECTED_CLAUDE_SKILLS:
+        skill_file = skills_root / expected_skill / "SKILL.md"
+        if not skill_file.is_file():
+            violations.append(
+                "INV-1: .claude/skills/%s/SKILL.md: missing expected skill"
+                % expected_skill
+            )
+    for skill_file in sorted(skills_root.glob("*/SKILL.md")):
         label = _rel(root, skill_file)
-        mapping, errors = parse_frontmatter(skill_file.read_bytes(), label)
+        raw = skill_file.read_bytes()
+        lines = raw.decode("utf-8", errors="replace").split("\n")
+        if len(lines) > SKILL_MD_MAX_LINES:
+            violations.append(
+                "INV-1: %s: exceeds %d-line cap (%d lines)"
+                % (label, SKILL_MD_MAX_LINES, len(lines))
+            )
+        mapping, errors = parse_frontmatter(raw, label)
         violations.extend("INV-1: %s" % e for e in errors)
         if mapping and mapping.get("name", skill_file.parent.name) != skill_file.parent.name:
             violations.append(
@@ -359,6 +428,22 @@ def check_inv1_frontmatter(root):
         if mapping and "description" in mapping:
             for trig_err in check_skill_description_triggers(mapping["description"], label):
                 violations.append("INV-1: %s" % trig_err)
+
+    for rel_script in (
+        ("comprehend-problem", "scripts", "structural_graph_polyfill.py"),
+        ("comprehend-problem", "scripts", "logical_z3_polyfill.py"),
+        ("comprehend-problem", "scripts", "rubric_grade_gate.py"),
+        ("coherence-bake", "scripts", "coherence_bake_gate.py"),
+    ):
+        pf_path = skills_root.joinpath(*rel_script)
+        pf_label = _rel(root, pf_path)
+        if not pf_path.is_file():
+            violations.append("INV-1: %s: missing skill script" % pf_label)
+            continue
+        try:
+            ast.parse(pf_path.read_bytes().decode("utf-8"))
+        except (UnicodeDecodeError, SyntaxError) as exc:
+            violations.append("INV-1: %s: invalid Python syntax (%s)" % (pf_label, exc))
     return violations
 
 
@@ -394,6 +479,45 @@ def check_inv2_json(root):
             violations.append(
                 "INV-2: %s: machine-local file unparseable (%s)"
                 % (_rel(root, local), exc)
+            )
+    agents_dir = root / ".claude" / "agents"
+    for agent_stem in EXPECTED_CLAUDE_AGENTS:
+        agent_md = agents_dir / ("%s.md" % agent_stem)
+        a_label = _rel(root, agent_md)
+        if not agent_md.is_file():
+            violations.append("INV-2: %s: missing custom agent markdown" % a_label)
+            continue
+        a_text = agent_md.read_bytes().decode("utf-8", errors="replace")
+        a_lines = a_text.split("\n")
+        if not a_lines or a_lines[0].strip() != "---":
+            violations.append("INV-2: %s: missing opening frontmatter fence" % a_label)
+            continue
+        end_idx = next(
+            (i for i in range(1, len(a_lines)) if a_lines[i].strip() == "---"),
+            None,
+        )
+        if end_idx is None:
+            violations.append("INV-2: %s: missing closing frontmatter fence" % a_label)
+            continue
+        a_map = {}
+        for ln in a_lines[1:end_idx]:
+            m = FM_LINE_RE.fullmatch(ln.rstrip("\r"))
+            if m:
+                a_map[m.group(1)] = m.group(2).strip()
+        if a_map.get("name") != agent_stem:
+            violations.append(
+                "INV-2: %s: frontmatter name %r must equal %r"
+                % (a_label, a_map.get("name"), agent_stem)
+            )
+        for trig_err in check_skill_description_triggers(a_map.get("description", ""), a_label):
+            violations.append("INV-2: %s" % trig_err)
+        tools_val = a_map.get("tools", "")
+        if not tools_val or any(
+            bad_t in tools_val for bad_t in ("Bash", "Write", "Edit", "MultiEdit")
+        ):
+            violations.append(
+                "INV-2: %s: read-only agent tools %r must not include write/shell tools"
+                % (a_label, tools_val)
             )
     return violations
 
@@ -455,7 +579,20 @@ def check_inv3_hooks(root):
 
 def check_inv4_pipeline_table(root):
     violations = []
-    text = (root / "CLAUDE.md").read_bytes().decode("utf-8", errors="replace")
+    claude_md = root / "CLAUDE.md"
+    if not claude_md.is_file():
+        return ["INV-4: CLAUDE.md missing"]
+    raw = claude_md.read_bytes()
+    if len(raw) > CLAUDE_MD_MAX_BYTES:
+        violations.append(
+            "INV-4: CLAUDE.md size %d bytes exceeds %d-byte cap"
+            % (len(raw), CLAUDE_MD_MAX_BYTES)
+        )
+    if raw.startswith(b"---"):
+        violations.append(
+            "INV-4: CLAUDE.md must not start with a YAML frontmatter fence '---'"
+        )
+    text = raw.decode("utf-8", errors="replace")
     names, row_violations = extract_pipeline_skills(text)
     violations.extend("INV-4: %s" % v for v in row_violations)
     if not names:
@@ -481,6 +618,21 @@ def check_inv5_rules_modules(root):
                 "INV-5: CLAUDE.md points at rules module %r but "
                 ".claude/rules/%s.md is missing" % (stem, stem)
             )
+    ps1_files = sorted((root / ".claude" / "hooks").glob("*.ps1"))
+    if not ps1_files:
+        violations.append("INV-5: no .ps1 hook scripts found in .claude/hooks")
+    for path in ps1_files:
+        label = _rel(root, path)
+        data = path.read_bytes()
+        try:
+            ps_text = data.decode("ascii")
+        except UnicodeDecodeError:
+            violations.append("INV-5: %s: must be strict 7-bit ASCII" % label)
+            continue
+        if FORBIDDEN_PS1_CALL in ps_text:
+            violations.append(
+                "INV-5: %s: contains forbidden %s call" % (label, FORBIDDEN_PS1_CALL)
+            )
     return violations
 
 
@@ -492,7 +644,14 @@ def check_inv6_encoding(root):
         root / ".mcp.json",
         root / ".claude" / "telemetry" / "agentic_telemetry.md",
     ]
-    targets.extend(sorted((root / ".claude" / "hooks").glob("*.ps1")))
+    seen_targets = {str(p.resolve()) for p in targets if p.exists()}
+    for dirpath, dirnames, filenames in os.walk(root / ".claude"):
+        dirnames[:] = [d for d in dirnames if d not in {"__pycache__"}]
+        for filename in sorted(filenames):
+            p = Path(dirpath) / filename
+            if p.suffix in SCAN_EXTENSIONS and str(p.resolve()) not in seen_targets:
+                targets.append(p)
+                seen_targets.add(str(p.resolve()))
     for path in targets:
         label = _rel(root, path)
         if not path.is_file():
@@ -506,6 +665,10 @@ def check_inv6_encoding(root):
             violations.append(
                 "INV-6: %s: NUL bytes (BOM-less UTF-16?)" % label
             )
+        if b"\r" in data:
+            violations.append("INV-6: %s: CRLF or bare CR byte present" % label)
+        if has_forbidden_control_bytes(data):
+            violations.append("INV-6: %s: forbidden ASCII control byte present" % label)
         try:
             data.decode("utf-8")
         except UnicodeDecodeError as exc:

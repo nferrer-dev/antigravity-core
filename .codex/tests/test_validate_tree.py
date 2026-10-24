@@ -776,6 +776,11 @@ class LiveTree(unittest.TestCase):
             self.assertTrue(tel_file.is_file())
             self.assertIn("VERDICT:PROCEED_FIX", tel_file.read_text(encoding="utf-8"))
 
+    def test_coherence_bake_r7_f_agy_r7_01_to_04_codex(self):
+        self.assertIn("[VERDICT: PROCEED_FIX]", vt.REQUIRED_TELEMETRY_MARKERS)
+        self.assertIn("cortex-librarian", vt.EXPECTED_CODEX_SKILLS)
+        self.assertIn("cortex-librarian", vt.EXPECTED_CODEX_AGENTS)
+
 
 
 class Meta(unittest.TestCase):

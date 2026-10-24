@@ -829,6 +829,20 @@ class LiveTree(unittest.TestCase):
             self.assertTrue(tel_file.is_file())
             self.assertIn("VERDICT:PROCEED_FIX", tel_file.read_text(encoding="utf-8"))
 
+    def test_coherence_bake_r7_f_agy_r7_01_to_04_claude(self):
+        self.assertTrue(hasattr(vt, "EXPECTED_CLAUDE_SKILLS"))
+        self.assertTrue(hasattr(vt, "EXPECTED_CLAUDE_AGENTS"))
+        self.assertTrue(hasattr(vt, "FORBIDDEN_PS1_CALL"))
+        self.assertTrue(hasattr(vt, "FORBIDDEN_CONTROL_BYTES"))
+        self.assertIn("cortex-librarian", vt.EXPECTED_CLAUDE_SKILLS)
+        self.assertIn("cortex-librarian", vt.EXPECTED_CLAUDE_AGENTS)
+        self.assertIn("[VERDICT: PROCEED_FIX]", vt.REQUIRED_TELEMETRY_MARKERS)
+        self.assertTrue(
+            (
+                REPO_ROOT / ".claude" / "skills" / "cortex-librarian" / "SKILL.md"
+            ).is_file()
+        )
+
 
 
 

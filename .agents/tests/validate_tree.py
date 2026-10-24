@@ -91,6 +91,7 @@ REQUIRED_BRC_GUARD_RULES = (
 
 REQUIRED_TELEMETRY_MARKERS = (
     "[VERDICT: REJECT]",
+    "[VERDICT: PROCEED_FIX]",
     "[GLOBAL VERDICT: REJECT]",
     "[GLOBAL VERDICT: PROCEED]",
     "<BLAST_RADIUS>",
@@ -145,6 +146,12 @@ INTERNAL_COMMITTEE_SKILLS = (
     "security-auditor",
     "skill-evolve",
     "cortex-librarian",
+)
+
+EXPECTED_AGENTS_CUSTOM_AGENTS = (
+    "cortex-librarian",
+    "stage3-design-reviewer",
+    "stage4-code-auditor",
 )
 
 REQUIRED_FM_KEYS = {"name", "description"}
@@ -888,6 +895,12 @@ def check_inv1_frontmatter(root):
                 % label
             )
     agents_dir = root / ".agents" / "agents"
+    for exp_agent in EXPECTED_AGENTS_CUSTOM_AGENTS:
+        exp_path = agents_dir / ("%s.md" % exp_agent)
+        if not exp_path.is_file():
+            violations.append(
+                "INV-1: .agents/agents/%s.md: missing expected custom agent" % exp_agent
+            )
     if agents_dir.is_dir():
         for agent_md in sorted(agents_dir.glob("*.md")):
             label = _rel(root, agent_md)

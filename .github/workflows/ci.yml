@@ -45,3 +45,18 @@ jobs:
 
       - name: Run global config sync self-test
         run: python .agents/scripts/sync_global_config.py --self-test
+
+      - name: Run Stage 0 structural graph polyfill self-test
+        run: python .agents/skills/comprehend-problem/scripts/structural_graph_polyfill.py --self-test
+
+      - name: Run Stage 0 logical Z3 polyfill self-test
+        run: python .agents/skills/comprehend-problem/scripts/logical_z3_polyfill.py --self-test
+
+      - name: Run universal rubric grade gate self-test
+        run: python .agents/skills/comprehend-problem/scripts/rubric_grade_gate.py --self-test
+
+      - name: Run Stage 5 coherence bake gate self-test
+        run: python .agents/skills/coherence-bake/scripts/coherence_bake_gate.py --self-test
+
+      - name: Run Cortex ingest unit test suite
+        run: node --test .agents/tests/cortex_ingest.test.js
