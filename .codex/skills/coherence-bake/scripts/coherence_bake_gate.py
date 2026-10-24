@@ -449,11 +449,40 @@ def _audit_single_js_file(js_path: Path, rel_path: str) -> List[str]:
     return []
 
 
+def _check_md_phase_monotonicity(cleaned: str, rel_path: str) -> List[str]:
+    """Verify Phase N headings inside a Markdown file are monotonically non-decreasing."""
+    last_phase = 0
+    for ln in cleaned.splitlines():
+        if ln.startswith("#"):
+            match = re.search(r"\bPhase\s+(\d+)\b", ln)
+            if match:
+                cur = int(match.group(1))
+                if cur < last_phase:
+                    return [f"{rel_path}: non-monotonic Phase heading {cur} < {last_phase}"]
+                last_phase = cur
+    return []
+
+
+def _check_md_stale_claims(text: str, rel_path: str) -> List[str]:
+    """Verify Markdown file does not contain stale pre-config paths or false exclusions."""
+    stale_tokens = (
+        "~/.gemini/GEMINI.md",
+        "~/.gemini/antigravity/skills",
+        "~/.gemini/antigravity/mcp_config.json",
+        "omitted to avoid the Antigravity moma_" + "search",
+    )
+    return [
+        f"{rel_path}: stale claim {tok}"
+        for tok in stale_tokens
+        if tok in text
+    ]
+
+
 def _audit_single_md_file(md_path: Path, rel_path: str) -> List[str]:
-    """Audit a Markdown file for broken relative links outside code blocks."""
+    """Audit a Markdown file for broken relative links, phase order, and stale claims."""
     text = md_path.read_text(encoding="utf-8", errors="replace")
-    cleaned = re.sub(r"```[\s\S]*?```", "", text)
-    cleaned = re.sub(r"`[^`\n]+`", "", cleaned)
+    cleaned_fenced = re.sub(r"```[\s\S]*?```", "", text)
+    cleaned = re.sub(r"`[^`\n]+`", "", cleaned_fenced)
     gaps: List[str] = []
     for match in _REL_MD_LINK_RE.finditer(cleaned):
         target = match.group(1).strip()
@@ -461,6 +490,8 @@ def _audit_single_md_file(md_path: Path, rel_path: str) -> List[str]:
             continue
         if not (md_path.parent / target).resolve().exists():
             gaps.append(f"{rel_path}: broken relative link {target}")
+    gaps.extend(_check_md_phase_monotonicity(cleaned_fenced, rel_path))
+    gaps.extend(_check_md_stale_claims(text, rel_path))
     return gaps
 
 
@@ -473,6 +504,29 @@ def _extract_md_h2_headings(md_path: Path) -> List[str]:
         for ln in cleaned.splitlines()
         if ln.startswith("## ")
     ]
+
+
+def _count_md_bullets(md_path: Path) -> int:
+    """Count top-level `- ` bullet lines in a Markdown file."""
+    return sum(
+        1
+        for ln in md_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if ln.startswith("- ")
+    )
+
+
+def _compare_edge_case_pair(
+    ag_ec: Path,
+    peer_ec: Path,
+    peer_label: str,
+    ec_name: str,
+) -> List[str]:
+    """Compare companion edge-cases existence and bullet count across trees."""
+    if ag_ec.is_file() != peer_ec.is_file():
+        return [f"{peer_label}/{ec_name}: companion edge-cases drift"]
+    if ag_ec.is_file() and _count_md_bullets(ag_ec) != _count_md_bullets(peer_ec):
+        return [f"{peer_label}/{ec_name}: companion bullet-count drift"]
+    return []
 
 
 def _compare_skill_pair(
@@ -489,9 +543,16 @@ def _compare_skill_pair(
     if _extract_md_h2_headings(ag_md) != _extract_md_h2_headings(peer_md):
         gaps.append(f"{peer_label}/SKILL.md: H2 heading drift vs canonical")
     ec_name = f"{ag_skill_dir.name}-edge-cases.md"
-    if (ag_skill_dir / ec_name).is_file() != (peer_skill_dir / ec_name).is_file():
-        gaps.append(f"{peer_label}/{ec_name}: companion edge-cases drift")
-    for script_p in sorted((ag_skill_dir / "scripts").glob("*.py")) if (ag_skill_dir / "scripts").is_dir() else ():
+    gaps.extend(
+        _compare_edge_case_pair(
+            ag_skill_dir / ec_name,
+            peer_skill_dir / ec_name,
+            peer_label,
+            ec_name,
+        )
+    )
+    script_dir = ag_skill_dir / "scripts"
+    for script_p in sorted(script_dir.glob("*.py")) if script_dir.is_dir() else ():
         peer_sp = peer_skill_dir / "scripts" / script_p.name
         if not peer_sp.is_file() or peer_sp.read_bytes() != script_p.read_bytes():
             gaps.append(f"{peer_label}/scripts/{script_p.name}: script SHA-256 drift")
@@ -609,7 +670,9 @@ def _check_inventory_and_ci_surface(repo_root: Path) -> int:
             ci_yml.read_text(encoding="utf-8", errors="replace"),
             (
                 "coherence_bake_gate.py --self-test",
+                "coherence_bake_gate.py --audit-repo .",
                 "rubric_grade_gate.py --self-test",
+                "mcp_keyring_launcher.py --self-test",
                 "cortex_ingest.test.js",
             ),
         )

@@ -1,6 +1,6 @@
 ---
 name: stage4-code-auditor
-description: Read-only Stage 4 iterative-implement committee subagent for auditing code diffs, style compliance, and security boundaries. Use when invoking Style Experts, Security Auditor, or Code Health Agent personas. Do not use for code generation or shell execution.
+description: Read-only Stage 4 iterative-implement committee subagent for auditing code diffs, style compliance, and security boundaries. Use when invoking Style Experts, Security Auditor, Performance Profiler, or Markdown Style Expert personas. Do not use for code generation or shell execution.
 tools: Read, Grep, Glob
 ---
 

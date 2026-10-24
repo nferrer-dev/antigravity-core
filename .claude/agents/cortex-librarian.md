@@ -1,6 +1,6 @@
 ---
 name: cortex-librarian
-description: Read-only knowledge retrieval microservice. Queries the local Cortex vector database via MCP recall to return cited architectural best practices under strict MVC limits. Use when a workflow needs foundational architectural truth plus dynamically learned heuristics from collective memory. Do not use to mutate code or Cortex state.
+description: Read-only Cortex RAG retrieval subagent for querying architectural best practices and learned edge-case heuristics during Stage 2 and Stage 3 debates. Use when invoking the Cortex Librarian persona. Do not use to mutate code or Cortex state.
 tools: Read, Grep, Glob, mcp__cortex__recall
 ---
 

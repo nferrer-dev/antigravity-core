@@ -1,7 +1,7 @@
 # Type 4: MCP Servers, Supply-Chain Security, & RAG Memory Defense
 
 > **Customization Surface**: [`.agents/mcp_config.json`](../../.agents/mcp_config.json),
-> [`.mcp.json`](../../.mcp.json), `~/.gemini/antigravity/mcp_config.json`,
+> [`.mcp.json`](../../.mcp.json), `~/.gemini/config/mcp_config.json`,
 > `~/.claude.json`, and
 > [`.agents/scripts/mcp_keyring_launcher.py`](../../.agents/scripts/mcp_keyring_launcher.py)
 

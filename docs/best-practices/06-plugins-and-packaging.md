@@ -45,7 +45,7 @@ enforce the exact **8-key `ALLOWED_PLUGIN_FIELDS` whitelist**:
   "name": "antigravity-core",
   "displayName": "Antigravity Core Harness-Nexus",
   "version": "1.0.0",
-  "description": "Distributable 2026 Agentic Harness plugin bundling rules, 19 skills, hooks, and MCP configurations.",
+  "description": "Distributable 2026 Agentic Harness plugin bundling rules, 20 skills, hooks, and MCP configurations.",
   "disabled": true,
   "suggestedPrompts": [
     "Run Stage 0 comprehension on this repository",
@@ -89,7 +89,7 @@ partial file corruption.
   SHA-256 digest and exact byte length of every file in the output bundle
   (`plugin.json`, `README.md`, `rules/AGENTS.md`, `hooks.json`, `hooks/*.ps1`,
   `scripts/secret_scan.py`, `scripts/mcp_keyring_launcher.py`,
-  `mcp_config.json`, `agents/*.md`, and all 19 `skills/`) and writes
+  `mcp_config.json`, `agents/*.md`, and all 20 `skills/`) and writes
   `integrity_manifest.json`.
 - **Standalone Verification (`--verify-dir`)**: Running
   `python .agents/scripts/package_plugin.py --verify-dir <bundle_path>`
@@ -108,8 +108,8 @@ synchronizes both **Google Antigravity (`~/.gemini`)** and **Claude Code
 
 | Target Surface | Sync Mechanism in `sync_global_config.py` | Safety & Idempotency Guarantee |
 | :--- | :--- | :--- |
-| **`~/.gemini/GEMINI.md` & `~/.claude/CLAUDE.md`** | Byte-identical UTF-8 LF copy of `.agents/AGENTS.md` and `CLAUDE.md`. | Timestamped backup prior to overwrite; `check_control_bytes` validation. |
-| **`~/.gemini/antigravity/skills` & `~/.claude/skills/<name>`** | Directory junction (`_winapi.CreateJunction`) to `.agents/skills` and per-skill junctions to `.claude/skills/<name>`. | Uses `os.path.lexists` before `_winapi.CreateJunction` to prevent `WinError 183` on repeated `--apply` runs while preserving user-created custom skills. |
+| **`~/.gemini/config/AGENTS.md` & `~/.claude/CLAUDE.md`** | Byte-identical UTF-8 LF copy of `.agents/AGENTS.md` and `CLAUDE.md`. | Timestamped backup prior to overwrite; `check_control_bytes` validation. |
+| **`~/.gemini/config/skills` & `~/.claude/skills/<name>`** | Directory junction (`_winapi.CreateJunction`) to `.agents/skills` and per-skill junctions to `.claude/skills/<name>`. | Uses `os.path.lexists` before `_winapi.CreateJunction` to prevent `WinError 183` on repeated `--apply` runs while preserving user-created custom skills. |
 | **`~/.claude/rules/*.md`, `agents/*.md`, `hooks/*.ps1`** | Per-file canonical sync with path-variable rewriting (`$CLAUDE_PROJECT_DIR/.claude/hooks` -> `~/.claude/hooks`). | Preserves unmanaged user agents/rules in `~/.claude/`. |
 | **`~/.claude/settings.json`** | Structural JSON hook upsert across `PreToolUse`, `Stop`, and `SubagentStop`. | Preserves all user top-level settings (`skipWorkflowUsageWarning`, etc.) and deduplicates hook entries by script basename. |
 | **`~/.claude.json` (`mcpServers`)** | Non-destructive key-level upsert (`check_or_sync_claude_mcp`) for `cortex`, `code-graph-context`, and `rea`. | Preserves existing user MCP servers (`http` or `stdio`) and scans only managed core entries for credential leaks. |

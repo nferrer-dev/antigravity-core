@@ -40,6 +40,9 @@ jobs:
       - name: Run secret scanner self-test
         run: python .agents/scripts/secret_scan.py --self-test
 
+      - name: Run MCP keyring launcher self-test
+        run: python .agents/scripts/mcp_keyring_launcher.py --self-test
+
       - name: Run standalone plugin bundler self-test
         run: python .agents/scripts/package_plugin.py --self-test
 
@@ -57,6 +60,9 @@ jobs:
 
       - name: Run Stage 5 coherence bake gate self-test
         run: python .agents/skills/coherence-bake/scripts/coherence_bake_gate.py --self-test
+
+      - name: Run Stage 5 coherence bake whole-repo surface audit
+        run: python .agents/skills/coherence-bake/scripts/coherence_bake_gate.py --audit-repo .
 
       - name: Run Cortex ingest unit test suite
         run: node --test .agents/tests/cortex_ingest.test.js

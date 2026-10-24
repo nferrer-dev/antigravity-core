@@ -91,7 +91,7 @@ across `138` real-world repositories (`AGENTBENCH`):
 ### 3.1 Root `AGENTS.md` vs. Scoped `.agents/rules/*.md` (Google Antigravity)
 
 1. **Never Put YAML Frontmatter in Root `AGENTS.md` (`INV-4`)**:
-    - Antigravity treats `AGENTS.md` (and `~/.gemini/GEMINI.md`) as always-on
+    - Antigravity treats `AGENTS.md` (and `~/.gemini/config/AGENTS.md`) as always-on
       raw Markdown. Only files inside `.agents/rules/*.md` parse YAML
       frontmatter (`trigger`, `globs`, `description`).
 2. **Keep `.agents/rules/` Strictly Flat (`INV-4`)**:

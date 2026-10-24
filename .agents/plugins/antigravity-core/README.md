@@ -1,6 +1,6 @@
 # Antigravity Core Harness Plugin
 
-`antigravity-core` packages the Stage 0-4 epistemic engineering pipeline, consensus committees, Blast Radius Containment (`brc-guard.ps1`) and Causal Telemetry (`telemetry-append.ps1`) lifecycle hooks, MCP server configuration, and language style skills into a single distributable Antigravity plugin bundle.
+`antigravity-core` packages the Stage 0-5 epistemic engineering pipeline, consensus committees, Blast Radius Containment (`brc-guard.ps1`) and Causal Telemetry (`telemetry-append.ps1`) lifecycle hooks, MCP server configuration, and language style skills into a single distributable Antigravity plugin bundle.
 
 ## Why `disabled: true` in the Source Repository
 
@@ -8,13 +8,13 @@ Inside the `antigravity-core` source repository checkout, `.agents/` already pro
 
 ## Building a Standalone Distributable Bundle
 
-To materialize a complete, self-contained plugin directory (with `"disabled": false`, `rules/AGENTS.md`, `hooks.json`, `hooks/`, `mcp_config.json`, `skills/`, `scripts/secret_scan.py`, `scripts/mcp_keyring_launcher.py`, and `skills/harness-scaffold/scripts/secret_scan.py`) for installation under `~/.gemini/config/plugins/antigravity-core` or team distribution:
+To materialize a complete, self-contained plugin directory (with `"disabled": false`, `rules/AGENTS.md`, `rules/*.md`, `agents/*.md`, `sidecars/`, `hooks.json`, `hooks/`, `mcp_config.json`, `skills/`, `scripts/secret_scan.py`, `scripts/mcp_keyring_launcher.py`, `skills/harness-scaffold/scripts/secret_scan.py`, and `integrity_manifest.json`) for installation under `~/.gemini/config/plugins/antigravity-core` or team distribution:
 
 ```powershell
 python .agents/scripts/package_plugin.py --output-dir <target-dir> --enable
 ```
 
-Repository-only build and one-time migration scripts (`package_plugin.py`, `sync_global_config.py`, `remediate_legacy_mcp.py`) and custom subagent files (`agents/<agent>.md`, omitted to avoid the Antigravity `moma_search` executor bug) are intentionally excluded from the packaged bundle.
+Repository-only build and one-time migration scripts (`package_plugin.py`, `sync_global_config.py`, `remediate_legacy_mcp.py`, `cortex_ingest.js`) are intentionally excluded from the packaged bundle.
 
 To run the built-in self-test:
 

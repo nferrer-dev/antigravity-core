@@ -66,7 +66,7 @@ Spawn one final subagent via `spawn_agent` (`fork_context=false`) whose explicit
 
 The Adjudicator's verdict is terminal — no appeal, no further rounds. On `REVISE`, the rejected artifact gets a full-committee diff-only resubmission: the author revises, and the next debate is scoped to the shards the diff touches.
 
-## 4. Phase 4: Resource Cleanup (Anti-Leak Protocol)
+## Resource Cleanup (Anti-Leak Protocol)
 
 1. **One Debate per Artifact:** Before Phase 1, check `wait_agent`; if debate agents for the same artifact are already live, join or abort — never start a second debate. Also take a lock file at `<scratchpad>\locks\debate-<artifact-slug>.lock` and release it at the end.
 2. **Shard Deadlines:** Bound each `wait_agent` wave against a per-shard time budget. A shard that blows its budget is stopped via `close_agent` and its untested claims are pruned fail-closed.
