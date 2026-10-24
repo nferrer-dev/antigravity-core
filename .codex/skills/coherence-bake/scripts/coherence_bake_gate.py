@@ -805,6 +805,17 @@ def _check_redteam_receipt_file(raw_path: Any, repo_root: Path) -> bool:
     )
 
 
+def _is_clean_transcript_line(ln: str) -> bool:
+    """Return True if a JSONL transcript line is valid JSON with non-ERROR status."""
+    try:
+        obj = json.loads(ln)
+    except ValueError:
+        return False
+    if not isinstance(obj, Mapping):
+        return False
+    return str(obj.get("status", "DONE")).upper() != "ERROR"
+
+
 def _check_redteam_transcript_file(raw_path: Any, repo_root: Path) -> bool:
     """Verify on-disk red-team .jsonl transcript has >=1 line and 0 errors/blocks."""
     target = _resolve_proof_path(raw_path, repo_root)
@@ -817,14 +828,7 @@ def _check_redteam_transcript_file(raw_path: Any, repo_root: Path) -> bool:
     ]
     if not lines:
         return False
-    for ln in lines:
-        if (
-            '"status": "ERROR"' in ln
-            or '"status":"ERROR"' in ln
-            or "BLOCKED by BRC" in ln
-        ):
-            return False
-    return True
+    return all(_is_clean_transcript_line(ln) for ln in lines)
 
 
 def _check_disk_closure_proofs(
