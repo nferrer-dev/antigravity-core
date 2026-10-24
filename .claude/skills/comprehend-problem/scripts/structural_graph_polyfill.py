@@ -29,6 +29,13 @@ IGNORED_DIRS = {
     ".mypy_cache",
     ".pytest_cache",
     ".ruff_cache",
+    "scratch",
+    "chroma_db",
+    "chroma_data",
+    "fpcalc_dir",
+    ".next",
+    "coverage",
+    ".claude",
 }
 _BRANCH_AST_TYPES = (
     ast.If,

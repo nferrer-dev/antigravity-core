@@ -57,6 +57,7 @@ EXCLUDED_WALK_DIRS: Set[str] = {
     "venv",
     "scratch",
     "chroma_db",
+    "chroma_data",
     "fpcalc_dir",
     ".next",
     "dist",
@@ -64,6 +65,8 @@ EXCLUDED_WALK_DIRS: Set[str] = {
     "coverage",
     ".pytest_cache",
     ".mypy_cache",
+    ".ruff_cache",
+    ".claude",
 }
 BINARY_EXTENSIONS: Set[str] = {
     ".png",
@@ -1211,6 +1214,196 @@ def _audit_e2e_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
     return gaps
 
 
+_COMPOSE_ONLY_PP_VARS: Set[str] = {
+    "PP_PROMETHEUS_PORT",
+    "PP_GRAFANA_PORT",
+    "PP_GRAFANA_ADMIN_USER",
+    "PP_GRAFANA_ADMIN_PASSWORD",
+    "PP_LOCUST_PORT",
+    "PP_LOCUST_WORKERS",
+}
+
+
+def _collect_declared_pp_env_vars(repo_root: Path) -> Set[str]:
+    """Extract PP_* env vars from .env.example, Dockerfiles, and loadtest compose."""
+    declared: Set[str] = set()
+    rels = (
+        ".env.example",
+        "Dockerfile",
+        "Dockerfile.railway",
+        "docker-compose.loadtest.yml",
+    )
+    for rel in rels:
+        fp = repo_root / rel
+        if fp.is_file():
+            txt = fp.read_text(encoding="utf-8", errors="replace")
+            declared.update(re.findall(r"\b(PP_[A-Z0-9_]+)\b", txt))
+    return declared - _COMPOSE_ONLY_PP_VARS
+
+
+def _collect_env_consumer_text(repo_root: Path) -> str:
+    """Concatenate source text from src/, scripts/, alembic/, and frontend/next.config.js."""
+    chunks: List[str] = []
+    for folder in ("src", "scripts", "alembic"):
+        base = repo_root / folder
+        if base.is_dir():
+            for fp in sorted(base.rglob("*")):
+                if fp.is_file() and fp.suffix in {".py", ".sh"}:
+                    chunks.append(fp.read_text(encoding="utf-8", errors="replace"))
+    next_cfg = repo_root / "frontend" / "next.config.js"
+    if next_cfg.is_file():
+        chunks.append(next_cfg.read_text(encoding="utf-8", errors="replace"))
+    return "\n".join(chunks)
+
+
+def _audit_env_var_parity(repo_root: Path) -> List[str]:
+    """Flag declared PP_* application env vars never read in runtime or scripts."""
+    if not (repo_root / ".env.example").is_file() and not (repo_root / "Dockerfile").is_file():
+        return []
+    declared = _collect_declared_pp_env_vars(repo_root)
+    if not declared:
+        return []
+    consumed_text = _collect_env_consumer_text(repo_root)
+    return [
+        f".env.example: unread application env var {var}"
+        for var in sorted(declared)
+        if var not in consumed_text
+    ]
+
+
+def _extract_optional_dep_extras(pyproj_text: str) -> Set[str]:
+    """Extract extra key names from [project.optional-dependencies] in pyproject.toml."""
+    match = re.search(
+        r"(?m)^\[project\.optional-dependencies\]\s*\n([\s\S]*?)(?=^\[[A-Za-z]|\Z)",
+        pyproj_text,
+    )
+    if not match:
+        return set()
+    return set(re.findall(r"(?m)^\s*([A-Za-z0-9_-]+)\s*=", match.group(1)))
+
+
+def _scan_file_pip_extras(
+    fpath: Path, rel: str, valid_extras: Set[str]
+) -> List[str]:
+    """Scan pip install lines in fpath for undefined .[extra] specifiers."""
+    if not fpath.is_file():
+        return []
+    gaps: List[str] = []
+    txt = fpath.read_text(encoding="utf-8", errors="replace")
+    for match in re.finditer(r"pip\s+install[^\n]*?\.(\[[A-Za-z0-9_,\s]+\])", txt):
+        raw_list = match.group(1).strip("[]").split(",")
+        for extra in (item.strip() for item in raw_list if item.strip()):
+            if extra not in valid_extras:
+                gaps.append(
+                    f"{rel}: pip install references undefined extra [{extra}]"
+                )
+    return gaps
+
+
+def _audit_pip_extras_parity(repo_root: Path) -> List[str]:
+    """Verify pip install .[extra] references in Dockerfiles and CI exist in pyproject.toml."""
+    pyproj = repo_root / "pyproject.toml"
+    if not pyproj.is_file():
+        return []
+    valid = _extract_optional_dep_extras(
+        pyproj.read_text(encoding="utf-8", errors="replace")
+    )
+    targets = (
+        "Dockerfile",
+        "Dockerfile.backend",
+        "Dockerfile.backfill",
+        "Dockerfile.railway",
+        ".github/workflows/ci.yml",
+    )
+    gaps: List[str] = []
+    for rel in targets:
+        gaps.extend(_scan_file_pip_extras(repo_root / rel, rel, valid))
+    return gaps
+
+
+def _check_dockerfile_worker_watch(repo_root: Path) -> List[str]:
+    """Verify Dockerfile worker stage ENTRYPOINT pp-feed includes --watch."""
+    df = repo_root / "Dockerfile"
+    if not df.is_file():
+        return []
+    txt = df.read_text(encoding="utf-8", errors="replace")
+    match = re.search(
+        r"(?im)^FROM\s+\S+\s+AS\s+worker\b([\s\S]*?)(?=^FROM\s|\Z)", txt
+    )
+    if match and 'ENTRYPOINT ["pp-feed"]' in match.group(1) and "--watch" not in match.group(1):
+        return ["Dockerfile: worker stage ENTRYPOINT pp-feed missing --watch"]
+    return []
+
+
+def _check_compose_redis(repo_root: Path) -> List[str]:
+    """Flag unused redis services in docker-compose manifests when redis is not in pyproject.toml."""
+    pyproj = repo_root / "pyproject.toml"
+    if not pyproj.is_file():
+        return []
+    if "redis" in pyproj.read_text(encoding="utf-8", errors="replace").lower():
+        return []
+    gaps: List[str] = []
+    for rel in ("docker-compose.yml", "docker-compose.prod.yml"):
+        fp = repo_root / rel
+        if fp.is_file() and "redis:" in fp.read_text(encoding="utf-8", errors="replace"):
+            gaps.append(f"{rel}: unused redis service in compose manifest")
+    return gaps
+
+
+def _check_compose_nginx_mount(repo_root: Path) -> List[str]:
+    """Flag ./frontend/public nginx mount when frontend/public/index.html is missing."""
+    dc = repo_root / "docker-compose.yml"
+    if not dc.is_file() or (repo_root / "frontend" / "public" / "index.html").is_file():
+        return []
+    if "./frontend/public:/usr/share/nginx/html" in dc.read_text(
+        encoding="utf-8", errors="replace"
+    ):
+        return [
+            "docker-compose.yml: nginx mounts frontend/public without frontend/public/index.html"
+        ]
+    return []
+
+
+def _audit_docker_and_compose_contracts(repo_root: Path) -> List[str]:
+    """Audit Dockerfile worker CMD, backfill chroma_data paths, and compose contracts."""
+    gaps = _check_dockerfile_worker_watch(repo_root)
+    for rel in ("Dockerfile.backfill", "docker-compose.backfill.yml"):
+        fp = repo_root / rel
+        if fp.is_file() and "chroma_data" in fp.read_text(encoding="utf-8", errors="replace"):
+            gaps.append(f"{rel}: stale chroma_data path")
+    gaps.extend(_check_compose_redis(repo_root))
+    gaps.extend(_check_compose_nginx_mount(repo_root))
+    return gaps
+
+
+def _has_alembic_001_drift(schema_txt: str) -> bool:
+    """Return True if 001_initial_schema.py drifts from SingleWriterDB columns/tables."""
+    required = ("super_vector_json", "metadata_blob", "event_id", "archive_tracks")
+    if not all(tok in schema_txt for tok in required):
+        return True
+    return "source_url" in schema_txt
+
+
+def _audit_alembic_vs_runtime_schema(repo_root: Path) -> List[str]:
+    """Audit alembic/env.py fallback URL and 001_initial_schema.py vs SingleWriterDB."""
+    gaps: List[str] = []
+    env_py = repo_root / "alembic" / "env.py"
+    if env_py.is_file() and "sqlite:///data/api.db" in env_py.read_text(
+        encoding="utf-8", errors="replace"
+    ):
+        gaps.append("alembic/env.py: stale fallback sqlite:///data/api.db")
+    init_py = repo_root / "alembic" / "versions" / "001_initial_schema.py"
+    db_py = repo_root / "src" / "orchestration" / "db.py"
+    if init_py.is_file() and db_py.is_file():
+        if _has_alembic_001_drift(
+            init_py.read_text(encoding="utf-8", errors="replace")
+        ):
+            gaps.append(
+                "alembic/versions/001_initial_schema.py: schema drift vs SingleWriterDB"
+            )
+    return gaps
+
+
 def _audit_cross_surface_contracts(repo_root: Path) -> List[str]:
     """Audit routes vs nginx/locust/e2e/frontend, metrics, Docker, Alembic, scripts, and deps."""
     gaps: List[str] = []
@@ -1227,6 +1420,10 @@ def _audit_cross_surface_contracts(repo_root: Path) -> List[str]:
     gaps.extend(_audit_chroma_collection_parity(repo_root))
     gaps.extend(_audit_pyproject_deps(repo_root))
     gaps.extend(_audit_frontend_execution(repo_root))
+    gaps.extend(_audit_env_var_parity(repo_root))
+    gaps.extend(_audit_pip_extras_parity(repo_root))
+    gaps.extend(_audit_docker_and_compose_contracts(repo_root))
+    gaps.extend(_audit_alembic_vs_runtime_schema(repo_root))
     return gaps
 
 
@@ -1882,6 +2079,32 @@ def _verify_manifest_self_test(repo_root: Path, anchor: str) -> Optional[str]:
     return None
 
 
+def _verify_manifest_parity_self_test(root: Path) -> Optional[str]:
+    """Verify env-var, pip-extras, worker --watch, and Alembic drift checks in self-test."""
+    (root / ".env.example").write_text("PP_UNREAD_VAR=1\n", encoding="utf-8")
+    (root / "Dockerfile").write_text(
+        'FROM runtime AS worker\nENTRYPOINT ["pp-feed"]\n', encoding="utf-8"
+    )
+    (root / "Dockerfile.backfill").write_text(
+        "RUN pip install .[ml]\n", encoding="utf-8"
+    )
+    (root / "alembic").mkdir(parents=True, exist_ok=True)
+    (root / "alembic" / "env.py").write_text(
+        'url = "sqlite:///data/api.db"\n', encoding="utf-8"
+    )
+    gaps = _audit_cross_surface_contracts(root)
+    expected_tokens = (
+        "unread application env var PP_UNREAD_VAR",
+        "undefined extra [ml]",
+        "missing --watch",
+        "stale fallback sqlite:///data/api.db",
+    )
+    for tok in expected_tokens:
+        if not any(tok in g for g in gaps):
+            return f"Expected '{tok}' in self-test gaps, got {gaps}"
+    return None
+
+
 def _verify_cross_surface_self_test() -> Optional[str]:
     """Verify cross-surface route, metric, Next.js Docker, and Alembic contract checks."""
     with tempfile.TemporaryDirectory() as tmp_str:
@@ -1910,9 +2133,9 @@ def _verify_cross_surface_self_test() -> Optional[str]:
             return f"Expected nginx route drift gap, got {gaps}"
         if not any("promo_collection" in g for g in gaps):
             return f"Expected scripts/verify_db.py promo_collection gap, got {gaps}"
-        if not any("flask" in g or "spotipy" in g for g in gaps):
+        if not any("flask" in g for g in gaps):
             return f"Expected dead pyproject dependency gap, got {gaps}"
-    return None
+        return _verify_manifest_parity_self_test(root)
 
 
 def run_self_test() -> Tuple[int, List[str]]:
