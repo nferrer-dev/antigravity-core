@@ -770,11 +770,19 @@ def _legacy_hook_and_ci_gaps(repo_root: Path) -> List[str]:
 
 
 def _run_repo_ruff_check(repo_root: Path, pyproj_text: str) -> List[str]:
-    """Run ruff check when configured in pyproject.toml and return diagnostics."""
+    """Run ruff check across 100% of repo_root when configured in pyproject.toml."""
     if "[tool.ruff" not in pyproj_text:
         return []
-    targets = [d for d in ("src", "tests", "scripts") if (repo_root / d).exists()]
-    cmd = [sys.executable, "-m", "ruff", "check", "--quiet"] + (targets or ["."])
+    cmd = [
+        sys.executable,
+        "-m",
+        "ruff",
+        "check",
+        "--quiet",
+        "--extend-exclude",
+        "scratch",
+        ".",
+    ]
     try:
         proc = subprocess.run(
             cmd, cwd=str(repo_root), capture_output=True, text=True, timeout=30
@@ -788,6 +796,116 @@ def _run_repo_ruff_check(repo_root: Path, pyproj_text: str) -> List[str]:
         for ln in proc.stdout.splitlines()
         if ln.strip()
     ][:50]
+
+
+def _get_git_tracked_files(
+    repo_root: Path,
+    extra_args: Sequence[str] = (),
+) -> List[str]:
+    """Return git ls-files relative paths when repo_root is a git repository."""
+    if not (repo_root / ".git").exists():
+        return []
+    cmd = ["git", "-C", str(repo_root), "ls-files"] + list(extra_args)
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=15
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if proc.returncode != 0:
+        return []
+    return [
+        ln.strip().replace("\\", "/")
+        for ln in proc.stdout.splitlines()
+        if ln.strip()
+    ]
+
+
+_ROOT_SCRATCH_ARTIFACTS: Set[str] = {
+    "diff.txt",
+    "test_output.txt",
+    "preflight_test_output.txt",
+    "compact_disk.txt",
+    "stage0_rubric.md",
+    "candidate_solutions_A_R.md",
+}
+
+
+def _audit_git_index_hygiene(repo_root: Path) -> List[str]:
+    """Flag gitignored files and root scratch logs still tracked in git index."""
+    ignored_tracked = set(
+        _get_git_tracked_files(repo_root, ("-i", "--exclude-standard"))
+    )
+    gaps: List[str] = []
+    for rel in _get_git_tracked_files(repo_root):
+        if (
+            rel in ignored_tracked
+            or rel in _ROOT_SCRATCH_ARTIFACTS
+            or rel.startswith(("scratch/", "chroma_db/"))
+        ):
+            gaps.append(f"{rel}: scratch or runtime artifact tracked in git index")
+    return gaps
+
+
+def _is_historical_plan_doc(rel: str) -> bool:
+    """Return True if rel is an archived historical plan/upgrade doc or test fixture."""
+    prefixes = (
+        "docs/plans/",
+        "docs/upgrade/",
+        "docs/superpowers/",
+        "docs/architecture/task.md",
+        "tests/admin/test_cli.py",
+    )
+    return any(rel == p or rel.startswith(p) for p in prefixes)
+
+
+def _has_stale_recommender_token(text: str) -> bool:
+    """Return True if text contains stale references to deleted recommender/pp-api."""
+    tokens = (
+        "recommender.",
+        "from recommender",
+        "import recommender",
+        '"pp-api"',
+        "recommend digest",
+        "/home/nigelf/",
+        "POST /auth/register",
+    )
+    return any(tok in text for tok in tokens)
+
+
+def _audit_single_tracked_text_file(
+    repo_root: Path,
+    rel: str,
+    forbid_recommender: bool,
+) -> List[str]:
+    """Scan one git-tracked file for hardcoded brain paths and deleted package refs."""
+    fpath = repo_root / rel
+    if not fpath.is_file() or fpath.suffix.lower() in BINARY_EXTENSIONS:
+        return []
+    text = fpath.read_text(encoding="utf-8", errors="replace")
+    gaps: List[str] = []
+    win_tok = ".gemini\\" + "antigravity\\brain\\"
+    pos_tok = ".gemini/" + "antigravity/brain/"
+    if win_tok in text or pos_tok in text:
+        gaps.append(f"{rel}: hardcoded conversation brain path")
+    if (
+        forbid_recommender
+        and not _is_historical_plan_doc(rel)
+        and _has_stale_recommender_token(text)
+    ):
+        gaps.append(f"{rel}: stale reference to deleted recommender/pp-api package")
+    return gaps
+
+
+def _audit_all_git_tracked_files(repo_root: Path) -> List[str]:
+    """Audit 100% of git-tracked files for index hygiene, brain paths, and stale packages."""
+    gaps = _audit_git_index_hygiene(repo_root)
+    forbid_rec = (repo_root / "pyproject.toml").is_file() and not _has_package_target(
+        repo_root, "recommender"
+    )
+    for rel in _get_git_tracked_files(repo_root):
+        gaps.extend(_audit_single_tracked_text_file(repo_root, rel, forbid_rec))
+    return gaps
 
 
 def _extract_toml_list(pyproj_text: str, key: str) -> List[str]:
@@ -848,8 +966,9 @@ def _audit_ci_and_entrypoints(repo_root: Path) -> List[str]:
 
 
 def _audit_pyproject_and_ci(repo_root: Path) -> List[str]:
-    """Audit pyproject.toml ruff cleanliness, testpaths coverage, and CI/Docker entrypoints."""
+    """Audit pyproject.toml ruff cleanliness, testpaths coverage, and all git-tracked files."""
     gaps = _audit_ci_and_entrypoints(repo_root)
+    gaps.extend(_audit_all_git_tracked_files(repo_root))
     pyproj = repo_root / "pyproject.toml"
     if not pyproj.is_file():
         return gaps
