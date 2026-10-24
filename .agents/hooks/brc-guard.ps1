@@ -172,7 +172,18 @@ if ($null -ne $argsObj) {
             break
         }
     }
-    foreach ($pathField in @('AbsolutePath', 'TargetFile', 'file_path', 'path', 'Path', 'SearchPath')) {
+    if ([string]::IsNullOrWhiteSpace($cmd) -and ($toolName -match '^(manage_task|send_command_input)$')) {
+        $isSendInput = ($toolName -eq 'send_command_input') -or ($argsObj.PSObject.Properties['Action'] -and ([string]$argsObj.Action) -ieq 'send_input')
+        if ($isSendInput) {
+            foreach ($inField in @('Input', 'input')) {
+                if ($argsObj.PSObject.Properties[$inField] -and $null -ne $argsObj.$inField) {
+                    $cmd = [string]$argsObj.$inField
+                    break
+                }
+            }
+        }
+    }
+    foreach ($pathField in @('AbsolutePath', 'TargetFile', 'file_path', 'path', 'Path', 'SearchPath', 'SearchDirectory', 'DirectoryPath', 'Directory', 'File')) {
         if ($argsObj.PSObject.Properties[$pathField] -and $null -ne $argsObj.$pathField) {
             $filePath = [string]$argsObj.$pathField
             break
@@ -372,6 +383,17 @@ function Get-WriteContentString {
             }
         }
     }
+    if ($ArgsObj.PSObject.Properties['ReplacementChunks'] -and $null -ne $ArgsObj.ReplacementChunks) {
+        foreach ($ch in @($ArgsObj.ReplacementChunks)) {
+            if ($null -ne $ch) {
+                foreach ($cf2 in @('ReplacementContent', 'Replacement', 'new_string')) {
+                    if ($ch.PSObject.Properties[$cf2] -and $null -ne $ch.$cf2) {
+                        $parts.Add([string]$ch.$cf2)
+                    }
+                }
+            }
+        }
+    }
     return ($parts -join "`n")
 }
 
@@ -492,7 +514,7 @@ function Test-InvalidRubricScoreBlock {
 }
 
 $isWriteTool = $toolName -match '^(write_to_file|write_file|(?:multi_)?replace_file_content|edit_file|(?:Multi)?Edit|Write)$'
-$isReadOrWriteTool = $isWriteTool -or ($toolName -match '^(view_file|read_file|Read|grep_search|Grep)$')
+$isReadOrWriteTool = $isWriteTool -or ($toolName -match '^(view_file|view_file_outline|view_code_item|read_file|Read|grep_search|Grep|find_by_name|list_(?:dir|resources))$')
 
 if ($isReadOrWriteTool -and (Test-SecretFilePath $filePath)) {
     Emit-Deny 'secret-file-access' $filePath
@@ -631,10 +653,10 @@ if ($toolName -eq 'schedule' -and $null -ne $argsObj) {
     }
 }
 
-if (($toolName -eq 'call_mcp_tool' -or $toolName -match '^mcp__cortex__') -and $null -ne $argsObj) {
+if (($toolName -eq 'call_mcp_tool' -or $toolName -match '^(?:mcp__cortex__|mcp_cortex_)') -and $null -ne $argsObj) {
     $srvName = ''
     $mcpTool = ''
-    if ($toolName -match '^mcp__cortex__(.+)$') {
+    if ($toolName -match '^(?:mcp__cortex__|mcp_cortex_)(.+)$') {
         $srvName = 'cortex'
         $mcpTool = $Matches[1]
     } else {

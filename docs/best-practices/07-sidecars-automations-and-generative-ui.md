@@ -4,8 +4,8 @@
 > [`.agents/skills/restart-phone-ui/SKILL.md`](../../.agents/skills/restart-phone-ui/SKILL.md),
 > [`.agents/rules/generative-ui.md`](../../.agents/rules/generative-ui.md),
 > [`.agents/rules/mobile-ui.md`](../../.agents/rules/mobile-ui.md),
-> [`.claude/rules/06-generative-ui.md`](../../.claude/rules/06-generative-ui.md),
-> and [`.claude/rules/07-mobile-ui.md`](../../.claude/rules/07-mobile-ui.md)
+> [`.claude/rules/heuristics.md`](../../.claude/rules/heuristics.md),
+> and [`.codex/rules/heuristics.md`](../../.codex/rules/heuristics.md)
 
 Auxiliary companion processes (`sidecar.json`), background cron automations
 (`schedule`), and rich interactive HTML/Mermaid widgets (`<agent-embed>`)
@@ -80,10 +80,9 @@ subagents unmonitored.
 ## 3. Generative UI (`<agent-embed>`) & Mobile Accessibility Rules
 
 When rendering interactive HTML widgets or Mermaid diagrams,
-[`.agents/rules/generative-ui.md`](../../.agents/rules/generative-ui.md)
-([`.claude/rules/06-generative-ui.md`](../../.claude/rules/06-generative-ui.md))
-and [`.agents/rules/mobile-ui.md`](../../.agents/rules/mobile-ui.md)
-([`.claude/rules/07-mobile-ui.md`](../../.claude/rules/07-mobile-ui.md)) enforce
+[`.agents/rules/generative-ui.md`](../../.agents/rules/generative-ui.md),
+[`.agents/rules/mobile-ui.md`](../../.agents/rules/mobile-ui.md),
+and [`.claude/rules/heuristics.md`](../../.claude/rules/heuristics.md) enforce
 strict structural and WCAG 2.1 AA visual invariants:
 
 | Surface | Mandatory Engineering Invariant | Rationale |

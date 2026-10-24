@@ -2,11 +2,11 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|PowerShell|Read|read_file|Grep|Edit|edit_file|Write|write_file|MultiEdit|SendMessage|Agent|Task|WebFetch|mcp__cortex__.*",
+        "matcher": "Bash|PowerShell|Read|read_file|Grep|Glob|Edit|edit_file|Write|write_file|write_to_file|(?:multi_)?replace_file_content|MultiEdit|SendMessage|send_message|Agent|Task|spawn_agent|WebFetch|mcp__cortex__.*",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/brc-guard.ps1\"",
+            "command": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/brc-guard.ps1\"",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/telemetry-append.ps1\"",
+            "command": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/telemetry-append.ps1\"",
             "timeout": 10
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/telemetry-append.ps1\"",
+            "command": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/telemetry-append.ps1\"",
             "timeout": 10
           }
         ]

@@ -46,7 +46,7 @@ CLAUDE_HOOKS_VAR = "$CLAUDE_PROJECT_DIR/" + CLAUDE_DIR_NAME + "/hooks"
 CODEX_MD_NAME = "CODEX" + ".md"
 CODEX_DIR_NAME = "." + "codex"
 CODEX_HOOKS_REL = "./" + CODEX_DIR_NAME + "/hooks"
-_TEXT_EXTS = {".md", ".json", ".toml", ".rules", ".yaml", ".ps1", ".py"}
+_TEXT_EXTS = {".md", ".json", ".toml", ".rules", ".yaml", ".ps1", ".py", ".js"}
 
 
 def sha256_hex(data):
@@ -66,7 +66,11 @@ def _collect_normalizable_files(repo_root):
         sub_dir = repo_root / sub_name
         if sub_dir.is_dir():
             targets.extend(sorted(sub_dir.rglob("*")))
-    return [p for p in targets if p.is_file() and p.suffix in _TEXT_EXTS]
+    return [
+        p
+        for p in targets
+        if "node_modules" not in p.parts and p.is_file() and p.suffix in _TEXT_EXTS
+    ]
 
 
 def normalize_lf_utf8(repo_root):

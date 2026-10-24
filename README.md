@@ -198,7 +198,7 @@ Antigravity executes these protocols via the 20 dynamic skills in
 ## 🧩 Decoupled Sidecars
 
 External interfaces (such as the Phone UI) are strictly decoupled into
-standalone repositories managed via `.agents/sidecars/sidecar.json`. The
+standalone repositories managed via `.agents/sidecars/<name>/sidecar.json`. The
 `antigravity-remote-control` server operates on port `3000` and is controlled
 across process boundaries via `restart-phone-ui`.
 
@@ -214,7 +214,7 @@ Build a self-contained plugin bundle containing all rules, skills, declarative
 subagents, hooks, and MCP configurations:
 
 ```powershell
-python .agents/scripts/package_plugin.py --output dist/antigravity-core-plugin
+python .agents/scripts/package_plugin.py --output-dir dist/antigravity-core-plugin
 agy plugin install dist/antigravity-core-plugin
 ```
 
@@ -239,7 +239,7 @@ git submodule add https://github.com/nferrer-dev/antigravity-core.git .agents
 ```
 
 Antigravity automatically discovers `.agents/AGENTS.md`, `.agents/rules/`,
-`.agents/skills/`, `.agents/agents/`, and `.agents/hooks/hooks.json` when
+`.agents/skills/`, `.agents/agents/`, and `.agents/hooks.json` when
 operating in the workspace.
 
 ---

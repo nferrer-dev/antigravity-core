@@ -40,9 +40,9 @@ FORBIDDEN_TOKENS = (
 
 FORBIDDEN_PS1_CALL = "Invoke-" + "Expression"
 
-SCAN_EXTENSIONS = {".md", ".json", ".ps1", ".py"}
+SCAN_EXTENSIONS = {".md", ".json", ".ps1", ".py", ".js"}
 INV8_EXCLUDED_RELPATHS = {".claude/settings.local.json"}
-INV8_EXCLUDED_DIRS = {"tests"}
+INV8_EXCLUDED_DIRS = {"tests", "__pycache__", "node_modules"}
 
 FORBIDDEN_CONTROL_BYTES = (
     set(range(0x00, 0x09)) | {0x0B, 0x0C, 0x0D} | set(range(0x0E, 0x20))
@@ -69,19 +69,6 @@ EXPECTED_CLAUDE_SKILLS = (
     "style-python",
     "style-rust",
     "technical-debate",
-)
-
-INTERNAL_COMMITTEE_SKILLS = (
-    "cortex-librarian",
-    "markdown-style-expert",
-    "security-auditor",
-    "skill-evolve",
-    "style-cpp",
-    "style-go",
-    "style-java",
-    "style-js",
-    "style-python",
-    "style-rust",
 )
 
 EXPECTED_CLAUDE_AGENTS = (
@@ -459,6 +446,21 @@ def _load_json(path):
     return json.loads(path.read_bytes().decode("utf-8"), object_pairs_hook=reject_duplicates)
 
 
+def _extract_relative_md_links(text):
+    cleaned = re.sub(r"```[\s\S]*?```", "", text)
+    cleaned = re.sub(r"`[^`\n]+`", "", cleaned)
+    links = []
+    for match in re.finditer(
+        r"\[[^\]]+\]\((?!https?:|mailto:|file:|sidecar:|customization:|conversation:|#)([^)#\s]+)",
+        cleaned,
+    ):
+        target = match.group(1).strip()
+        if not target or "<" in target or ">" in target or "[" in target:
+            continue
+        links.append(target)
+    return sorted(set(links))
+
+
 def check_inv2_json(root):
     violations = []
     required = (root / ".claude" / "settings.json", root / ".mcp.json")
@@ -468,7 +470,11 @@ def check_inv2_json(root):
             violations.append("INV-2: %s: missing" % label)
             continue
         try:
-            _load_json(path)
+            data = _load_json(path)
+            if path.name == ".mcp.json":
+                servers = data.get("mcpServers") if isinstance(data, dict) else None
+                if not isinstance(servers, dict) or not servers:
+                    violations.append("INV-2: %s: 'mcpServers' must be a non-empty object" % label)
         except (ValueError, UnicodeDecodeError) as exc:
             violations.append("INV-2: %s: %s" % (label, exc))
     local = root / ".claude" / "settings.local.json"
@@ -482,11 +488,13 @@ def check_inv2_json(root):
             )
     agents_dir = root / ".claude" / "agents"
     for agent_stem in EXPECTED_CLAUDE_AGENTS:
-        agent_md = agents_dir / ("%s.md" % agent_stem)
+        if not (agents_dir / ("%s.md" % agent_stem)).is_file():
+            violations.append(
+                "INV-2: .claude/agents/%s.md: missing custom agent markdown" % agent_stem
+            )
+    for agent_md in sorted(agents_dir.glob("*.md")) if agents_dir.is_dir() else ():
+        agent_stem = agent_md.stem
         a_label = _rel(root, agent_md)
-        if not agent_md.is_file():
-            violations.append("INV-2: %s: missing custom agent markdown" % a_label)
-            continue
         a_text = agent_md.read_bytes().decode("utf-8", errors="replace")
         a_lines = a_text.split("\n")
         if not a_lines or a_lines[0].strip() != "---":
@@ -519,21 +527,49 @@ def check_inv2_json(root):
                 "INV-2: %s: read-only agent tools %r must not include write/shell tools"
                 % (a_label, tools_val)
             )
+    md_targets = (
+        [root / "CLAUDE.md"]
+        + sorted((root / ".claude" / "skills").rglob("*.md"))
+        + sorted((root / ".claude" / "rules").glob("*.md"))
+    )
+    for md_path in md_targets:
+        if not md_path.is_file():
+            continue
+        m_label = _rel(root, md_path)
+        m_text = md_path.read_bytes().decode("utf-8", errors="replace")
+        for rel_link in _extract_relative_md_links(m_text):
+            if not (md_path.parent / rel_link).resolve().exists():
+                violations.append(
+                    "INV-2: %s: relative link %r does not exist" % (m_label, rel_link)
+                )
     return violations
 
 
 def check_inv3_hooks(root):
     violations = []
     settings = root / ".claude" / "settings.json"
+    label = _rel(root, settings)
     try:
         config = _load_json(settings)
     except (OSError, ValueError, UnicodeDecodeError):
         return ["INV-3: %s unparseable; hook references unverifiable"
-                % _rel(root, settings)]
-    refs = set()
-    for entries in (config.get("hooks") or {}).values():
+                % label]
+    hooks_map = config.get("hooks") or {}
+    for req_ev in ("PreToolUse", "Stop", "SubagentStop"):
+        if req_ev not in hooks_map:
+            violations.append("INV-3: %s: missing required event %r" % (label, req_ev))
+    refs = {}
+    total_timeout = 0
+    for entries in hooks_map.values():
         for entry in entries:
             for hook in entry.get("hooks", []):
+                t_val = int(hook.get("timeout", 30))
+                if t_val <= 0 or t_val > 10:
+                    violations.append(
+                        "INV-3: %s: hook handler timeout %ds must be between 1s and 10s"
+                        % (label, t_val)
+                    )
+                total_timeout += t_val
                 command = hook.get("command", "")
                 gated = extract_hook_refs(command)
                 if "$CLAUDE_PROJECT_DIR" in command and not gated:
@@ -541,7 +577,14 @@ def check_inv3_hooks(root):
                         "INV-3: hook command %r contains no gate-passing "
                         ".claude/hooks reference" % command
                     )
-                refs.update(gated)
+                for g_ref in gated:
+                    refs.setdefault(g_ref, []).append(command)
+    if total_timeout > 30:
+        violations.append(
+            "INV-3: %s: total hook timeout %ds exceeds 30s cap" % (label, total_timeout)
+        )
+    if not refs:
+        violations.append("INV-3: %s: no hook scripts referenced" % label)
     hooks_dir = (root / ".claude" / "hooks").resolve()
     for ref in sorted(refs):
         target = root / ref
@@ -553,6 +596,12 @@ def check_inv3_hooks(root):
             script_text = target.read_bytes().decode("utf-8", errors="replace")
             if script_text.strip().startswith("# mock"):
                 continue
+            for cmd in refs[ref]:
+                if "-NoProfile" not in cmd or "-NonInteractive" not in cmd:
+                    violations.append(
+                        "INV-3: %s: hook command %r must include -NoProfile and -NonInteractive"
+                        % (label, cmd)
+                    )
             if target.name == "brc-guard.ps1":
                 for rule_id in REQUIRED_BRC_GUARD_RULES:
                     if rule_id not in script_text:
@@ -646,7 +695,7 @@ def check_inv6_encoding(root):
     ]
     seen_targets = {str(p.resolve()) for p in targets if p.exists()}
     for dirpath, dirnames, filenames in os.walk(root / ".claude"):
-        dirnames[:] = [d for d in dirnames if d not in {"__pycache__"}]
+        dirnames[:] = [d for d in dirnames if d not in {"__pycache__", "node_modules"}]
         for filename in sorted(filenames):
             p = Path(dirpath) / filename
             if p.suffix in SCAN_EXTENSIONS and str(p.resolve()) not in seen_targets:
@@ -954,6 +1003,24 @@ def _compute_func_mccabe(func_node):
     return complexity
 
 
+def _find_unused_upper_constants(tree):
+    defined = set()
+    loaded = set()
+    for stmt in tree.body:
+        targets = []
+        if isinstance(stmt, ast.Assign):
+            targets = stmt.targets
+        elif isinstance(stmt, ast.AnnAssign):
+            targets = [stmt.target]
+        for t in targets:
+            if isinstance(t, ast.Name) and re.fullmatch(r"[A-Z][A-Z0-9_]{2,}", t.id):
+                defined.add(t.id)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            loaded.add(node.id)
+    return sorted(defined - loaded)
+
+
 def _check_rubric_schema_and_script_parity(root):
     violations = []
     shared_scripts = (
@@ -979,30 +1046,43 @@ def _check_rubric_schema_and_script_parity(root):
                         % (tree_name, rel_script, cl_dir, rel_script)
                     )
     prod_py_files = list((root / cl_dir / "skills").glob("*/scripts/*.py"))
-    for py_path in sorted(set(prod_py_files)):
+    all_py_files = prod_py_files + list((root / cl_dir / "tests").glob("*.py"))
+    for py_path in sorted(set(all_py_files)):
         if not py_path.is_file():
             continue
         try:
             tree = ast.parse(py_path.read_bytes().decode("utf-8", errors="replace"))
         except SyntaxError:
             continue
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                comp = _compute_func_mccabe(node)
-                if comp > 9:
-                    violations.append(
-                        "INV-10: %s: function %s has McCabe complexity %d > 9"
-                        % (_rel(root, py_path), node.name, comp)
-                    )
+        for unused_const in _find_unused_upper_constants(tree):
+            violations.append(
+                "INV-10: %s: unused module-level constant %s"
+                % (_rel(root, py_path), unused_const)
+            )
+        if py_path in prod_py_files:
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    comp = _compute_func_mccabe(node)
+                    if comp > 9:
+                        violations.append(
+                            "INV-10: %s: function %s has McCabe complexity %d > 9"
+                            % (_rel(root, py_path), node.name, comp)
+                        )
     return violations
 
 
 def check_inv10_skill_security(root):
     violations = []
     skills_dir = root / ".claude" / "skills"
-    targets = list(skills_dir.rglob("SKILL.md")) + list(
-        skills_dir.rglob("*-edge-cases.md")
+    targets = (
+        list(skills_dir.rglob("SKILL.md"))
+        + list(skills_dir.rglob("*-edge-cases.md"))
+        + list(skills_dir.glob("*/references/*.md"))
+        + [root / "CLAUDE.md"]
     )
+    agents_dir = root / ".claude" / "agents"
+    if agents_dir.is_dir():
+        targets.extend(agents_dir.glob("*.md"))
     rules_dir = root / ".claude" / "rules"
     if rules_dir.is_dir():
         targets.extend(rules_dir.glob("*.md"))

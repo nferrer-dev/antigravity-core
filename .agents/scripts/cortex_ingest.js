@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 if (!process.argv.includes('--force')) {
     console.log(`
@@ -18,9 +18,16 @@ const args = process.argv.slice(2);
 let directory = null;
 let workflow = null;
 
-for (const arg of args) {
+for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
     if (arg.startsWith('--workflow=')) {
-        workflow = arg.split('=')[1];
+        workflow = arg.slice('--workflow='.length);
+    } else if (arg === '--workflow' && i + 1 < args.length) {
+        workflow = args[++i];
+    } else if (arg.startsWith('--file=')) {
+        directory = arg.slice('--file='.length);
+    } else if (arg === '--file' && i + 1 < args.length) {
+        directory = args[++i];
     } else if (arg !== '--force') {
         directory = arg;
     }
@@ -28,6 +35,11 @@ for (const arg of args) {
 
 if (!workflow || !directory) {
     console.error('Usage: node cortex_ingest.js <directory> --workflow=<workflow_name> [--force]');
+    process.exit(1);
+}
+
+if (!/^[a-zA-Z0-9_-]{1,64}$/.test(workflow)) {
+    console.error(`Invalid --workflow namespace: ${workflow}`);
     process.exit(1);
 }
 
@@ -69,12 +81,25 @@ for (const file of files) {
             for (let i = 0; i < chunks.length; i++) {
                 const chunkContent = chunks[i];
                 // Use importance 1.0 (Permanent Memory) and category "textbook" (Semantic Isolation)
-                const cmd = `python "${savePyPath}" --type reference --namespace "${workflow}" --importance 1.0 --category "textbook"`;
-                execSync(cmd, { 
-                    input: chunkContent, 
-                    stdio: ['pipe', 'inherit', 'inherit'],
-                    env: { ...process.env, PYTHONUTF8: '1' }
-                });
+                execFileSync(
+                    'python',
+                    [
+                        savePyPath,
+                        '--type',
+                        'reference',
+                        '--namespace',
+                        workflow,
+                        '--importance',
+                        '1.0',
+                        '--category',
+                        'textbook',
+                    ],
+                    {
+                        input: chunkContent,
+                        stdio: ['pipe', 'inherit', 'inherit'],
+                        env: { ...process.env, PYTHONUTF8: '1' },
+                    }
+                );
             }
             successCount++;
         } catch (err) {

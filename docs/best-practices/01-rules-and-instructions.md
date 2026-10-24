@@ -119,13 +119,13 @@ In Claude Code, [`CLAUDE.md`](../../CLAUDE.md) (`57` lines / `6.7 KB`) acts as a
 high-signal routing table while domain-specific rules are decomposed into 7
 focused modules under [`.claude/rules/`](../../.claude/rules/):
 
-- [`01-consensus-and-stages.md`](../../.claude/rules/01-consensus-and-stages.md)
-- [`02-epistemic-and-tdd.md`](../../.claude/rules/02-epistemic-and-tdd.md)
-- [`03-isolation-mvc-brc.md`](../../.claude/rules/03-isolation-mvc-brc.md)
-- [`04-telemetry-and-patience.md`](../../.claude/rules/04-telemetry-and-patience.md)
-- [`05-operational-heuristics.md`](../../.claude/rules/05-operational-heuristics.md)
-- [`06-generative-ui.md`](../../.claude/rules/06-generative-ui.md)
-- [`07-mobile-ui.md`](../../.claude/rules/07-mobile-ui.md)
+- [`blast-radius.md`](../../.claude/rules/blast-radius.md)
+- [`consensus.md`](../../.claude/rules/consensus.md)
+- [`context-and-isolation.md`](../../.claude/rules/context-and-isolation.md)
+- [`heuristics.md`](../../.claude/rules/heuristics.md)
+- [`pipeline.md`](../../.claude/rules/pipeline.md)
+- [`tdd.md`](../../.claude/rules/tdd.md)
+- [`telemetry.md`](../../.claude/rules/telemetry.md)
 
 Each file stays between `1.5 KB` and `9.0 KB`, eliminating serial-position
 middle-dip and allowing path-scoped loading via `paths:` frontmatter globs when

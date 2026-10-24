@@ -30,7 +30,7 @@ You MUST pass the absolute file path of the Stage 0 Epistemic Context file (the 
 You must explicitly instruct the subagents in their prompt that they are **strictly forbidden from writing their solutions to disk directly**.
 Instead, each subagent MUST return its final candidate solution as its final report delivered back to you (the Parent Orchestrator) via `wait_agent`.
 
-## 4. Sequential Compilation (MVC Pull)
+## 4. Sequential Compilation (MVC Pull) & Teardown
 As the Parent Orchestrator, await all three subagents via `wait_agent` and close them via `close_agent`.
 Once you hold all three candidate solutions, sequentially compile them into a single file at `scratch/candidate_solutions.md` (enforced by `.codex/hooks/brc-guard.ps1` `stage1-candidate-solutions-gate` to verify all 3 cognitive framing lenses are present).
 

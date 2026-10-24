@@ -45,12 +45,11 @@ for interactive user approval until the 3-minute `schedule` timer expires.
   restricting committee subagents to pure read-only inspection (`view_file`,
   `grep_search`, `find_by_name`).
 - **Claude Code ([`.claude/agents/*.md`](../../.claude/agents/))**:
-  All 10 auditor/reviewer manifests (including
-  [`stage3-design-reviewer.md`](../../.claude/agents/stage3-design-reviewer.md)
+  All 3 auditor/reviewer manifests
+  ([`cortex-librarian.md`](../../.claude/agents/cortex-librarian.md),
+  [`stage3-design-reviewer.md`](../../.claude/agents/stage3-design-reviewer.md),
   and [`stage4-code-auditor.md`](../../.claude/agents/stage4-code-auditor.md))
-  declare `tools: Read, Grep, Glob` (or `disallowedTools: Edit, Write`), while
-  [`isolated-implementer.md`](../../.claude/agents/isolated-implementer.md)
-  declares `isolation: worktree`.
+  declare `tools: Read, Grep, Glob` and `disallowedTools: Write, Edit, MultiEdit, Bash, NotebookEdit`, while write-capable coding subagents execute in isolated git worktrees (`isolation: worktree`).
 
 ### 2.2 Subagent Mandatory Access Control (`SEAgent` & `MiniScope`, `RB-9` & `RB-18`)
 

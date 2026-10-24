@@ -219,8 +219,13 @@ def _copy_metadata_and_sidecars(plugin_src_dir, agents_dir, output_dir, manifest
                 sidecars_candidate,
                 output_dir / "sidecars",
                 dirs_exist_ok=True,
-                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "node_modules"),
             )
+    sidecars_out = output_dir / "sidecars"
+    if sidecars_out.is_dir():
+        for sc_file in sorted(sidecars_out.rglob("*")):
+            if sc_file.is_file() and sc_file.suffix in {".md", ".json", ".ps1", ".py", ".js"}:
+                sc_file.write_bytes(sc_file.read_bytes().replace(b"\r\n", b"\n"))
 
 
 def _copy_hooks_and_configs(agents_dir, output_dir):
@@ -422,7 +427,7 @@ def _has_bom_or_control_bytes(raw):
 
 def _check_bundle_encoding_and_tamper(target):
     """Verify UTF-8 no-BOM LF encoding and integrity_manifest tamper detection."""
-    text_exts = {".md", ".json", ".ps1", ".py"}
+    text_exts = {".md", ".json", ".ps1", ".py", ".js"}
     for bundled_file in sorted(target.rglob("*")):
         if bundled_file.is_file() and bundled_file.suffix in text_exts:
             if _has_bom_or_control_bytes(bundled_file.read_bytes()):

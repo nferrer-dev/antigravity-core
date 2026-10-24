@@ -13,7 +13,7 @@ Before spawning any agents, read `debate-edge-cases.md` (bundled with this skill
 
 By explicit User directive, this skill overrides the unanimous consensus requirement at the gates it governs. The Hostile Adjudicator provides the final, terminal binary exit condition, ensuring deadlocks are structurally impossible.
 
-## Topology Constraint: The Parent Is the Only Orchestrator
+### Topology Constraint: The Parent Is the Only Orchestrator
 
 OpenAI Codex subagents spawned via `spawn_agent` do not nest Sub-Orchestrators in this engine. Every agent in every phase is spawned directly by the parent session via `spawn_agent` (`fork_context=false`), and the parent alone performs sharding, gating, memory ingestion, and cleanup. Passing `fork_context=false` isolates each subagent's context window (Zero Shared Context), so domain isolation is preserved without nesting.
 
@@ -66,7 +66,7 @@ Spawn one final subagent via `spawn_agent` (`fork_context=false`) whose explicit
 
 The Adjudicator's verdict is terminal — no appeal, no further rounds. On `REVISE`, the rejected artifact gets a full-committee diff-only resubmission: the author revises, and the next debate is scoped to the shards the diff touches.
 
-## Lifecycle Management
+## 4. Phase 4: Resource Cleanup (Anti-Leak Protocol)
 
 1. **One Debate per Artifact:** Before Phase 1, check `wait_agent`; if debate agents for the same artifact are already live, join or abort — never start a second debate. Also take a lock file at `<scratchpad>\locks\debate-<artifact-slug>.lock` and release it at the end.
 2. **Shard Deadlines:** Bound each `wait_agent` wave against a per-shard time budget. A shard that blows its budget is stopped via `close_agent` and its untested claims are pruned fail-closed.

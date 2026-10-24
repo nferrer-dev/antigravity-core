@@ -781,6 +781,15 @@ class LiveTree(unittest.TestCase):
         self.assertIn("cortex-librarian", vt.EXPECTED_CODEX_SKILLS)
         self.assertIn("cortex-librarian", vt.EXPECTED_CODEX_AGENTS)
 
+    def test_coherence_bake_r8_f_agy_r8_01_to_05_codex(self):
+        brc_text = (REPO_ROOT / ".codex" / "hooks" / "brc-guard.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("ReplacementChunks", brc_text)
+        self.assertIn("SearchDirectory", brc_text)
+        self.assertIn("DirectoryPath", brc_text)
+
+
 
 
 class Meta(unittest.TestCase):

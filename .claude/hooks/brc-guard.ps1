@@ -158,12 +158,23 @@ function Get-WriteContentString {
             }
         }
     }
+    if ($ArgsObj.PSObject.Properties['ReplacementChunks'] -and $null -ne $ArgsObj.ReplacementChunks) {
+        foreach ($ch in @($ArgsObj.ReplacementChunks)) {
+            if ($null -ne $ch) {
+                foreach ($cf2 in @('ReplacementContent', 'Replacement', 'new_string')) {
+                    if ($ch.PSObject.Properties[$cf2] -and $null -ne $ch.$cf2) {
+                        $parts.Add([string]$ch.$cf2)
+                    }
+                }
+            }
+        }
+    }
     return ($parts -join "`n")
 }
 
 # ---- Check file-access tools (Read, Edit, Write, MultiEdit) ----
 $filePath = ''
-foreach ($pf in @('file_path', 'path', 'Path', 'notebook_path', 'TargetFile', 'AbsolutePath', 'SearchPath')) {
+foreach ($pf in @('file_path', 'path', 'Path', 'notebook_path', 'TargetFile', 'AbsolutePath', 'SearchPath', 'SearchDirectory', 'DirectoryPath', 'Directory', 'File')) {
     if ($toolInput.PSObject.Properties[$pf] -and $null -ne $toolInput.$pf) {
         $filePath = [string]$toolInput.$pf
         break

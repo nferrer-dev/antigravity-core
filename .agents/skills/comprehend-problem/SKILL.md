@@ -26,7 +26,7 @@ Execute the chosen path using the designated tooling:
 2. If the `chiasmus` MCP server is configured, use `call_mcp_tool` to run Z3 SMT logic proofs and extract verifiable invariants.
 3. **Graceful Degradation (Polyfill)**: If the `chiasmus` server is unavailable, you MUST fallback to executing the local Python Z3 polyfill script located at `.agents/skills/comprehend-problem/scripts/logical_z3_polyfill.py` via `run_command` (`python .agents/skills/comprehend-problem/scripts/logical_z3_polyfill.py <spec_json_path> <output_json_path>`).
 
-### C. Exploratory (Blackboard)
+### C. Exploratory (Blackboard Swarm)
 1. Use `invoke_subagent` (`TypeName: "research"`, `Workspace: "inherit"`, `Model: "inherit"`) to spawn multiple decoupled research subagents under a 3-minute `schedule` timeout (`DurationSeconds=180`, `TimerCondition="never"`).
 2. Assign each subagent a disjoint output file in `scratch/` (if output exceeds 200 lines) and explicitly forbid `run_command` and `read_url_content` in their prompt to prevent non-interactive permission or redirect hangs.
 3. Instruct them to map the dead-ends and vectors of the problem space and report back via `send_message`, then terminate the timer (`manage_task(Action="kill")`) and subagents (`manage_subagents(Action="kill")`).

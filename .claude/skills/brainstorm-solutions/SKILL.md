@@ -30,7 +30,7 @@ You MUST pass the absolute file path of the Stage 0 Epistemic Context file (the 
 You must explicitly instruct the subagents in their prompt that they are **strictly forbidden from writing their solutions to disk directly**.
 Instead, each subagent MUST return its final candidate solution as its final report — the Task tool delivers it back to you (the Parent Orchestrator) when the subagent completes.
 
-## 4. Sequential Compilation (MVC Pull)
+## 4. Sequential Compilation (MVC Pull) & Teardown
 As the Parent Orchestrator, wait for all three Task calls to return.
 Once you hold all three candidate solutions, sequentially compile them into a single file at `scratch\candidate_solutions.md` inside the session scratchpad directory listed in your system prompt.
 

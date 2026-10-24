@@ -843,6 +843,21 @@ class LiveTree(unittest.TestCase):
             ).is_file()
         )
 
+    def test_coherence_bake_r8_f_agy_r8_01_to_05_claude(self):
+        self.assertFalse(hasattr(vt, "INTERNAL_COMMITTEE_SKILLS"))
+        brc_text = (REPO_ROOT / ".claude" / "hooks" / "brc-guard.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("ReplacementChunks", brc_text)
+        self.assertIn("SearchDirectory", brc_text)
+        settings_text = (REPO_ROOT / ".claude" / "settings.json").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("-NonInteractive", settings_text)
+        self.assertIn("replace_file_content", settings_text)
+        self.assertIn("spawn_agent", settings_text)
+
+
 
 
 

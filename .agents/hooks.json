@@ -3,7 +3,7 @@
     "enabled": true,
     "PreToolUse": [
       {
-        "matcher": "run_command|execute_command|Bash|view_file|read_file|grep_search|Grep|(?:multi_)?replace_file_content|edit_file|write_to_file|write_file|(?:Multi)?Edit|Write|Read|invoke_subagent|define_subagent|send_message|schedule|read_url_content|WebFetch|call_mcp_tool",
+        "matcher": "run_command|execute_command|Bash|manage_task|send_command_input|view_file|view_file_outline|view_code_item|read_file|grep_search|Grep|find_by_name|list_(?:dir|resources)|(?:multi_)?replace_file_content|edit_file|write_to_file|write_file|(?:Multi)?Edit|Write|Read|invoke_subagent|define_subagent|send_message|schedule|read_url_content|WebFetch|call_mcp_tool|mcp_cortex_.*|mcp__cortex__.*",
         "hooks": [
           {
             "type": "command",

@@ -1,24 +1,34 @@
 """Deterministic Diminishing-Returns & Full-System Coherence Bake Gate.
 
 Evaluates cross-layer AST producer-consumer audits, formal Z3/SMT state
-proofs, and candidate findings across four first-class dimensions:
+proofs, whole-repository file coverage ledgers, generative surface audits,
+and candidate findings across four first-class dimensions:
 1. COHERENCE_CONTRACT (cross-layer producer-consumer seams & schema fidelity)
 2. SYSTEM_DESIGN (modularity, concurrency, bulkhead & complexity hotspots)
 3. OPTIMIZATION (asymptotic complexity, query plans, vectorization & I/O)
 4. SOTA_BENCHMARK (peer-reviewed literature & production OSS benchmarks)
 
-Rejects speculative, sub-epsilon, or rubric-deficient findings and emits either
-`AIRTIGHT_HALT` (when the point of diminishing returns is reached with an
-exhaustive audit manifest) or `PROCEED_FIX`.
+Emits a tri-state verdict:
+- `INCOMPLETE_AUDIT_RETRY` (exit code 2): audit manifest, file coverage ledger,
+  or unreported surface gaps are incomplete.
+- `PROCEED_FIX` (exit code 0): 100% file coverage ledger verified and >= 1
+  verified finding requires remediation.
+- `AIRTIGHT_HALT` (exit code 0): 0 verified findings, 0 AST/surface gaps, Z3
+  SAT, 100% CLEAN file coverage ledger, fixed-point wave_history, and valid
+  on-disk Phase 5 red-team receipt and transcript.
 
 Usage:
     python coherence_bake_gate.py <ast> <z3> <findings> <out> --repo-root <d>
+    python coherence_bake_gate.py --build-ledger <repo_root> <out_json>
+    python coherence_bake_gate.py --audit-repo <repo_root>
     python coherence_bake_gate.py --self-test
 """
 import argparse
+import ast
 import hashlib
 import json
 import math
+import os
 import re
 import sys
 import tempfile
@@ -37,11 +47,46 @@ REQUIRED_AUDIT_SURFACES: Tuple[str, ...] = (
     "single_to_multi_composition",
     "cross_tree_and_doc_parity",
 )
+EXCLUDED_WALK_DIRS: Set[str] = {
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+}
+BINARY_EXTENSIONS: Set[str] = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".ico",
+    ".pdf",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".pyc",
+    ".db",
+    ".sqlite",
+    ".sqlite3",
+}
 
 _FILE_LINE_RE = re.compile(r"^(?P<path>.+?):(?P<start>\d+)(?:-(?P<end>\d+))?$")
 _MD_IMAGE_EXFIL_RE = re.compile(r"!\[[^\]]*\]\(\s*https?://", re.IGNORECASE)
 _INVISIBLE_CHAR_RE = re.compile(
     r"[\u200b-\u200d\u202a-\u202e\u2060-\u2064\ufeff\U000e0000-\U000e007f]"
+)
+_REL_MD_LINK_RE = re.compile(
+    r"\[[^\]]+\]\((?!https?:|mailto:|file:|sidecar:|customization:|conversation:|#)([^)#\s]+)"
+)
+_JS_EXEC_INTERP_RE = re.compile(
+    r"\bexec(?:Sync)?\s*\(\s*(?:`[^`]*\$\{|['\"][^'\"]*['\"]\s*\+)"
+)
+_RUBRIC_BLOCK_RE = re.compile(
+    r"<RUBRIC_SCORE>\s*(\{[\s\S]*?\})\s*</RUBRIC_SCORE>"
 )
 
 
@@ -294,6 +339,7 @@ def _is_test_rel_path(rel_path: str) -> bool:
         "tests" in path_obj.parts
         or name.startswith("test_")
         or name.endswith("_test.py")
+        or name.endswith(".test.js")
     )
 
 
@@ -311,24 +357,185 @@ def _count_non_test_high_complexity(ast_data: Mapping[str, Any]) -> int:
     return count
 
 
+def build_file_coverage_ledger(
+    repo_root: Path,
+) -> Dict[str, Dict[str, str]]:
+    """Walk repo_root and build a deterministic SHA-256 ledger of scannable files."""
+    resolved_root = repo_root.resolve()
+    ledger: Dict[str, Dict[str, str]] = {}
+    for dirpath, dirnames, filenames in os.walk(resolved_root):
+        dirnames[:] = sorted(
+            d for d in dirnames if d not in EXCLUDED_WALK_DIRS
+        )
+        for fname in sorted(filenames):
+            fpath = Path(dirpath) / fname
+            if fpath.suffix.lower() in BINARY_EXTENSIONS or not fpath.is_file():
+                continue
+            rel = str(fpath.relative_to(resolved_root)).replace("\\", "/")
+            digest = hashlib.sha256(fpath.read_bytes()).hexdigest()
+            ledger[rel] = {"sha256": digest, "status": "CLEAN"}
+    return ledger
+
+
+def _compute_ast_mccabe(func_node: ast.AST) -> int:
+    """Compute McCabe cyclomatic complexity for an AST function node."""
+    complexity = 1
+    branch_types = (
+        ast.If,
+        ast.For,
+        ast.AsyncFor,
+        ast.While,
+        ast.ExceptHandler,
+        ast.With,
+        ast.AsyncWith,
+        ast.IfExp,
+        ast.comprehension,
+    )
+    for child in ast.walk(func_node):
+        if isinstance(child, branch_types):
+            complexity += 1
+        elif isinstance(child, ast.BoolOp):
+            complexity += max(0, len(child.values) - 1)
+    return complexity
+
+
+def _unused_upper_consts(tree: ast.Module) -> List[str]:
+    """Return module-level UPPER_CASE constants never loaded in tree."""
+    defined: Set[str] = set()
+    loaded: Set[str] = set()
+    for stmt in tree.body:
+        targets = getattr(stmt, "targets", [getattr(stmt, "target", None)])
+        for t_node in targets:
+            if isinstance(t_node, ast.Name) and re.fullmatch(
+                r"[A-Z][A-Z0-9_]{2,}", t_node.id
+            ):
+                defined.add(t_node.id)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            loaded.add(node.id)
+    return sorted(defined - loaded)
+
+
+def _audit_single_py_file(py_path: Path, rel_path: str) -> List[str]:
+    """Audit a Python file for syntax, unused constants, and McCabe <= 9."""
+    try:
+        source = py_path.read_text(encoding="utf-8", errors="replace")
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        return [f"{rel_path}: SyntaxError ({exc})"]
+    gaps = [
+        f"{rel_path}: unused constant {cname}"
+        for cname in _unused_upper_consts(tree)
+    ]
+    if _is_test_rel_path(rel_path):
+        return gaps
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            score = _compute_ast_mccabe(node)
+            if score > 9:
+                gaps.append(
+                    f"{rel_path}: function {node.name} McCabe {score} > 9"
+                )
+    return gaps
+
+
+def _audit_single_js_file(js_path: Path, rel_path: str) -> List[str]:
+    """Audit a JS/TS file for CWE-78 shell command string interpolation."""
+    if _is_test_rel_path(rel_path):
+        return []
+    text = js_path.read_text(encoding="utf-8", errors="replace")
+    if _JS_EXEC_INTERP_RE.search(text):
+        return [f"{rel_path}: CWE-78 interpolated exec/execSync call"]
+    return []
+
+
+def _audit_single_md_file(md_path: Path, rel_path: str) -> List[str]:
+    """Audit a Markdown file for broken relative links outside code blocks."""
+    text = md_path.read_text(encoding="utf-8", errors="replace")
+    cleaned = re.sub(r"```[\s\S]*?```", "", text)
+    cleaned = re.sub(r"`[^`\n]+`", "", cleaned)
+    gaps: List[str] = []
+    for match in _REL_MD_LINK_RE.finditer(cleaned):
+        target = match.group(1).strip()
+        if not target or "<" in target or ">" in target or "[" in target:
+            continue
+        if not (md_path.parent / target).resolve().exists():
+            gaps.append(f"{rel_path}: broken relative link {target}")
+    return gaps
+
+
+def _extract_md_h2_headings(md_path: Path) -> List[str]:
+    """Extract `## ` H2 headings outside fenced code blocks."""
+    text = md_path.read_text(encoding="utf-8", errors="replace")
+    cleaned = re.sub(r"```[\s\S]*?```", "", text)
+    return [
+        ln.strip()
+        for ln in cleaned.splitlines()
+        if ln.startswith("## ")
+    ]
+
+
+def _compare_skill_pair(
+    ag_skill_dir: Path,
+    peer_skill_dir: Path,
+    peer_label: str,
+) -> List[str]:
+    """Compare H2 headings and companion files between two skill directories."""
+    gaps: List[str] = []
+    ag_md = ag_skill_dir / "SKILL.md"
+    peer_md = peer_skill_dir / "SKILL.md"
+    if not ag_md.is_file() or not peer_md.is_file():
+        return gaps
+    if _extract_md_h2_headings(ag_md) != _extract_md_h2_headings(peer_md):
+        gaps.append(f"{peer_label}/SKILL.md: H2 heading drift vs canonical")
+    ec_name = f"{ag_skill_dir.name}-edge-cases.md"
+    if (ag_skill_dir / ec_name).is_file() != (peer_skill_dir / ec_name).is_file():
+        gaps.append(f"{peer_label}/{ec_name}: companion edge-cases drift")
+    for script_p in sorted((ag_skill_dir / "scripts").glob("*.py")) if (ag_skill_dir / "scripts").is_dir() else ():
+        peer_sp = peer_skill_dir / "scripts" / script_p.name
+        if not peer_sp.is_file() or peer_sp.read_bytes() != script_p.read_bytes():
+            gaps.append(f"{peer_label}/scripts/{script_p.name}: script SHA-256 drift")
+    return gaps
+
+
+def _audit_cross_tree_skill_parity(repo_root: Path) -> List[str]:
+    """Audit shared skills across .agents, .claude, and .codex for structural parity."""
+    ag_skills = repo_root / ("." + "agents") / "skills"
+    if not ag_skills.is_dir():
+        return []
+    gaps: List[str] = []
+    for tree_name in ("." + "claude", "." + "codex"):
+        peer_skills = repo_root / tree_name / "skills"
+        if not peer_skills.is_dir():
+            continue
+        for s_dir in sorted(ag_skills.iterdir()):
+            peer_dir = peer_skills / s_dir.name
+            if s_dir.is_dir() and peer_dir.is_dir():
+                gaps.extend(
+                    _compare_skill_pair(
+                        s_dir, peer_dir, f"{tree_name}/skills/{s_dir.name}"
+                    )
+                )
+    return gaps
+
+
 def _check_agents_hook_surface(repo_root: Path) -> int:
     """Check present Antigravity hooks.json for mandatory subagent and search matchers."""
     ag_hooks = repo_root / ("." + "agents") / "hooks.json"
     if not ag_hooks.is_file():
         return 0
     txt = ag_hooks.read_text(encoding="utf-8", errors="replace")
-    tok_define = "define_" + "subagent"
-    tok_grep = "grep_" + "search"
-    return (0 if tok_define in txt else 1) + (0 if tok_grep in txt else 1)
+    req = ("define_" + "subagent", "grep_" + "search", "manage_" + "task", "-NonInteractive")
+    return _missing_token_count(txt, req)
 
 
 def _check_claude_hook_surface(repo_root: Path) -> int:
-    """Check present Claude settings.json for mandatory Grep PreToolUse matcher."""
+    """Check present Claude settings.json for mandatory Grep and NonInteractive flags."""
     cl_settings = repo_root / ("." + "claude") / "settings.json"
     if not cl_settings.is_file():
         return 0
     txt = cl_settings.read_text(encoding="utf-8", errors="replace")
-    return 0 if "Grep" in txt else 1
+    return _missing_token_count(txt, ("Grep", "-NonInteractive", "spawn_agent"))
 
 
 def _missing_token_count(text: str, required_tokens: Sequence[str]) -> int:
@@ -349,6 +556,8 @@ def _check_single_tree_scripts(tree_root: Path) -> int:
             brc.read_text(encoding="utf-8", errors="replace"),
             (
                 "SearchPath",
+                "SearchDirectory",
+                "ReplacementChunks",
                 "Get-WriteContentString",
                 "AIRTIGHT_HALT",
                 "PROCEED_FIX",
@@ -429,17 +638,44 @@ def _check_shared_script_parity(repo_root: Path) -> int:
     return gaps
 
 
-def _audit_repo_surface_gaps(repo_root: Path) -> int:
-    """Deterministically verify 4-surface hook/telemetry/validator parity when present."""
-    gaps = (
+def _legacy_hook_and_ci_gaps(repo_root: Path) -> List[str]:
+    """Collect hook/CI/script token parity gaps across harness trees."""
+    count = (
         _check_agents_hook_surface(repo_root)
         + _check_claude_hook_surface(repo_root)
         + _check_shared_script_parity(repo_root)
         + _check_inventory_and_ci_surface(repo_root)
     )
     for tree_name in ("." + "agents", "." + "claude", "." + "codex"):
-        gaps += _check_single_tree_scripts(repo_root / tree_name)
+        count += _check_single_tree_scripts(repo_root / tree_name)
+    return [f"harness_surface_gap_{i}" for i in range(count)]
+
+
+def audit_repo_surfaces(repo_root: Path) -> List[str]:
+    """Generatively scan 100% of repo files and cross-tree surfaces for defects."""
+    resolved_root = repo_root.resolve()
+    gaps: List[str] = []
+    for dirpath, dirnames, filenames in os.walk(resolved_root):
+        dirnames[:] = sorted(
+            d for d in dirnames if d not in EXCLUDED_WALK_DIRS
+        )
+        for fname in sorted(filenames):
+            fpath = Path(dirpath) / fname
+            rel = str(fpath.relative_to(resolved_root)).replace("\\", "/")
+            if fpath.suffix == ".py":
+                gaps.extend(_audit_single_py_file(fpath, rel))
+            elif fpath.suffix in {".js", ".ts"}:
+                gaps.extend(_audit_single_js_file(fpath, rel))
+            elif fpath.suffix == ".md":
+                gaps.extend(_audit_single_md_file(fpath, rel))
+    gaps.extend(_audit_cross_tree_skill_parity(resolved_root))
+    gaps.extend(_legacy_hook_and_ci_gaps(resolved_root))
     return gaps
+
+
+def _audit_repo_surface_gaps(repo_root: Path) -> int:
+    """Return total count of generative whole-repo surface gaps."""
+    return len(audit_repo_surfaces(repo_root))
 
 
 def _count_unconstrained_vars(z3_data: Mapping[str, Any]) -> int:
@@ -488,30 +724,187 @@ def _has_valid_manifest_flags(manifest: Mapping[str, Any]) -> bool:
     return _check_redteam_rubric(manifest.get("redteam_rubric_score"))
 
 
+def _is_valid_ledger_entry(
+    item: Any,
+    exp_sha: str,
+    verified_ids: Set[str],
+) -> bool:
+    """Verify one file_coverage_ledger entry against on-disk SHA-256 and status."""
+    if not isinstance(item, Mapping) or item.get("sha256") != exp_sha:
+        return False
+    status = str(item.get("status", ""))
+    if not verified_ids:
+        return status == "CLEAN"
+    if status == "CLEAN":
+        return True
+    if status.startswith("FINDING:"):
+        fid = status.split(":", 1)[1].strip()
+        return fid in verified_ids
+    return False
+
+
+def _check_file_coverage_ledger(
+    ledger: Any,
+    repo_root: Path,
+    verified_ids: Set[str],
+) -> bool:
+    """Verify 100% repository file coverage and SHA-256 digests on disk."""
+    if not isinstance(ledger, Mapping):
+        return False
+    expected = build_file_coverage_ledger(repo_root)
+    if set(ledger.keys()) != set(expected.keys()):
+        return False
+    return all(
+        _is_valid_ledger_entry(
+            ledger.get(rel_p), meta["sha256"], verified_ids
+        )
+        for rel_p, meta in expected.items()
+    )
+
+
+def _check_wave_history(wave_history: Any) -> bool:
+    """Verify wave_history ends with a clean fixed-point wave (files_modified == 0)."""
+    if not isinstance(wave_history, list) or not wave_history:
+        return False
+    if not all(isinstance(w, Mapping) for w in wave_history):
+        return False
+    last = wave_history[-1]
+    return (
+        last.get("findings_count") == 0
+        and last.get("files_modified") == 0
+    )
+
+
+def _resolve_proof_path(raw_path: Any, repo_root: Path) -> Optional[Path]:
+    """Resolve a receipt or transcript path on disk."""
+    if not _is_nonempty_str(raw_path):
+        return None
+    cand = Path(str(raw_path).strip())
+    if not cand.is_absolute():
+        cand = repo_root.resolve() / cand
+    return cand if cand.is_file() else None
+
+
+def _check_redteam_receipt_file(raw_path: Any, repo_root: Path) -> bool:
+    """Verify on-disk Phase 5 red-team receipt contains Stage 5 AIRTIGHT_HALT rubric."""
+    target = _resolve_proof_path(raw_path, repo_root)
+    if target is None:
+        return False
+    text = target.read_text(encoding="utf-8", errors="replace")
+    match = _RUBRIC_BLOCK_RE.search(text)
+    if not match:
+        return False
+    try:
+        obj = json.loads(match.group(1))
+    except ValueError:
+        return False
+    return (
+        isinstance(obj, Mapping)
+        and obj.get("stage") == 5
+        and obj.get("verdict") == "AIRTIGHT_HALT"
+    )
+
+
+def _check_redteam_transcript_file(raw_path: Any, repo_root: Path) -> bool:
+    """Verify on-disk red-team .jsonl transcript has >=1 line and 0 errors/blocks."""
+    target = _resolve_proof_path(raw_path, repo_root)
+    if target is None:
+        return False
+    lines = [
+        ln.strip()
+        for ln in target.read_text(encoding="utf-8", errors="replace").splitlines()
+        if ln.strip()
+    ]
+    if not lines:
+        return False
+    for ln in lines:
+        if (
+            '"status": "ERROR"' in ln
+            or '"status":"ERROR"' in ln
+            or "BLOCKED by BRC" in ln
+        ):
+            return False
+    return True
+
+
+def _check_disk_closure_proofs(
+    manifest: Mapping[str, Any],
+    repo_root: Path,
+    verified_ids: Set[str],
+) -> bool:
+    """Enforce mandatory on-disk file coverage ledger and closure proofs."""
+    if not _check_file_coverage_ledger(
+        manifest.get("file_coverage_ledger"), repo_root, verified_ids
+    ):
+        return False
+    if verified_ids:
+        return True
+    return (
+        _check_wave_history(manifest.get("wave_history"))
+        and _check_redteam_receipt_file(
+            manifest.get("redteam_receipt_path"), repo_root
+        )
+        and _check_redteam_transcript_file(
+            manifest.get("redteam_transcript_path"), repo_root
+        )
+    )
+
+
+def _has_zero_failure_counts(manifest: Mapping[str, Any]) -> bool:
+    """Return True if test_failures, invariant_violations, and transcript errors are 0."""
+    keys = (
+        "test_failures",
+        "invariant_violations",
+        "redteam_transcript_errors",
+    )
+    return all(_non_negative_count(manifest.get(k, 0)) == 0 for k in keys)
+
+
+def _is_valid_manifest_dict(manifest: Any) -> bool:
+    """Return True if manifest is a Mapping with valid flags and zero failure counts."""
+    if not isinstance(manifest, Mapping):
+        return False
+    if not _has_valid_manifest_flags(manifest):
+        return False
+    return _has_zero_failure_counts(manifest)
+
+
+def _needs_disk_closure_fail(
+    manifest: Mapping[str, Any],
+    require_manifest: bool,
+    repo_root: Optional[Path],
+    verified_ids: Optional[Set[str]],
+) -> bool:
+    """Return True if disk closure proofs are required and fail validation."""
+    if repo_root is None or not require_manifest:
+        return False
+    v_ids = set() if verified_ids is None else verified_ids
+    return not _check_disk_closure_proofs(manifest, repo_root, v_ids)
+
+
 def _check_exhaustiveness_manifest(
     manifest: Any,
     require_manifest: bool = False,
+    repo_root: Optional[Path] = None,
+    verified_ids: Optional[Set[str]] = None,
 ) -> str:
-    """Validate exhaustiveness_manifest dict for 4-surface and red-team closure."""
+    """Validate exhaustiveness_manifest dict for 4-surface and disk-grounded closure."""
     if manifest is None:
         return "incomplete_exhaustiveness_manifest" if require_manifest else "ok"
-    if not isinstance(manifest, Mapping) or not _has_valid_manifest_flags(
-        manifest
+    if not _is_valid_manifest_dict(manifest):
+        return "incomplete_exhaustiveness_manifest"
+    if _needs_disk_closure_fail(
+        manifest, require_manifest, repo_root, verified_ids
     ):
         return "incomplete_exhaustiveness_manifest"
-    zero_counts = (
-        _non_negative_count(manifest.get("test_failures", 0)) == 0
-        and _non_negative_count(manifest.get("invariant_violations", 0)) == 0
-        and _non_negative_count(manifest.get("redteam_transcript_errors", 0)) == 0
-    )
-    return "ok" if zero_counts else "incomplete_exhaustiveness_manifest"
+    return "ok"
 
 
-def _extract_findings_and_manifest(
+def _extract_raw_findings_and_manifest(
     ast_data: Mapping[str, Any],
     findings_payload: Any,
-) -> Tuple[List[Any], str]:
-    """Extract candidate finding list and validate exhaustiveness_manifest."""
+) -> Tuple[List[Any], Any, bool]:
+    """Return `(raw_list, manifest_obj, require_manifest)` from inputs."""
     manifest = ast_data.get("exhaustiveness_manifest")
     if isinstance(findings_payload, Mapping):
         if manifest is None:
@@ -521,14 +914,10 @@ def _extract_findings_and_manifest(
             findings_payload.get("candidate_items", []),
         )
         raw_list = list(items) if isinstance(items, list) else []
-        return raw_list, _check_exhaustiveness_manifest(
-            manifest, require_manifest=True
-        )
+        return raw_list, manifest, True
     if isinstance(findings_payload, list):
-        return list(findings_payload), _check_exhaustiveness_manifest(
-            manifest, require_manifest=False
-        )
-    return [], _check_exhaustiveness_manifest(manifest, require_manifest=False)
+        return list(findings_payload), manifest, False
+    return [], manifest, False
 
 
 def _partition_findings(
@@ -564,6 +953,63 @@ def _partition_findings(
     return verified, rejected, by_category
 
 
+def _has_unreported_surface_gaps(
+    surface_gaps: Sequence[str],
+    verified: Sequence[Mapping[str, Any]],
+) -> bool:
+    """Return True if any file-scoped surface gap is not covered by verified findings."""
+    covered_files = {
+        str(f.get("file_and_line", "")).split(":", 1)[0].replace("\\", "/")
+        for f in verified
+    }
+    for gap in surface_gaps:
+        if ": " in gap:
+            gap_file = gap.split(": ", 1)[0].replace("\\", "/")
+            if gap_file not in covered_files:
+                return True
+    return False
+
+
+def _finalize_exhaustiveness_status(
+    base_status: str,
+    require_manifest: bool,
+    verified: Sequence[Mapping[str, Any]],
+    surface_gaps: Sequence[str],
+) -> str:
+    """Check whether file-scoped surface gaps were left unreported in findings."""
+    if not require_manifest or base_status != "ok" or not verified:
+        return base_status
+    if _has_unreported_surface_gaps(surface_gaps, verified):
+        return "unreported_surface_gaps"
+    return base_status
+
+
+def _is_airtight_state(
+    verified_count: int,
+    ast_gaps: int,
+    z3_status: str,
+    z3_unconstrained: int,
+    exh_status: str,
+) -> bool:
+    """Return True if all 5 coherence closure conditions hold simultaneously."""
+    if verified_count != 0 or ast_gaps != 0 or z3_unconstrained != 0:
+        return False
+    return z3_status == "SAT" and exh_status == "ok"
+
+
+def _resolve_tri_state_status(
+    require_manifest: bool,
+    exhaustiveness_status: str,
+    is_airtight: bool,
+) -> Tuple[str, int, int]:
+    """Return `(status, action_declare_airtight_halt, action_propose_invariant_fix)`."""
+    if require_manifest and exhaustiveness_status != "ok":
+        return "INCOMPLETE_AUDIT_RETRY", 0, 0
+    if is_airtight:
+        return "AIRTIGHT_HALT", 1, 0
+    return "PROCEED_FIX", 0, 1
+
+
 def evaluate_bake_inputs(
     ast_data: Mapping[str, Any],
     z3_data: Mapping[str, Any],
@@ -571,6 +1017,7 @@ def evaluate_bake_inputs(
     repo_root: Path,
 ) -> Dict[str, Any]:
     """Evaluate AST audit, Z3 proof, exhaustiveness manifest, and findings."""
+    surface_gap_details = audit_repo_surfaces(repo_root)
     raw_contract_gaps = max(
         _non_negative_count(ast_data.get("contract_gaps", 0)),
         _count_non_test_high_complexity(ast_data),
@@ -578,24 +1025,35 @@ def evaluate_bake_inputs(
     ast_contract_gaps = (
         raw_contract_gaps
         + _non_negative_count(ast_data.get("unindexed_hot_paths", 0))
-        + _audit_repo_surface_gaps(repo_root)
+        + len(surface_gap_details)
     )
     z3_status = str(z3_data.get("status", "SAT")).strip().upper()
     z3_unconstrained_count = _count_unconstrained_vars(z3_data)
 
-    raw_items, exhaustiveness_status = _extract_findings_and_manifest(
+    raw_items, manifest, req_manifest = _extract_raw_findings_and_manifest(
         ast_data, findings_payload
     )
     verified, rejected, by_category = _partition_findings(raw_items, repo_root)
-
-    is_airtight = (
-        len(verified) == 0
-        and ast_contract_gaps == 0
-        and z3_status == "SAT"
-        and z3_unconstrained_count == 0
-        and exhaustiveness_status == "ok"
+    verified_ids = {str(f["id"]) for f in verified}
+    base_exh = _check_exhaustiveness_manifest(
+        manifest,
+        require_manifest=req_manifest,
+        repo_root=repo_root,
+        verified_ids=verified_ids,
     )
-    status = "AIRTIGHT_HALT" if is_airtight else "PROCEED_FIX"
+    exhaustiveness_status = _finalize_exhaustiveness_status(
+        base_exh, req_manifest, verified, surface_gap_details
+    )
+    is_airtight = _is_airtight_state(
+        len(verified),
+        ast_contract_gaps,
+        z3_status,
+        z3_unconstrained_count,
+        exhaustiveness_status,
+    )
+    status, act_halt, act_fix = _resolve_tri_state_status(
+        req_manifest, exhaustiveness_status, is_airtight
+    )
 
     cert_payload = json.dumps(
         {
@@ -616,9 +1074,10 @@ def evaluate_bake_inputs(
 
     return {
         "status": status,
-        "action_declare_airtight_halt": 1 if is_airtight else 0,
-        "action_propose_invariant_fix": 0 if is_airtight else 1,
+        "action_declare_airtight_halt": act_halt,
+        "action_propose_invariant_fix": act_fix,
         "ast_contract_gaps": ast_contract_gaps,
+        "surface_gap_details": surface_gap_details,
         "z3_status": z3_status,
         "z3_unconstrained_count": z3_unconstrained_count,
         "exhaustiveness_status": exhaustiveness_status,
@@ -766,6 +1225,51 @@ def _build_good_test_findings(anchor_1_2: str) -> List[Dict[str, Any]]:
     ]
 
 
+def _verify_manifest_self_test(repo_root: Path, anchor: str) -> Optional[str]:
+    """Test Tri-State Gate, file_coverage_ledger, and disk closure proofs."""
+    ast_ok = {"contract_gaps": 0, "unindexed_hot_paths": 0}
+    z3_ok = {"status": "SAT", "unconstrained_variables": []}
+    good_items = _build_good_test_findings(anchor)
+    res_inc = evaluate_bake_inputs(
+        ast_ok, z3_ok, {"findings": good_items}, repo_root
+    )
+    if res_inc["status"] != "INCOMPLETE_AUDIT_RETRY":
+        return f"Expected INCOMPLETE_AUDIT_RETRY, got {res_inc['status']}"
+
+    rt_receipt = repo_root / "rt_receipt.md"
+    rt_receipt.write_text(
+        '<RUBRIC_SCORE>\n{"stage": 5, "verdict": "AIRTIGHT_HALT"}\n</RUBRIC_SCORE>\n',
+        encoding="utf-8",
+    )
+    rt_trans = repo_root / "rt_transcript.jsonl"
+    rt_trans.write_text('{"step": 1, "status": "DONE"}\n', encoding="utf-8")
+    ledger = build_file_coverage_ledger(repo_root)
+    manifest = {
+        "uncapped_discovery": True,
+        "full_suite_executed": True,
+        "closed_loop_reaudit": True,
+        "independent_redteam_reaudit": True,
+        "surfaces_audited": {k: True for k in REQUIRED_AUDIT_SURFACES},
+        "redteam_rubric_score": {k: 3 for k in REQUIRED_AUDIT_SURFACES},
+        "test_failures": 0,
+        "invariant_violations": 0,
+        "redteam_transcript_errors": 0,
+        "file_coverage_ledger": ledger,
+        "wave_history": [{"wave": 1, "findings_count": 0, "files_modified": 0}],
+        "redteam_receipt_path": "rt_receipt.md",
+        "redteam_transcript_path": "rt_transcript.jsonl",
+    }
+    res_halt = evaluate_bake_inputs(
+        ast_ok,
+        z3_ok,
+        {"findings": [], "exhaustiveness_manifest": manifest},
+        repo_root,
+    )
+    if res_halt["status"] != "AIRTIGHT_HALT":
+        return f"Expected manifest AIRTIGHT_HALT, got {res_halt}"
+    return None
+
+
 def run_self_test() -> Tuple[int, List[str]]:
     """Run deterministic self-tests for all acceptance and rejection gates."""
     with tempfile.TemporaryDirectory() as tmp_dir_str:
@@ -798,6 +1302,10 @@ def run_self_test() -> Tuple[int, List[str]]:
         if res_good["verified_findings_count"] != 4:
             return 1, [f"Expected 4 verified findings, got {res_good}"]
 
+        err_msg = _verify_manifest_self_test(repo_root, anchor)
+        if err_msg is not None:
+            return 1, [err_msg]
+
     return 0, ["SELF_TEST_OK: coherence_bake_gate verified all 4 categories."]
 
 
@@ -812,6 +1320,17 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--self-test",
         action="store_true",
         help="Run built-in deterministic unit tests and exit.",
+    )
+    parser.add_argument(
+        "--build-ledger",
+        nargs=2,
+        metavar=("REPO_ROOT", "OUT_JSON"),
+        help="Build 100% repository file_coverage_ledger JSON.",
+    )
+    parser.add_argument(
+        "--audit-repo",
+        metavar="REPO_ROOT",
+        help="Run generative whole-repo surface audit and exit 0 if clean.",
     )
     parser.add_argument(
         "ast_json", nargs="?", help="Path to Stage 0 AST JSON artifact."
@@ -855,7 +1374,7 @@ def _execute_cli_gate(args: argparse.Namespace) -> int:
         f"verified={result['verified_findings_count']} "
         f"rejected={result['rejected_speculative_count']}"
     )
-    return 0
+    return 2 if result["status"] == "INCOMPLETE_AUDIT_RETRY" else 0
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -867,12 +1386,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         for msg in msgs:
             print(msg)
         return code
+    if args.build_ledger:
+        root_p, out_p = Path(args.build_ledger[0]), Path(args.build_ledger[1])
+        _write_json_file(out_p, build_file_coverage_ledger(root_p))
+        return 0
+    if args.audit_repo:
+        gaps = audit_repo_surfaces(Path(args.audit_repo))
+        for gap in gaps:
+            print(gap)
+        return 1 if gaps else 0
     if not all(
         (args.ast_json, args.z3_json, args.findings_json, args.output_json)
     ):
         parser.error(
             "ast_json, z3_json, findings_json, and output_json are required "
-            "unless --self-test is set."
+            "unless --self-test, --build-ledger, or --audit-repo is set."
         )
     return _execute_cli_gate(args)
 

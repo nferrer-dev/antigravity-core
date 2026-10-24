@@ -25,7 +25,7 @@ When the user triggers this skill, you must autonomously bootstrap the current r
 
 ## 4. Telemetry Scaffolding (Causal Telemetry Protocol)
 - Identify the centralized artifact directory for the current conversation (usually `<appDataDir>\brain\<conversation-id>\`).
-- Create an empty `agentic_telemetry.md` file in that directory.
-- Format it with the required markdown table headers: `| Timestamp | Agent Role | Decision | Causal Justification |` and a markdown separator row `|---|---|---|---|`.
+- Create `agentic_telemetry.md` in that directory (UTF-8, no BOM).
+- Format it with a one-line HTML comment header documenting the single-line hash-chained trace format (`- [<ISO-8601 UTC>] | <Agent Role> | <3-5-word decision> | <1-2-sentence causal justification> [chain:<8-hex>]`), matching `telemetry-append.ps1`. Never use a markdown table.
 
 Upon completion, output a summary to the user indicating that the repository is now fully "Agent-Ready" for the 2026 Ecosystem.

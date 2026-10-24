@@ -19,3 +19,7 @@ When the user triggers this skill to vet a technical proposition or configuratio
 - As the Hostile Adjudicator, emit a `<RUBRIC_SCORE>` JSON block (`"stage"`, `"role"`, `"verdict"`, and `"criteria"` items with `"id"`, `"evidence"`, `"score"`) (`stage: 2`, `0..3` BARS with `"evidence"` before `"score"`) and determine the final binary verdict (`[GLOBAL VERDICT: PROCEED]` or `[GLOBAL VERDICT: REJECT]`).
 - You MUST explicitly present the retrieved empirical causal chain and the final verdict to the user.
 - **Strict Gate**: Do NOT proceed to write an implementation plan (Stage 3) until this Stage 2 verdict is `PROCEED`.
+
+## 3. Consensus-Loop Arbitration
+
+Per `.agents/AGENTS.md`, a consensus loop that hits its round cap (max 5) or trips dynamic stagnation detection (two consecutive rounds with materially identical objections or mutually exclusive constraints) escalates here. Feed the deadlocked committee's final objections and the disputed artifact into Phase 1 as the proposition under debate. The Hostile Adjudicator's verdict is terminal: it ends the loop with no further rounds and overrides unanimity.

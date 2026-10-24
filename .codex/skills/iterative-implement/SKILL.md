@@ -29,9 +29,9 @@ Spawn the following reviewers concurrently in parallel via `spawn_agent` (`agent
 1. **Language-Specific Style Expert** (always invoked for code): instruct it to select and read the style skill matching the file extension from `.codex/skills/style-*` (or `~/.codex/skills/style-*`, e.g., `style-python`, `style-go`, `style-js`, `style-cpp`, `style-java`, `style-rust`), AND to proactively read that skill's `[skillname]-edge-cases.md` file if it exists, then verify the diff against both.
 2. **Security Auditor** (only invoked for auth/crypto/inputs/network/hooks domains): instruct it to read `.codex/skills/security-auditor/SKILL.md` (and `.codex/skills/security-auditor/security-auditor-edge-cases.md` if it exists) and verify the diff against its Two-Pass Hunter-Verifier rubric.
 3. **Performance Profiler** (only invoked for data-pipelines/loops domains).
-4. **Markdown Style Expert** (only invoked for documentation/Markdown files): instruct it to read `.codex/skills/markdown-style-expert/SKILL.md`.
+4. **Markdown Style Expert** (only invoked for documentation/Markdown files): instruct it to read `.codex/skills/markdown-style-expert/SKILL.md` and `.codex/skills/markdown-style-expert/markdown-style-expert-edge-cases.md`.
 5. **Code Health Agent** (always invoked):
-   - **Strict Bounds:** constrain this agent strictly to two questions against the localized diff: *Are there any unintentional changes in your code change?* (verifiable against deterministic AST symbol/signature changes per `PatchDiff`, `arXiv:2503.15223`) and *Are there any redundancies introduced in your code change?*
+   - **Strict Bounds:** constrain this agent strictly to two questions against the localized diff: *Are there any unintentional changes in your code change?* (for Python diffs, `python .codex/skills/comprehend-problem/scripts/structural_graph_polyfill.py --ast-diff <old_file> <new_file>` provides a deterministic AST symbol/signature diff per `PatchDiff`, `arXiv:2503.15223`) and *Are there any redundancies introduced in your code change?*
    - **Forbidden:** it is strictly prohibited from analyzing global up/downstream dependencies (MVC violation) and from evaluating subjective readability or "YAGNI" critiques (Bounded Quality Constraints violation).
 
 ## 5. Bounded Quality Constraints & SkillOpt

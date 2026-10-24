@@ -7,6 +7,8 @@ description: The canonical Level 4 Map-Reduce orchestration engine for harness-n
 
 This is the central execution engine for all Stage 2 (Idea Vetting) and Stage 3 (Design Validation) workflows. It executes a rigorously sandboxed, adversarial review to mathematically prove propositions via the Hostile Adjudicator pattern, completely replacing legacy 5-round consensus loops.
 
+Before spawning any agents, read `debate-edge-cases.md` (bundled with this skill) for learned failure modes.
+
 ## Global Override Context
 By explicit User directive, this skill overrides the legacy unanimous consensus requirement. The `Hostile Adjudicator` provides the final, terminal binary exit condition (`PROCEED` or `REJECT`), ensuring deadlocks are mathematically impossible.
 

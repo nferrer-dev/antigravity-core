@@ -12,7 +12,7 @@ When the user triggers this skill, autonomously bootstrap the current repository
 - **Constraint Check:** Before running `git init`, you MUST output a visible message to the user asking for explicit confirmation, clearly presenting the absolute path of the directory that will be initialized. Wait for the user's explicit approval.
 - **Initialization:** Once approved, check if a `.git` folder exists. If not, run `git init` via Bash.
 - **Ignore File:** Check if a `.gitignore` exists. If not, create a basic one (e.g., ignoring `node_modules`, `__pycache__`, `.env`) with the Write tool.
-- **Pre-Commit Secret Gate:** Configure `.pre-commit-config.yaml` and `.git/hooks/pre-commit` to run staged secret scanning (`betterleaks git --staged` or the repository secret scanner) before every commit.
+- **Pre-Commit Secret Gate:** Configure `.pre-commit-config.yaml` and `.git/hooks/pre-commit` to run staged secret scanning (`python scripts/secret_scan.py --staged` or `betterleaks git --staged`) before every commit.
 - **Initial Commit:** Execute an initial commit with the message `"Initial agentic scaffold commit"` so that git worktree isolation (which requires an existing HEAD to branch from) can function without deadlocking.
 
 ## 2. Testing Infrastructure (Agentic TDD Protocol)

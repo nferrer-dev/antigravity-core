@@ -50,9 +50,9 @@ FORBIDDEN_TOKENS = (
 
 FORBIDDEN_PS1_CALL = "Invoke-" + "Expression"
 
-SCAN_EXTENSIONS = {".md", ".json", ".toml", ".rules", ".yaml", ".ps1", ".py"}
+SCAN_EXTENSIONS = {".md", ".json", ".toml", ".rules", ".yaml", ".ps1", ".py", ".js"}
 INV8_EXCLUDED_RELPATHS = {".codex/config.toml"}
-INV8_EXCLUDED_DIRS = {"tests", "__pycache__"}
+INV8_EXCLUDED_DIRS = {"tests", "__pycache__", "node_modules"}
 
 FORBIDDEN_CONTROL_BYTES = (
     set(range(0x00, 0x09)) | {0x0B, 0x0C, 0x0D} | set(range(0x0E, 0x20))
@@ -472,6 +472,21 @@ def _load_json(path):
     return json.loads(path.read_bytes().decode("utf-8"), object_pairs_hook=reject_duplicates)
 
 
+def _extract_relative_md_links(text):
+    cleaned = re.sub(r"```[\s\S]*?```", "", text)
+    cleaned = re.sub(r"`[^`\n]+`", "", cleaned)
+    links = []
+    for match in re.finditer(
+        r"\[[^\]]+\]\((?!https?:|mailto:|file:|sidecar:|customization:|conversation:|#)([^)#\s]+)",
+        cleaned,
+    ):
+        target = match.group(1).strip()
+        if not target or "<" in target or ">" in target or "[" in target:
+            continue
+        links.append(target)
+    return sorted(set(links))
+
+
 def check_inv2_json_toml_rules(root):
     violations = []
     hooks_json = root / ".codex" / "hooks.json"
@@ -528,11 +543,13 @@ def check_inv2_json_toml_rules(root):
 
     agents_dir = root / ".codex" / "agents"
     for agent_stem in EXPECTED_CODEX_AGENTS:
-        agent_toml = agents_dir / ("%s.toml" % agent_stem)
+        if not (agents_dir / ("%s.toml" % agent_stem)).is_file():
+            violations.append(
+                "INV-2: .codex/agents/%s.toml: missing custom agent TOML" % agent_stem
+            )
+    for agent_toml in sorted(agents_dir.glob("*.toml")) if agents_dir.is_dir() else ():
+        agent_stem = agent_toml.stem
         a_label = _rel(root, agent_toml)
-        if not agent_toml.is_file():
-            violations.append("INV-2: %s: missing custom agent TOML" % a_label)
-            continue
         try:
             a_data = tomllib.loads(agent_toml.read_bytes().decode("utf-8"))
             if a_data.get("name") != agent_stem:
@@ -545,6 +562,8 @@ def check_inv2_json_toml_rules(root):
                     "INV-2: %s: missing root-level description or developer_instructions"
                     % a_label
                 )
+            for trig_err in check_skill_description_triggers(a_data.get("description", ""), a_label):
+                violations.append("INV-2: %s" % trig_err)
             if a_data.get("sandbox_mode") != "read-only":
                 violations.append(
                     "INV-2: %s: sandbox_mode must be 'read-only'" % a_label
@@ -561,6 +580,22 @@ def check_inv2_json_toml_rules(root):
                 )
         except (ValueError, UnicodeDecodeError) as exc:
             violations.append("INV-2: %s: %s" % (a_label, exc))
+
+    md_targets = (
+        [root / "CODEX.md"]
+        + sorted((root / ".codex" / "skills").rglob("*.md"))
+        + sorted((root / ".codex" / "rules").glob("*.md"))
+    )
+    for md_path in md_targets:
+        if not md_path.is_file():
+            continue
+        m_label = _rel(root, md_path)
+        m_text = md_path.read_bytes().decode("utf-8", errors="replace")
+        for rel_link in _extract_relative_md_links(m_text):
+            if not (md_path.parent / rel_link).resolve().exists():
+                violations.append(
+                    "INV-2: %s: relative link %r does not exist" % (m_label, rel_link)
+                )
 
     rules_file = root / ".codex" / "rules" / "antigravity.rules"
     r_label = _rel(root, rules_file)
@@ -607,7 +642,7 @@ def check_inv3_hooks(root):
             violations.append("INV-3: %s: missing required event %r" % (label, req_ev))
 
     total_timeout = 0
-    referenced_scripts = set()
+    referenced_scripts = {}
     for event_name, entries in hooks_map.items():
         if not isinstance(entries, list) or not entries:
             violations.append(
@@ -635,7 +670,7 @@ def check_inv3_hooks(root):
                         % (label, cmd)
                     )
                 for s_name in HOOK_SCRIPT_RE.findall(cmd):
-                    referenced_scripts.add(s_name)
+                    referenced_scripts.setdefault(s_name, []).append(cmd)
 
     if total_timeout > 15:
         violations.append(
@@ -654,6 +689,12 @@ def check_inv3_hooks(root):
         script_text = target.read_bytes().decode("utf-8", errors="replace")
         if script_text.strip().startswith("# mock"):
             continue
+        for cmd in referenced_scripts[script_name]:
+            if "-NoProfile" not in cmd or "-NonInteractive" not in cmd:
+                violations.append(
+                    "INV-3: %s: hook command %r must include -NoProfile and -NonInteractive"
+                    % (label, cmd)
+                )
         if script_name == "brc-guard.ps1":
             for rule_id in REQUIRED_BRC_GUARD_RULES:
                 if rule_id not in script_text:
@@ -748,7 +789,7 @@ def check_inv6_encoding(root):
     violations = []
     targets = [root / "CODEX.md"]
     for dirpath, dirnames, filenames in os.walk(root / ".codex"):
-        dirnames[:] = [d for d in dirnames if d not in {"__pycache__"}]
+        dirnames[:] = [d for d in dirnames if d not in {"__pycache__", "node_modules"}]
         for filename in sorted(filenames):
             path = Path(dirpath) / filename
             if path.suffix in SCAN_EXTENSIONS:
@@ -1046,6 +1087,24 @@ def _compute_func_mccabe(func_node):
     return complexity
 
 
+def _find_unused_upper_constants(tree):
+    defined = set()
+    loaded = set()
+    for stmt in tree.body:
+        targets = []
+        if isinstance(stmt, ast.Assign):
+            targets = stmt.targets
+        elif isinstance(stmt, ast.AnnAssign):
+            targets = [stmt.target]
+        for t in targets:
+            if isinstance(t, ast.Name) and re.fullmatch(r"[A-Z][A-Z0-9_]{2,}", t.id):
+                defined.add(t.id)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            loaded.add(node.id)
+    return sorted(defined - loaded)
+
+
 def _check_rubric_schema_and_script_parity(root):
     violations = []
     shared_scripts = (
@@ -1071,30 +1130,43 @@ def _check_rubric_schema_and_script_parity(root):
                         % (tree_name, rel_script, cx_dir, rel_script)
                     )
     prod_py_files = list((root / cx_dir / "skills").glob("*/scripts/*.py"))
-    for py_path in sorted(set(prod_py_files)):
+    all_py_files = prod_py_files + list((root / cx_dir / "tests").glob("*.py"))
+    for py_path in sorted(set(all_py_files)):
         if not py_path.is_file():
             continue
         try:
             tree = ast.parse(py_path.read_bytes().decode("utf-8", errors="replace"))
         except SyntaxError:
             continue
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                comp = _compute_func_mccabe(node)
-                if comp > 9:
-                    violations.append(
-                        "INV-10: %s: function %s has McCabe complexity %d > 9"
-                        % (_rel(root, py_path), node.name, comp)
-                    )
+        for unused_const in _find_unused_upper_constants(tree):
+            violations.append(
+                "INV-10: %s: unused module-level constant %s"
+                % (_rel(root, py_path), unused_const)
+            )
+        if py_path in prod_py_files:
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    comp = _compute_func_mccabe(node)
+                    if comp > 9:
+                        violations.append(
+                            "INV-10: %s: function %s has McCabe complexity %d > 9"
+                            % (_rel(root, py_path), node.name, comp)
+                        )
     return violations
 
 
 def check_inv10_skill_security(root):
     violations = []
     skills_dir = root / ".codex" / "skills"
-    targets = list(skills_dir.rglob("SKILL.md")) + list(
-        skills_dir.rglob("*-edge-cases.md")
+    targets = (
+        list(skills_dir.rglob("SKILL.md"))
+        + list(skills_dir.rglob("*-edge-cases.md"))
+        + list(skills_dir.glob("*/references/*.md"))
+        + [root / "CODEX.md"]
     )
+    agents_dir = root / ".codex" / "agents"
+    if agents_dir.is_dir():
+        targets.extend(agents_dir.glob("*.toml"))
     rules_dir = root / ".codex" / "rules"
     if rules_dir.is_dir():
         targets.extend(rules_dir.glob("*.md"))
