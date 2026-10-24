@@ -848,11 +848,8 @@ def _audit_git_index_hygiene(repo_root: Path) -> List[str]:
 
 
 def _is_historical_plan_doc(rel: str) -> bool:
-    """Return True if rel is an archived historical plan/upgrade doc or test fixture."""
+    """Return True if rel is an archived task log or invariant test fixture."""
     prefixes = (
-        "docs/plans/",
-        "docs/upgrade/",
-        "docs/superpowers/",
         "docs/architecture/task.md",
         "tests/admin/test_cli.py",
     )
@@ -869,6 +866,11 @@ def _has_stale_recommender_token(text: str) -> bool:
         "recommend digest",
         "/home/nigelf/",
         "POST /auth/register",
+        "song-recommender",
+        "RECOMMEND_SPOTIFY",
+        "RECOMMEND_DATA_DIR",
+        "src.admin.cli:",
+        "--max-cycles",
     )
     return any(tok in text for tok in tokens)
 
@@ -965,10 +967,153 @@ def _audit_ci_and_entrypoints(repo_root: Path) -> List[str]:
     return gaps
 
 
+def _extract_web_route_prefixes(repo_root: Path) -> Set[str]:
+    """Extract top-level /<prefix> route segments from src/web/*.py."""
+    routes_py = repo_root / "src" / "web" / "routes.py"
+    if not routes_py.is_file():
+        return set()
+    prefixes: Set[str] = {"api"}
+    for name in ("routes.py", "server.py"):
+        fp = repo_root / "src" / "web" / name
+        if fp.is_file():
+            txt = fp.read_text(encoding="utf-8", errors="replace")
+            for m in re.finditer(r'@(?:router|app)\.[a-z]+\(\s*"/([A-Za-z0-9_-]+)', txt):
+                prefixes.add(m.group(1))
+    return prefixes
+
+
+def _audit_nginx_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
+    """Verify nginx proxy location blocks target existing FastAPI route prefixes."""
+    gaps: List[str] = []
+    for rel in ("nginx.conf", "nginx.prod.conf"):
+        fp = repo_root / rel
+        if not fp.is_file():
+            continue
+        txt = fp.read_text(encoding="utf-8", errors="replace")
+        for m in re.finditer(r"location\s+/([A-Za-z0-9_-]+)\s*\{([^}]*)\}", txt):
+            seg, body = m.group(1), m.group(2)
+            if "proxy_pass" in body and seg not in prefixes:
+                gaps.append(f"{rel}: nginx proxies non-existent route /{seg}")
+    return gaps
+
+
+def _audit_locust_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
+    """Verify loadtest/locustfile.py client calls target existing FastAPI route prefixes."""
+    fp = repo_root / "loadtest" / "locustfile.py"
+    if not fp.is_file():
+        return []
+    txt = fp.read_text(encoding="utf-8", errors="replace")
+    gaps: List[str] = []
+    for m in re.finditer(r'self\.client\.[a-z]+\(\s*f?"/([A-Za-z0-9_-]+)', txt):
+        seg = m.group(1)
+        if seg not in prefixes:
+            gaps.append(f"loadtest/locustfile.py: loadtest targets non-existent route /{seg}")
+    return gaps
+
+
+def _extract_exported_metrics(repo_root: Path) -> Set[str]:
+    """Extract Prometheus metric names declared via # TYPE in src/web/routes.py."""
+    routes_py = repo_root / "src" / "web" / "routes.py"
+    if not routes_py.is_file():
+        return set()
+    txt = routes_py.read_text(encoding="utf-8", errors="replace")
+    return set(re.findall(r"#\s*TYPE\s+([a-zA-Z0-9_]+)\s+", txt))
+
+
+def _collect_metric_consumer_files(repo_root: Path) -> List[Path]:
+    """Collect Grafana JSON/YAML files and docs/API.md for metric parity checks."""
+    files: List[Path] = []
+    graf = repo_root / "grafana"
+    if graf.is_dir():
+        files.extend(sorted(graf.rglob("*.json")))
+        files.extend(sorted(graf.rglob("*.yml")))
+    api_md = repo_root / "docs" / "API.md"
+    if api_md.is_file():
+        files.append(api_md)
+    return files
+
+
+def _audit_metrics_consumers(repo_root: Path, metrics: Set[str]) -> List[str]:
+    """Verify Grafana dashboards/alerts and docs/API.md reference exported metrics."""
+    if not metrics:
+        return []
+    gaps: List[str] = []
+    pat = re.compile(
+        r"\b(private_press_[a-z0-9_]+|track_processing_total|sync_runs_total"
+        r"|export_operations_total|websocket_connections_active)\b"
+    )
+    for fp in _collect_metric_consumer_files(repo_root):
+        rel = str(fp.relative_to(repo_root)).replace("\\", "/")
+        txt = fp.read_text(encoding="utf-8", errors="replace")
+        for m in pat.finditer(txt):
+            if m.group(1) not in metrics:
+                gaps.append(f"{rel}: unexported Prometheus metric {m.group(1)}")
+    return gaps
+
+
+def _audit_nextjs_docker_contracts(repo_root: Path) -> List[str]:
+    """Flag Vite dist/ directory references when frontend/package.json uses Next.js."""
+    fe_pkg = repo_root / "frontend" / "package.json"
+    if not fe_pkg.is_file() or '"next"' not in fe_pkg.read_text(encoding="utf-8", errors="replace"):
+        return []
+    gaps: List[str] = []
+    for rel in ("Dockerfile", "Dockerfile.railway", "docker-compose.yml"):
+        fp = repo_root / rel
+        if fp.is_file():
+            txt = fp.read_text(encoding="utf-8", errors="replace")
+            if "/app/dist" in txt or "./frontend/dist" in txt:
+                gaps.append(f"{rel}: references Vite dist/ directory for Next.js frontend")
+    return gaps
+
+
+def _audit_alembic_schema_contracts(repo_root: Path) -> List[str]:
+    """Flag legacy recommender tables in alembic/versions/*.py when recommender is absent."""
+    vers_dir = repo_root / "alembic" / "versions"
+    if _has_package_target(repo_root, "recommender") or not vers_dir.is_dir():
+        return []
+    gaps: List[str] = []
+    for fp in sorted(vers_dir.glob("*.py")):
+        rel = str(fp.relative_to(repo_root)).replace("\\", "/")
+        txt = fp.read_text(encoding="utf-8", errors="replace")
+        if "recommendation_sets" in txt or "candidate_matches" in txt:
+            gaps.append(f"{rel}: legacy recommender schema in Alembic migration")
+    return gaps
+
+
+def _audit_e2e_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
+    """Verify e2e/*.ts files do not target deleted /login or /auth OAuth routes."""
+    e2e_dir = repo_root / "e2e"
+    if not e2e_dir.is_dir() or "auth" in prefixes:
+        return []
+    gaps: List[str] = []
+    for fp in sorted(e2e_dir.rglob("*.ts")):
+        rel = str(fp.relative_to(repo_root)).replace("\\", "/")
+        txt = fp.read_text(encoding="utf-8", errors="replace")
+        if "/auth/" in txt or "'/login'" in txt:
+            gaps.append(f"{rel}: e2e test targets non-existent /auth or /login route")
+    return gaps
+
+
+def _audit_cross_surface_contracts(repo_root: Path) -> List[str]:
+    """Audit routes vs nginx/locust/e2e, metrics vs Grafana/docs, Next.js Docker, and Alembic."""
+    gaps: List[str] = []
+    prefixes = _extract_web_route_prefixes(repo_root)
+    if prefixes:
+        gaps.extend(_audit_nginx_route_parity(repo_root, prefixes))
+        gaps.extend(_audit_locust_route_parity(repo_root, prefixes))
+        gaps.extend(_audit_e2e_route_parity(repo_root, prefixes))
+    metrics = _extract_exported_metrics(repo_root)
+    gaps.extend(_audit_metrics_consumers(repo_root, metrics))
+    gaps.extend(_audit_nextjs_docker_contracts(repo_root))
+    gaps.extend(_audit_alembic_schema_contracts(repo_root))
+    return gaps
+
+
 def _audit_pyproject_and_ci(repo_root: Path) -> List[str]:
     """Audit pyproject.toml ruff cleanliness, testpaths coverage, and all git-tracked files."""
     gaps = _audit_ci_and_entrypoints(repo_root)
     gaps.extend(_audit_all_git_tracked_files(repo_root))
+    gaps.extend(_audit_cross_surface_contracts(repo_root))
     pyproj = repo_root / "pyproject.toml"
     if not pyproj.is_file():
         return gaps
@@ -1617,6 +1762,26 @@ def _verify_manifest_self_test(repo_root: Path, anchor: str) -> Optional[str]:
     return None
 
 
+def _verify_cross_surface_self_test() -> Optional[str]:
+    """Verify cross-surface route, metric, Next.js Docker, and Alembic contract checks."""
+    with tempfile.TemporaryDirectory() as tmp_str:
+        root = Path(tmp_str)
+        routes_p = root / "src" / "web" / "routes.py"
+        routes_p.parent.mkdir(parents=True, exist_ok=True)
+        routes_p.write_text(
+            '@router.get("/health")\n# TYPE private_press_uptime_seconds gauge\n',
+            encoding="utf-8",
+        )
+        (root / "nginx.conf").write_text(
+            "location /ghost {\n  proxy_pass http://api:8000;\n}\n",
+            encoding="utf-8",
+        )
+        gaps = _audit_cross_surface_contracts(root)
+        if not any("nginx proxies non-existent route /ghost" in g for g in gaps):
+            return f"Expected nginx route drift gap, got {gaps}"
+    return None
+
+
 def run_self_test() -> Tuple[int, List[str]]:
     """Run deterministic self-tests for all acceptance and rejection gates."""
     with tempfile.TemporaryDirectory() as tmp_dir_str:
@@ -1652,6 +1817,9 @@ def run_self_test() -> Tuple[int, List[str]]:
         err_msg = _verify_manifest_self_test(repo_root, anchor)
         if err_msg is not None:
             return 1, [err_msg]
+        cs_err = _verify_cross_surface_self_test()
+        if cs_err is not None:
+            return 1, [cs_err]
 
     return 0, ["SELF_TEST_OK: coherence_bake_gate verified all 4 categories."]
 
