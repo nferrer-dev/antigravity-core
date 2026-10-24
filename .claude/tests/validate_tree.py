@@ -770,12 +770,79 @@ def scan_test_integrity(source_text, label):
 
 
 
+def _compute_func_mccabe(func_node):
+    complexity = 1
+    branch_types = (
+        ast.If,
+        ast.For,
+        ast.AsyncFor,
+        ast.While,
+        ast.ExceptHandler,
+        ast.With,
+        ast.AsyncWith,
+        ast.IfExp,
+        ast.comprehension,
+    )
+    for child in ast.walk(func_node):
+        if isinstance(child, branch_types):
+            complexity += 1
+        elif isinstance(child, ast.BoolOp):
+            complexity += max(0, len(child.values) - 1)
+    return complexity
+
+
+def _check_rubric_schema_and_script_parity(root):
+    violations = []
+    shared_scripts = (
+        "skills/coherence-bake/scripts/coherence_bake_gate.py",
+        "skills/comprehend-problem/scripts/logical_z3_polyfill.py",
+        "skills/comprehend-problem/scripts/rubric_grade_gate.py",
+        "skills/comprehend-problem/scripts/structural_graph_polyfill.py",
+    )
+    cl_dir = "." + "claude"
+    peer_trees = ("." + "agents", "." + "codex")
+    for rel_script in shared_scripts:
+        base_path = root / cl_dir / rel_script
+        if not base_path.is_file():
+            continue
+        base_sha = hashlib.sha256(base_path.read_bytes()).hexdigest()
+        for tree_name in peer_trees:
+            peer_path = root / tree_name / rel_script
+            if peer_path.is_file():
+                peer_sha = hashlib.sha256(peer_path.read_bytes()).hexdigest()
+                if peer_sha != base_sha:
+                    violations.append(
+                        "INV-10: %s/%s: SHA-256 drift vs %s/%s"
+                        % (tree_name, rel_script, cl_dir, rel_script)
+                    )
+    prod_py_files = list((root / cl_dir / "skills").glob("*/scripts/*.py"))
+    for py_path in sorted(set(prod_py_files)):
+        if not py_path.is_file():
+            continue
+        try:
+            tree = ast.parse(py_path.read_bytes().decode("utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                comp = _compute_func_mccabe(node)
+                if comp > 9:
+                    violations.append(
+                        "INV-10: %s: function %s has McCabe complexity %d > 9"
+                        % (_rel(root, py_path), node.name, comp)
+                    )
+    return violations
+
+
 def check_inv10_skill_security(root):
     violations = []
     skills_dir = root / ".claude" / "skills"
     targets = list(skills_dir.rglob("SKILL.md")) + list(
         skills_dir.rglob("*-edge-cases.md")
     )
+    rules_dir = root / ".claude" / "rules"
+    if rules_dir.is_dir():
+        targets.extend(rules_dir.glob("*.md"))
     for path in sorted(set(targets)):
         if not path.is_file():
             continue
@@ -816,6 +883,7 @@ def check_inv10_skill_security(root):
             for k in ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"'):
                 if k not in ag_txt:
                     violations.append("INV-10: %s: missing required <RUBRIC_SCORE> schema key %s" % (_rel(root, ag_path), k))
+    violations.extend(_check_rubric_schema_and_script_parity(root))
     for test_py in sorted((root / ".claude" / "tests").glob("test_*.py")):
         t_label = _rel(root, test_py)
         t_text = test_py.read_bytes().decode("utf-8", errors="replace")

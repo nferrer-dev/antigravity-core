@@ -665,6 +665,117 @@ class LiveTree(unittest.TestCase):
             tel_file = tel_root / ".codex" / "telemetry" / "agentic_telemetry.md"
             self.assertFalse(tel_file.exists())
 
+    def test_coherence_bake_r6_f_agy_r6_01_to_04_codex(self):
+        self.assertTrue(hasattr(vt, "_compute_func_mccabe"))
+        self.assertTrue(hasattr(vt, "_check_rubric_schema_and_script_parity"))
+        self.assertEqual(vt._check_rubric_schema_and_script_parity(REPO_ROOT), [])
+
+        open_tag = "<" + "RUBRIC_SCORE>"
+        close_tag = "</" + "RUBRIC_SCORE>"
+        stage5_airtight = (
+            open_tag
+            + '{"stage": 5, "role": "Red-Team Coherence Auditor", '
+            '"verdict": "AIRTIGHT_HALT", "criteria": ['
+            '{"id": "c1", "evidence": "a", "score": 3},'
+            '{"id": "c2", "evidence": "a", "score": 3},'
+            '{"id": "c3", "evidence": "a", "score": 3}'
+            '], "min_score": 3, "total_score": 9, "threshold": 7}'
+            + close_tag
+            + "\n[VERDICT: AIRTIGHT_HALT]"
+        )
+        bad_rubric = stage5_airtight.replace('"score": 3', '"score": 1', 1)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "scratch").mkdir(parents=True, exist_ok=True)
+            (tmp_path / "scratch" / "stage0_ok.md").write_text("SAT", encoding="utf-8")
+
+            res_ok = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "send_input",
+                    "tool_input": {"message": stage5_airtight},
+                }
+            )
+            self.assertEqual(res_ok.returncode, 0, res_ok.stderr)
+
+            res_me = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "MultiEdit",
+                    "tool_input": {
+                        "file_path": str(tmp_path / "scratch" / "review.md"),
+                        "edits": [{"new_string": bad_rubric}],
+                    },
+                }
+            )
+            self.assertEqual(res_me.returncode, 2)
+
+            res_role_lp = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "spawn_agent",
+                    "tool_input": {
+                        "agent_type": "self",
+                        "role": "Security Auditor",
+                        "message": "Audit diff.",
+                    },
+                }
+            )
+            self.assertEqual(res_role_lp.returncode, 2)
+
+            res_fetch = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "WebFetch",
+                    "tool_input": {"url": "https://example.com/public"},
+                }
+            )
+            self.assertEqual(res_fetch.returncode, 0)
+            self.assertTrue(
+                (tmp_path / "scratch" / ".untrusted_web_taint.json").is_file()
+            )
+            res_res_taint = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "spawn_agent",
+                    "tool_input": {
+                        "agent_type": "research",
+                        "role": "SOTA Researcher",
+                        "message": "Read literature.",
+                    },
+                }
+            )
+            self.assertEqual(res_res_taint.returncode, 0, res_res_taint.stderr)
+
+            tel_root = tmp_path / "tel_r6"
+            (tel_root / ".codex" / "telemetry").mkdir(parents=True, exist_ok=True)
+            tel_hook = REPO_ROOT / ".codex" / "hooks" / "telemetry-append.ps1"
+            subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(tel_hook),
+                ],
+                input=json.dumps(
+                    {
+                        "cwd": str(tel_root),
+                        "hook_event_name": "Stop",
+                        "last_assistant_message": "Audit found seam. [VERDICT: PROCEED_FIX]",
+                    }
+                ),
+                env={**os.environ, "CODEX_PROJECT_DIR": str(tel_root)},
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            tel_file = tel_root / ".codex" / "telemetry" / "agentic_telemetry.md"
+            self.assertTrue(tel_file.is_file())
+            self.assertIn("VERDICT:PROCEED_FIX", tel_file.read_text(encoding="utf-8"))
+
 
 
 class Meta(unittest.TestCase):

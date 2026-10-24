@@ -304,10 +304,11 @@ function Test-InvalidRubricScoreBlock {
     if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
     $blockMatches = [regex]::Matches($Text, '(?is)<RUBRIC_SCORE>\s*(\{[\s\S]*?\})\s*</RUBRIC_SCORE>')
     if ($blockMatches.Count -eq 0) { return $false }
-    $validVerdicts = @('APPROVE', 'REJECT', 'PROCEED', 'HALT', 'TIER_0', 'TIER_1', 'TIER_2')
+    $validVerdicts = @('APPROVE', 'REJECT', 'PROCEED', 'HALT', 'TIER_0', 'TIER_1', 'TIER_2', 'AIRTIGHT_HALT', 'PROCEED_FIX')
     $lastVerdict = ''
     $hasReject = $false
     $hasHalt = $false
+    $hasProceedFix = $false
     $seenPanelRoles = @{}
     foreach ($bm in $blockMatches) {
         $rawJson = $bm.Groups[1].Value
@@ -351,6 +352,7 @@ function Test-InvalidRubricScoreBlock {
         $lastVerdict = $verdict
         if ($verdict -eq 'REJECT') { $hasReject = $true }
         if ($verdict -eq 'HALT') { $hasHalt = $true }
+        if ($verdict -eq 'PROCEED_FIX') { $hasProceedFix = $true }
         $critList = @($obj.criteria)
         $minCrit = if ($stageVal -eq 0) { 1 } else { 3 }
         if ($critList.Count -lt $minCrit) { return $true }
@@ -384,13 +386,13 @@ function Test-InvalidRubricScoreBlock {
             $effThr = [int]$obj.threshold
             if ($effThr -lt $defThr) { return $true }
         }
-        if ($verdict -in @('APPROVE', 'PROCEED')) {
+        if ($verdict -in @('APPROVE', 'PROCEED', 'AIRTIGHT_HALT')) {
             if ($actualMin -lt 2 -or $actualTotal -lt $effThr) { return $true }
-        } elseif ($verdict -eq 'REJECT') {
+        } elseif ($verdict -in @('REJECT', 'PROCEED_FIX')) {
             if ($actualMin -ge 2 -and $actualTotal -ge $effThr) { return $true }
         }
     }
-    $panelVerdict = if ($hasHalt) { 'HALT' } elseif ($hasReject) { 'REJECT' } else { $lastVerdict }
+    $panelVerdict = if ($hasHalt) { 'HALT' } elseif ($hasReject) { 'REJECT' } elseif ($hasProceedFix) { 'PROCEED_FIX' } else { $lastVerdict }
     $proseMatches = [regex]::Matches($Text, '\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]')
     if ($proseMatches.Count -gt 0) {
         $proseVerdict = $proseMatches[$proseMatches.Count - 1].Groups[1].Value.Trim().ToUpperInvariant()
@@ -413,7 +415,8 @@ if ($filePath -ne '') {
     }
     if ($toolName -match '^(Edit|Write|MultiEdit|write_to_file|write_file|(?:multi_)?replace_file_content|edit_file)$') {
         if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
-            ($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|CLAUDE\.md|AGENTS\.md|CODEX\.md|config\.toml|antigravity\.rules|agentic_telemetry\.md)$')) {
+            (($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|CLAUDE\.md|AGENTS\.md|CODEX\.md|config\.toml|antigravity\.rules|agentic_telemetry\.md)$') -or
+             ($norm -match '(?i)(^|\\)(\.agents|\.claude|\.codex)\\agents\\[A-Za-z0-9_-]+\.(md|toml)$'))) {
             Deny 'harness-config-self-tampering' $filePath
         }
         if (($norm -notmatch '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') -and
@@ -473,7 +476,7 @@ if ($toolName -match '^(Agent|Task|spawn_agent)$') {
     if ($subType -ieq 'self' -and $subRole -match '(?i)(Style Expert|Security Auditor|Code Health Agent|Idea Skeptic|System Architect|Requirements Engineer|Scope Reviewer|Cortex Librarian|Codebase Explorer)') {
         Deny 'subagent-role-least-privilege' "Read-only auditor/explorer role '$subRole' must not be spawned with write-capable subagent_type='self'"
     }
-    if ($subType -match '(?i)^(stage3-design-reviewer|stage4-code-auditor|cortex-librarian|explorer)$') {
+    if ($subType -match '(?i)^(stage3-design-reviewer|stage4-code-auditor|cortex-librarian|explorer|research)$') {
         if ($subPrompt -match '(?i)\b(apply_patch|git\s+commit|git\s+push|rm\s+-rf|Remove-Item)\b') {
             Deny 'subagent-role-least-privilege' "Read-only subagent '$subType' must not be instructed to mutate files or git state"
         }

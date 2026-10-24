@@ -2693,6 +2693,147 @@ class LiveTree(unittest.TestCase):
         ]
         self.assertEqual(non_test_high, [])
 
+    def test_coherence_bake_r6_f_agy_r6_01_to_04(self):
+        # F-AGY-R6-01: Stage 5 AIRTIGHT_HALT and PROCEED_FIX verdicts in rubric_grade_gate.py and brc-guard.ps1
+        rgg_dir = REPO_ROOT / ".agents" / "skills" / "comprehend-problem" / "scripts"
+        if str(rgg_dir) not in sys.path:
+            sys.path.insert(0, str(rgg_dir))
+        import rubric_grade_gate as rgg  # noqa: E402
+
+        self.assertIn("AIRTIGHT_HALT", rgg.VALID_VERDICTS)
+        self.assertIn("PROCEED_FIX", rgg.VALID_VERDICTS)
+        self.assertIn("AIRTIGHT_HALT", rgg.APPROVAL_VERDICTS)
+
+        open_tag = "<" + "RUBRIC_SCORE>"
+        close_tag = "</" + "RUBRIC_SCORE>"
+        stage5_airtight = (
+            open_tag
+            + '{"stage": 5, "role": "Red-Team Coherence Auditor", '
+            '"verdict": "AIRTIGHT_HALT", "criteria": ['
+            '{"id": "config_to_runtime_hooks", "evidence": "https://arxiv.org/abs/2406.01297", "score": 3},'
+            '{"id": "prompt_to_gate_schemas", "evidence": "https://arxiv.org/abs/2406.01297", "score": 3},'
+            '{"id": "single_to_multi_composition", "evidence": "https://arxiv.org/abs/2406.01297", "score": 3},'
+            '{"id": "cross_tree_and_doc_parity", "evidence": "https://arxiv.org/abs/2406.01297", "score": 3}'
+            '], "min_score": 3, "total_score": 12, "threshold": 9}'
+            + close_tag
+            + "\n[VERDICT: AIRTIGHT_HALT]"
+        )
+        res_s5 = rgg.evaluate_rubric_text(stage5_airtight)
+        self.assertEqual(res_s5["status"], "VALID")
+        self.assertEqual(res_s5["verdict"], "AIRTIGHT_HALT")
+
+        res_brc_s5 = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "send_message",
+                    "args": {"Message": stage5_airtight},
+                }
+            }
+        )
+        self.assertEqual(json.loads(res_brc_s5.stdout.strip())["decision"], "allow")
+
+        stage5_bad_airtight = stage5_airtight.replace('"score": 3', '"score": 1', 1).replace(
+            '"min_score": 3, "total_score": 12', '"min_score": 1, "total_score": 10'
+        )
+        self.assertEqual(rgg.evaluate_rubric_text(stage5_bad_airtight)["reason"], "min_score_veto")
+        res_brc_bad_s5 = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "send_message",
+                    "args": {"Message": stage5_bad_airtight},
+                }
+            }
+        )
+        self.assertEqual(json.loads(res_brc_bad_s5.stdout.strip())["decision"], "deny")
+
+        stage5_proceed_fix = (
+            open_tag
+            + '{"stage": 5, "role": "Red-Team Coherence Auditor", '
+            '"verdict": "PROCEED_FIX", "criteria": ['
+            '{"id": "config_to_runtime_hooks", "evidence": "https://arxiv.org/abs/2406.01297", "score": 1},'
+            '{"id": "prompt_to_gate_schemas", "evidence": "https://arxiv.org/abs/2406.01297", "score": 3},'
+            '{"id": "single_to_multi_composition", "evidence": "https://arxiv.org/abs/2406.01297", "score": 3},'
+            '{"id": "cross_tree_and_doc_parity", "evidence": "https://arxiv.org/abs/2406.01297", "score": 3}'
+            '], "min_score": 1, "total_score": 10, "threshold": 9}'
+            + close_tag
+            + "\n[VERDICT: PROCEED_FIX]"
+        )
+        self.assertEqual(rgg.evaluate_rubric_text(stage5_proceed_fix)["status"], "VALID")
+        res_brc_pf = self._run_brc_guard(
+            {
+                "toolCall": {
+                    "name": "send_message",
+                    "args": {"Message": stage5_proceed_fix},
+                }
+            }
+        )
+        self.assertEqual(json.loads(res_brc_pf.stdout.strip())["decision"], "allow")
+
+        # F-AGY-R6-01: telemetry-append.ps1 logs [VERDICT: PROCEED_FIX]
+        tel_hook = REPO_ROOT / ".agents" / "hooks" / "telemetry-append.ps1"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(tel_hook),
+                ],
+                input=json.dumps(
+                    {
+                        "conversationId": "c-r6",
+                        "fullyIdle": True,
+                        "lastAssistantMessage": "Phase 5 audit found gap. [VERDICT: PROCEED_FIX]",
+                        "artifactDirectoryPath": str(tmp_dir),
+                    }
+                ),
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            tel_file = tmp_dir / "agentic_telemetry.md"
+            self.assertTrue(tel_file.is_file())
+            self.assertIn("VERDICT:PROCEED_FIX", tel_file.read_text(encoding="utf-8"))
+
+        # F-AGY-R6-04: coherence_bake_gate.py 4-surface scanner and redteam_rubric_score check
+        cbg_dir = REPO_ROOT / ".agents" / "skills" / "coherence-bake" / "scripts"
+        if str(cbg_dir) not in sys.path:
+            sys.path.insert(0, str(cbg_dir))
+        import coherence_bake_gate as cbg  # noqa: E402
+
+        self.assertEqual(cbg._audit_repo_surface_gaps(REPO_ROOT), 0)
+        bad_rt_manifest = {
+            "uncapped_discovery": True,
+            "full_suite_executed": True,
+            "closed_loop_reaudit": True,
+            "independent_redteam_reaudit": True,
+            "surfaces_audited": {k: True for k in cbg.REQUIRED_AUDIT_SURFACES},
+            "redteam_rubric_score": {
+                "config_to_runtime_hooks": 1,
+                "prompt_to_gate_schemas": 3,
+                "single_to_multi_composition": 3,
+                "cross_tree_and_doc_parity": 3,
+            },
+            "test_failures": 0,
+            "invariant_violations": 0,
+        }
+        self.assertEqual(
+            cbg._check_exhaustiveness_manifest(bad_rt_manifest, require_manifest=True),
+            "incomplete_exhaustiveness_manifest",
+        )
+        good_rt_manifest = dict(bad_rt_manifest)
+        good_rt_manifest["redteam_rubric_score"] = {
+            k: 3 for k in cbg.REQUIRED_AUDIT_SURFACES
+        }
+        self.assertEqual(
+            cbg._check_exhaustiveness_manifest(good_rt_manifest, require_manifest=True),
+            "ok",
+        )
+
 
 
 class Meta(unittest.TestCase):

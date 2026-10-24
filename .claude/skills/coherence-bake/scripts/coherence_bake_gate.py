@@ -331,29 +331,82 @@ def _check_claude_hook_surface(repo_root: Path) -> int:
     return 0 if "Grep" in txt else 1
 
 
+def _missing_token_count(text: str, required_tokens: Sequence[str]) -> int:
+    """Return the count of required_tokens not present in text."""
+    missing = 0
+    for tok in required_tokens:
+        if tok not in text:
+            missing += 1
+    return missing
+
+
 def _check_single_tree_scripts(tree_root: Path) -> int:
-    """Check brc-guard.ps1 and telemetry-append.ps1 in one harness tree if present."""
+    """Check brc-guard.ps1, telemetry-append.ps1, and validate_tree.py if present."""
     gaps = 0
     brc = tree_root / "hooks" / "brc-guard.ps1"
     if brc.is_file():
-        brc_txt = brc.read_text(encoding="utf-8", errors="replace")
-        if "SearchPath" not in brc_txt:
-            gaps += 1
+        gaps += _missing_token_count(
+            brc.read_text(encoding="utf-8", errors="replace"),
+            (
+                "SearchPath",
+                "Get-WriteContentString",
+                "AIRTIGHT_HALT",
+                "PROCEED_FIX",
+                "subagent-role-least-privilege",
+                "explorer|research",
+            ),
+        )
     tel = tree_root / "hooks" / "telemetry-append.ps1"
     if tel.is_file():
-        tel_txt = tel.read_text(encoding="utf-8", errors="replace")
-        if (
-            "Get-TranscriptAssistantText" not in tel_txt
-            or "Remove-BacktickCodeSpans" not in tel_txt
-        ):
+        gaps += _missing_token_count(
+            tel.read_text(encoding="utf-8", errors="replace"),
+            (
+                "Get-TranscriptAssistantText",
+                "Remove-BacktickCodeSpans",
+                "[VERDICT: PROCEED_FIX]",
+            ),
+        )
+    vt_py = tree_root / "tests" / "validate_tree.py"
+    if vt_py.is_file():
+        gaps += _missing_token_count(
+            vt_py.read_text(encoding="utf-8", errors="replace"),
+            (
+                "_compute_func_mccabe",
+                "_check_rubric_schema_and_script_parity",
+                "rules_dir",
+            ),
+        )
+    return gaps
+
+
+def _check_shared_script_parity(repo_root: Path) -> int:
+    """Verify Stage 5 rubric verdicts and SHA-256 parity across harness trees."""
+    ag_rgg = (
+        repo_root
+        / ("." + "agents")
+        / "skills/comprehend-problem/scripts/rubric_grade_gate.py"
+    )
+    if not ag_rgg.is_file():
+        return 0
+    rgg_txt = ag_rgg.read_text(encoding="utf-8", errors="replace")
+    gaps = _missing_token_count(rgg_txt, ("AIRTIGHT_HALT", "PROCEED_FIX"))
+    for tree_name in ("." + "claude", "." + "codex"):
+        peer = (
+            repo_root
+            / tree_name
+            / "skills/comprehend-problem/scripts/rubric_grade_gate.py"
+        )
+        if peer.is_file() and peer.read_bytes() != ag_rgg.read_bytes():
             gaps += 1
     return gaps
 
 
 def _audit_repo_surface_gaps(repo_root: Path) -> int:
-    """Deterministically verify cross-surface hook/telemetry parity when harness dirs exist."""
-    gaps = _check_agents_hook_surface(repo_root) + _check_claude_hook_surface(
-        repo_root
+    """Deterministically verify 4-surface hook/telemetry/validator parity when present."""
+    gaps = (
+        _check_agents_hook_surface(repo_root)
+        + _check_claude_hook_surface(repo_root)
+        + _check_shared_script_parity(repo_root)
     )
     for tree_name in ("." + "agents", "." + "claude", "." + "codex"):
         gaps += _check_single_tree_scripts(repo_root / tree_name)
@@ -375,6 +428,37 @@ def _has_valid_audit_surfaces(surfaces: Any) -> bool:
     return all(surfaces.get(key) is True for key in REQUIRED_AUDIT_SURFACES)
 
 
+def _check_redteam_rubric(redteam_rubric: Any) -> bool:
+    """Return True if optional redteam_rubric_score is None or valid Stage 5 BARS."""
+    if redteam_rubric is None:
+        return True
+    if not isinstance(redteam_rubric, Mapping):
+        return False
+    scores: List[int] = []
+    for surface in REQUIRED_AUDIT_SURFACES:
+        val = redteam_rubric.get(surface)
+        if not _is_valid_bars_int(val) or int(val) < 2:
+            return False
+        scores.append(int(val))
+    return sum(scores) >= int(math.ceil(0.75 * 3.0 * len(scores)))
+
+
+def _has_valid_manifest_flags(manifest: Mapping[str, Any]) -> bool:
+    """Return True if required boolean flags, audit surfaces, and redteam rubric hold."""
+    req_bools = (
+        "uncapped_discovery",
+        "full_suite_executed",
+        "closed_loop_reaudit",
+        "independent_redteam_reaudit",
+    )
+    for key in req_bools:
+        if manifest.get(key) is not True:
+            return False
+    if not _has_valid_audit_surfaces(manifest.get("surfaces_audited")):
+        return False
+    return _check_redteam_rubric(manifest.get("redteam_rubric_score"))
+
+
 def _check_exhaustiveness_manifest(
     manifest: Any,
     require_manifest: bool = False,
@@ -382,17 +466,9 @@ def _check_exhaustiveness_manifest(
     """Validate exhaustiveness_manifest dict for 4-surface and red-team closure."""
     if manifest is None:
         return "incomplete_exhaustiveness_manifest" if require_manifest else "ok"
-    if not isinstance(manifest, Mapping):
-        return "incomplete_exhaustiveness_manifest"
-    req_bools = (
-        "uncapped_discovery",
-        "full_suite_executed",
-        "closed_loop_reaudit",
-        "independent_redteam_reaudit",
-    )
-    if not all(manifest.get(k) is True for k in req_bools):
-        return "incomplete_exhaustiveness_manifest"
-    if not _has_valid_audit_surfaces(manifest.get("surfaces_audited")):
+    if not isinstance(manifest, Mapping) or not _has_valid_manifest_flags(
+        manifest
+    ):
         return "incomplete_exhaustiveness_manifest"
     zero_counts = (
         _non_negative_count(manifest.get("test_failures", 0)) == 0

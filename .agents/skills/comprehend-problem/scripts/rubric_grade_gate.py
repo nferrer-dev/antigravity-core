@@ -28,8 +28,11 @@ VALID_VERDICTS: Tuple[str, ...] = (
     "TIER_0",
     "TIER_1",
     "TIER_2",
+    "AIRTIGHT_HALT",
+    "PROCEED_FIX",
 )
-APPROVAL_VERDICTS: Tuple[str, ...] = ("APPROVE", "PROCEED")
+APPROVAL_VERDICTS: Tuple[str, ...] = ("APPROVE", "PROCEED", "AIRTIGHT_HALT")
+REJECTION_VERDICTS: Tuple[str, ...] = ("REJECT", "PROCEED_FIX")
 
 _RUBRIC_TAG_RE = re.compile(
     r"<RUBRIC_SCORE>\s*(?P<json>\{[\s\S]*?\})\s*</RUBRIC_SCORE>",
@@ -235,7 +238,7 @@ def _check_verdict_consistency(
             return "rubric_threshold_not_met"
         if metrics["cobb_douglas"] < 0.75:
             return "cobb_douglas_below_threshold"
-    elif verdict == "REJECT":
+    elif verdict in REJECTION_VERDICTS:
         if (
             metrics["min_score"] >= 2
             and metrics["total_score"] >= effective_threshold
@@ -326,12 +329,11 @@ def _evaluate_single_rubric_json(
 def _aggregate_panel_verdict(
     results: Sequence[Mapping[str, Any]],
 ) -> str:
-    """Return non-compensatory panel verdict (HALT > REJECT > last)."""
+    """Return non-compensatory panel verdict (HALT > REJECT > PROCEED_FIX > last)."""
     verdicts = {str(r.get("verdict", "")).upper() for r in results}
-    if "HALT" in verdicts:
-        return "HALT"
-    if "REJECT" in verdicts:
-        return "REJECT"
+    for priority in ("HALT", "REJECT", "PROCEED_FIX"):
+        if priority in verdicts:
+            return priority
     return str(results[-1]["verdict"])
 
 

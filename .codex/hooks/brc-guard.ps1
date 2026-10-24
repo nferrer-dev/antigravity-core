@@ -161,10 +161,33 @@ function Test-TamperPath {
     $norm = $PathStr.Replace('/', '\').Trim()
     if ($norm -match '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') { return $false }
     if (($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|config\.toml|antigravity\.rules|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|CODEX\.md|CLAUDE\.md|AGENTS\.md|agentic_telemetry\.md)$') -or
-        ($norm -match '(?i)(^|\\)\.codex\\agents\\[A-Za-z0-9_-]+\.toml$')) {
+        ($norm -match '(?i)(^|\\)(\.agents|\.claude|\.codex)\\agents\\[A-Za-z0-9_-]+\.(md|toml)$')) {
         return $true
     }
     return $false
+}
+
+function Get-WriteContentString {
+    param($ArgsObj)
+    if ($null -eq $ArgsObj) { return '' }
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($cf in @('CodeContent', 'ReplacementContent', 'Replacement', 'new_string', 'content')) {
+        if ($ArgsObj.PSObject.Properties[$cf] -and $null -ne $ArgsObj.$cf) {
+            $parts.Add([string]$ArgsObj.$cf)
+        }
+    }
+    if ($ArgsObj.PSObject.Properties['edits'] -and $null -ne $ArgsObj.edits) {
+        foreach ($ed in @($ArgsObj.edits)) {
+            if ($null -ne $ed) {
+                foreach ($ef in @('new_string', 'Replacement', 'ReplacementContent')) {
+                    if ($ed.PSObject.Properties[$ef] -and $null -ne $ed.$ef) {
+                        $parts.Add([string]$ed.$ef)
+                    }
+                }
+            }
+        }
+    }
+    return ($parts -join "`n")
 }
 
 function Test-GeneratedOutputPath {
@@ -309,10 +332,11 @@ function Test-InvalidRubricScoreBlock {
     if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
     $blockMatches = [regex]::Matches($Text, '(?is)<RUBRIC_SCORE>\s*(\{[\s\S]*?\})\s*</RUBRIC_SCORE>')
     if ($blockMatches.Count -eq 0) { return $false }
-    $validVerdicts = @('APPROVE', 'REJECT', 'PROCEED', 'HALT', 'TIER_0', 'TIER_1', 'TIER_2')
+    $validVerdicts = @('APPROVE', 'REJECT', 'PROCEED', 'HALT', 'TIER_0', 'TIER_1', 'TIER_2', 'AIRTIGHT_HALT', 'PROCEED_FIX')
     $lastVerdict = ''
     $hasReject = $false
     $hasHalt = $false
+    $hasProceedFix = $false
     $seenPanelRoles = @{}
     foreach ($bm in $blockMatches) {
         $rawJson = $bm.Groups[1].Value
@@ -356,6 +380,7 @@ function Test-InvalidRubricScoreBlock {
         $lastVerdict = $verdict
         if ($verdict -eq 'REJECT') { $hasReject = $true }
         if ($verdict -eq 'HALT') { $hasHalt = $true }
+        if ($verdict -eq 'PROCEED_FIX') { $hasProceedFix = $true }
         $critList = @($obj.criteria)
         $minCrit = if ($stageVal -eq 0) { 1 } else { 3 }
         if ($critList.Count -lt $minCrit) { return $true }
@@ -389,13 +414,13 @@ function Test-InvalidRubricScoreBlock {
             $effThr = [int]$obj.threshold
             if ($effThr -lt $defThr) { return $true }
         }
-        if ($verdict -in @('APPROVE', 'PROCEED')) {
+        if ($verdict -in @('APPROVE', 'PROCEED', 'AIRTIGHT_HALT')) {
             if ($actualMin -lt 2 -or $actualTotal -lt $effThr) { return $true }
-        } elseif ($verdict -eq 'REJECT') {
+        } elseif ($verdict -in @('REJECT', 'PROCEED_FIX')) {
             if ($actualMin -ge 2 -and $actualTotal -ge $effThr) { return $true }
         }
     }
-    $panelVerdict = if ($hasHalt) { 'HALT' } elseif ($hasReject) { 'REJECT' } else { $lastVerdict }
+    $panelVerdict = if ($hasHalt) { 'HALT' } elseif ($hasReject) { 'REJECT' } elseif ($hasProceedFix) { 'PROCEED_FIX' } else { $lastVerdict }
     $proseMatches = [regex]::Matches($Text, '\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]')
     if ($proseMatches.Count -gt 0) {
         $proseVerdict = $proseMatches[$proseMatches.Count - 1].Groups[1].Value.Trim().ToUpperInvariant()
@@ -473,12 +498,7 @@ if ($filePath -ne '') {
         if (Test-MissingStage0Artifact $filePath $payload) {
             Deny 'stage0-comprehend-problem-gate' 'Run comprehend-problem (.codex/skills/comprehend-problem/SKILL.md) and write non-empty scratch/stage0_<topic>.md or .json (with SAT status) before writing implementation_plan.md'
         }
-        $writeBody = ''
-        foreach ($cf in @('content', 'new_string', 'CodeContent', 'ReplacementContent', 'Replacement')) {
-            if ($toolInput.PSObject.Properties[$cf] -and $null -ne $toolInput.$cf) {
-                $writeBody += "`n" + [string]$toolInput.$cf
-            }
-        }
+        $writeBody = Get-WriteContentString $toolInput
         if (($toolName -match '^(Write|write_to_file|write_file)$') -and (Test-Stage1CandidateSolutionsGate $filePath $writeBody)) {
             Deny 'stage1-candidate-solutions-gate' 'candidate_solutions.md must include all 3 cognitive framing lenses (Radical Innovator, Enterprise Minimalist, Security Paranoiac)'
         }
@@ -512,19 +532,30 @@ if ($toolName -match '^(spawn_agent|Agent|Task)$') {
             Deny 'subagent-message-injection-guard' 'Blocked secret token or prompt-injection override directive in subagent prompt'
         }
     }
-    $agentType = ''
-    foreach ($af in @('agent_type', 'subagent_type', 'role', 'Role')) {
-        if ($toolInput.PSObject.Properties[$af] -and $null -ne $toolInput.$af) {
-            $agentType = [string]$toolInput.$af
+    $subType = ''
+    foreach ($tf in @('agent_type', 'subagent_type', 'TypeName')) {
+        if ($toolInput.PSObject.Properties[$tf] -and $null -ne $toolInput.$tf) {
+            $subType = [string]$toolInput.$tf
             break
         }
     }
-    if ($agentType -match '(?i)^(stage3-design-reviewer|stage4-code-auditor|cortex-librarian|explorer)$') {
+    $subRole = ''
+    foreach ($rf in @('description', 'role', 'Role')) {
+        if ($toolInput.PSObject.Properties[$rf] -and $null -ne $toolInput.$rf) {
+            $subRole = [string]$toolInput.$rf
+            break
+        }
+    }
+    $agentType = if (-not [string]::IsNullOrWhiteSpace($subType)) { $subType } else { $subRole }
+    if ($subType -match '^(?i)(self|default|worker)$' -and $subRole -match '(?i)(Style Expert|Security Auditor|Code Health Agent|Idea Skeptic|System Architect|Requirements Engineer|Scope Reviewer|Cortex Librarian|Codebase Explorer)') {
+        Deny 'subagent-role-least-privilege' "Read-only auditor/explorer role '$subRole' must not be spawned with write-capable agent_type='$subType'"
+    }
+    if ($agentType -match '(?i)^(stage3-design-reviewer|stage4-code-auditor|cortex-librarian|explorer|research)$') {
         if ($subPrompt -match '(?i)\b(apply_patch|git\s+commit|git\s+push|rm\s+-rf|Remove-Item)\b') {
             Deny 'subagent-role-least-privilege' "Read-only subagent '$agentType' must not be instructed to mutate files or git state"
         }
     }
-    if ((Test-SessionWebTainted $payload) -and ($agentType -notmatch '(?i)^(stage3-design-reviewer|stage4-code-auditor|cortex-librarian|explorer)$')) {
+    if ((Test-SessionWebTainted $payload) -and ($agentType -notmatch '(?i)^(stage3-design-reviewer|stage4-code-auditor|cortex-librarian|explorer|research)$')) {
         Deny 'subagent-taint-delegation-guard' 'Spawning write-capable subagent while session is web-tainted is blocked'
     }
     exit 0
@@ -581,19 +612,31 @@ if ($toolName -match '^(WebFetch|web_fetch)$') {
             Deny 'ssrf-local-metadata-url' $targetUrl
         }
         try {
+            $taintObj = @{
+                url = $targetUrl
+                timestamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+            } | ConvertTo-Json -Compress
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            $baseDir = $null
+            if ($payload.PSObject.Properties['artifactDirectoryPath'] -and $payload.artifactDirectoryPath) {
+                $baseDir = [string]$payload.artifactDirectoryPath
+            } elseif ($payload.PSObject.Properties['cwd'] -and $payload.cwd) {
+                $baseDir = [string]$payload.cwd
+            }
+            if ($baseDir -and (Test-Path -LiteralPath $baseDir)) {
+                $scratchDir = Join-Path $baseDir 'scratch'
+                if (-not (Test-Path -LiteralPath $scratchDir)) {
+                    New-Item -ItemType Directory -Path $scratchDir -Force | Out-Null
+                }
+                [System.IO.File]::WriteAllText((Join-Path $scratchDir '.untrusted_web_taint.json'), $taintObj, $utf8NoBom)
+            }
             $root = Resolve-CodexRepoRoot
-            if ($root) {
+            if ($root -and (Test-Path -LiteralPath (Join-Path $root '.codex'))) {
                 $telDir = Join-Path $root '.codex\telemetry'
                 if (-not (Test-Path -LiteralPath $telDir)) {
                     New-Item -ItemType Directory -Path $telDir -Force | Out-Null
                 }
-                $taintFile = Join-Path $telDir '.untrusted_web_taint.json'
-                $taintObj = @{
-                    url = $targetUrl
-                    timestamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-                } | ConvertTo-Json -Compress
-                $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-                [System.IO.File]::WriteAllText($taintFile, $taintObj, $utf8NoBom)
+                [System.IO.File]::WriteAllText((Join-Path $telDir '.untrusted_web_taint.json'), $taintObj, $utf8NoBom)
             }
         } catch {
             # Ignore taint write failure on read-only paths.

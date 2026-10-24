@@ -757,6 +757,78 @@ class LiveTree(unittest.TestCase):
             tel_file = tel_root / ".claude" / "telemetry" / "agentic_telemetry.md"
             self.assertFalse(tel_file.exists())
 
+    def test_coherence_bake_r6_f_agy_r6_01_to_04_claude(self):
+        import os
+
+        self.assertTrue(hasattr(vt, "_compute_func_mccabe"))
+        self.assertTrue(hasattr(vt, "_check_rubric_schema_and_script_parity"))
+        self.assertEqual(vt._check_rubric_schema_and_script_parity(REPO_ROOT), [])
+
+        open_tag = "<" + "RUBRIC_SCORE>"
+        close_tag = "</" + "RUBRIC_SCORE>"
+        stage5_airtight = (
+            open_tag
+            + '{"stage": 5, "role": "Red-Team Coherence Auditor", '
+            '"verdict": "AIRTIGHT_HALT", "criteria": ['
+            '{"id": "c1", "evidence": "a", "score": 3},'
+            '{"id": "c2", "evidence": "a", "score": 3},'
+            '{"id": "c3", "evidence": "a", "score": 3}'
+            '], "min_score": 3, "total_score": 9, "threshold": 7}'
+            + close_tag
+            + "\n[VERDICT: AIRTIGHT_HALT]"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            res_ok = self._run_claude_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "SendMessage",
+                    "tool_input": {"message": stage5_airtight},
+                }
+            )
+            self.assertEqual(res_ok.returncode, 0, res_ok.stderr)
+
+            res_res_mut = self._run_claude_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Agent",
+                    "tool_input": {
+                        "subagent_type": "research",
+                        "description": "SOTA Researcher",
+                        "prompt": "Run git commit -m 'mutate'",
+                    },
+                }
+            )
+            self.assertEqual(res_res_mut.returncode, 2)
+
+            tel_root = tmp_path / "tel_r6"
+            (tel_root / ".claude" / "telemetry").mkdir(parents=True, exist_ok=True)
+            tel_hook = REPO_ROOT / ".claude" / "hooks" / "telemetry-append.ps1"
+            subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(tel_hook),
+                ],
+                input=json.dumps(
+                    {
+                        "hook_event_name": "Stop",
+                        "last_assistant_message": "Audit found seam. [VERDICT: PROCEED_FIX]",
+                    }
+                ),
+                env={**os.environ, "CLAUDE_PROJECT_DIR": str(tel_root)},
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            tel_file = tel_root / ".claude" / "telemetry" / "agentic_telemetry.md"
+            self.assertTrue(tel_file.is_file())
+            self.assertIn("VERDICT:PROCEED_FIX", tel_file.read_text(encoding="utf-8"))
+
 
 
 

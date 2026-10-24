@@ -201,7 +201,8 @@ function Test-TamperFilePath {
     if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
     $norm = $PathStr.Replace('/', '\')
     if ($norm -match '(?i)(^|\\)(scratch|tmp|temp)(\\|$)') { return $false }
-    if ($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|CODEX\.md|config\.toml|antigravity\.rules|agentic_telemetry\.md)$') {
+    if (($norm -match '(?i)(^|\\)(hooks\.json|settings\.json|brc-guard\.ps1|telemetry-append\.ps1|\.pre-commit-config\.yaml|mcp_config\.json|\.mcp\.json|plugin\.json|AGENTS\.md|CLAUDE\.md|CODEX\.md|config\.toml|antigravity\.rules|agentic_telemetry\.md)$') -or
+        ($norm -match '(?i)(^|\\)(\.agents|\.claude|\.codex)\\agents\\[A-Za-z0-9_-]+\.(md|toml)$')) {
         return $true
     }
     return $false
@@ -267,9 +268,29 @@ function Test-MissingStageArtifact {
             $searchDirs.Add($artDir.Replace('/', '\'))
         }
     }
+    $cwdDir = ''
+    if ($null -ne $PayloadObj -and $PayloadObj.PSObject.Properties['cwd']) {
+        $cwdDir = [string]$PayloadObj.cwd
+        if (-not [string]::IsNullOrWhiteSpace($cwdDir)) {
+            $cwdNorm = $cwdDir.Replace('/', '\')
+            if (-not $searchDirs.Contains($cwdNorm)) {
+                $searchDirs.Add($cwdNorm)
+            }
+        }
+    }
     $parentDir = Split-Path -Parent $norm
-    if (-not [string]::IsNullOrWhiteSpace($parentDir) -and -not $searchDirs.Contains($parentDir)) {
-        $searchDirs.Add($parentDir)
+    if (-not [string]::IsNullOrWhiteSpace($parentDir)) {
+        $resolvedParent = $parentDir
+        if (-not [System.IO.Path]::IsPathRooted($parentDir)) {
+            if (-not [string]::IsNullOrWhiteSpace($cwdDir)) {
+                $resolvedParent = Join-Path ($cwdDir.Replace('/', '\')) $parentDir
+            } else {
+                $resolvedParent = ''
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($resolvedParent) -and -not $searchDirs.Contains($resolvedParent)) {
+            $searchDirs.Add($resolvedParent)
+        }
     }
     if ($searchDirs.Count -eq 0) { return $false }
     foreach ($dir in $searchDirs) {
@@ -373,10 +394,11 @@ function Test-InvalidRubricScoreBlock {
     if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
     $blockMatches = [regex]::Matches($Text, '(?is)<RUBRIC_SCORE>\s*(\{[\s\S]*?\})\s*</RUBRIC_SCORE>')
     if ($blockMatches.Count -eq 0) { return $false }
-    $validVerdicts = @('APPROVE', 'REJECT', 'PROCEED', 'HALT', 'TIER_0', 'TIER_1', 'TIER_2')
+    $validVerdicts = @('APPROVE', 'REJECT', 'PROCEED', 'HALT', 'TIER_0', 'TIER_1', 'TIER_2', 'AIRTIGHT_HALT', 'PROCEED_FIX')
     $lastVerdict = ''
     $hasReject = $false
     $hasHalt = $false
+    $hasProceedFix = $false
     $seenPanelRoles = @{}
     foreach ($bm in $blockMatches) {
         $rawJson = $bm.Groups[1].Value
@@ -420,6 +442,7 @@ function Test-InvalidRubricScoreBlock {
         $lastVerdict = $verdict
         if ($verdict -eq 'REJECT') { $hasReject = $true }
         if ($verdict -eq 'HALT') { $hasHalt = $true }
+        if ($verdict -eq 'PROCEED_FIX') { $hasProceedFix = $true }
         $critList = @($obj.criteria)
         $minCrit = if ($stageVal -eq 0) { 1 } else { 3 }
         if ($critList.Count -lt $minCrit) { return $true }
@@ -453,13 +476,13 @@ function Test-InvalidRubricScoreBlock {
             $effThr = [int]$obj.threshold
             if ($effThr -lt $defThr) { return $true }
         }
-        if ($verdict -in @('APPROVE', 'PROCEED')) {
+        if ($verdict -in @('APPROVE', 'PROCEED', 'AIRTIGHT_HALT')) {
             if ($actualMin -lt 2 -or $actualTotal -lt $effThr) { return $true }
-        } elseif ($verdict -eq 'REJECT') {
+        } elseif ($verdict -in @('REJECT', 'PROCEED_FIX')) {
             if ($actualMin -ge 2 -and $actualTotal -ge $effThr) { return $true }
         }
     }
-    $panelVerdict = if ($hasHalt) { 'HALT' } elseif ($hasReject) { 'REJECT' } else { $lastVerdict }
+    $panelVerdict = if ($hasHalt) { 'HALT' } elseif ($hasReject) { 'REJECT' } elseif ($hasProceedFix) { 'PROCEED_FIX' } else { $lastVerdict }
     $proseMatches = [regex]::Matches($Text, '\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]')
     if ($proseMatches.Count -gt 0) {
         $proseVerdict = $proseMatches[$proseMatches.Count - 1].Groups[1].Value.Trim().ToUpperInvariant()
@@ -590,6 +613,11 @@ if ($toolName -eq 'invoke_subagent' -and $null -ne $argsObj) {
         if ($sub.PSObject.Properties['TypeName'] -and $null -ne $sub.TypeName) { $subType = [string]$sub.TypeName }
         if ($subType -ieq 'self' -and $subRole -match '(?i)(Style Expert|Security Auditor|Code Health Agent|Idea Skeptic|System Architect|Requirements Engineer|Scope Reviewer|Cortex Librarian|Codebase Explorer)') {
             Emit-Deny 'subagent-role-least-privilege' "Read-only auditor/explorer role '$subRole' must not be spawned with write-capable TypeName='self'"
+        }
+        if ($subType -match '(?i)^(stage3-design-reviewer|stage4-code-auditor|cortex-librarian|explorer|research)$') {
+            if ($subPromptStr -match '(?i)\b(apply_patch|git\s+commit|git\s+push|rm\s+-rf|Remove-Item)\b') {
+                Emit-Deny 'subagent-role-least-privilege' "Read-only subagent '$subType' must not be instructed to mutate files or git state"
+            }
         }
         if ($hasWebTaint -and ($subType -notmatch '(?i)^(stage3-design-reviewer|stage4-code-auditor|cortex-librarian|explorer|research)$')) {
             Emit-ForceAsk 'subagent-taint-delegation-guard' "Spawning write-capable subagent '$subRole' (TypeName='$subType') while session is web-tainted requires confirmation"
