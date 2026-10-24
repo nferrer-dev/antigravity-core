@@ -30,6 +30,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -768,6 +769,96 @@ def _legacy_hook_and_ci_gaps(repo_root: Path) -> List[str]:
     return [f"harness_surface_gap_{i}" for i in range(count)]
 
 
+def _run_repo_ruff_check(repo_root: Path, pyproj_text: str) -> List[str]:
+    """Run ruff check when configured in pyproject.toml and return diagnostics."""
+    if "[tool.ruff" not in pyproj_text:
+        return []
+    targets = [d for d in ("src", "tests", "scripts") if (repo_root / d).exists()]
+    cmd = [sys.executable, "-m", "ruff", "check", "--quiet"] + (targets or ["."])
+    try:
+        proc = subprocess.run(
+            cmd, cwd=str(repo_root), capture_output=True, text=True, timeout=30
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if proc.returncode == 0:
+        return []
+    return [
+        f"ruff: {ln.strip()}"
+        for ln in proc.stdout.splitlines()
+        if ln.strip()
+    ][:50]
+
+
+def _extract_toml_list(pyproj_text: str, key: str) -> List[str]:
+    """Extract string items from a TOML array assignment `key = [...]`."""
+    match = re.search(
+        rf"(?m)^\s*{re.escape(key)}\s*=\s*\[([\s\S]*?)\]", pyproj_text
+    )
+    if not match:
+        return []
+    return [m.group(1).strip("/") for m in re.finditer(r'"([^"]+)"', match.group(1))]
+
+
+def _is_covered_by_testpaths(rel_path: str, testpaths: Sequence[str]) -> bool:
+    """Return True if rel_path matches or is inside at least one entry in testpaths."""
+    return any(
+        rel_path == tp or rel_path.startswith(f"{tp}/") for tp in testpaths
+    )
+
+
+def _audit_pyproject_testpaths(repo_root: Path, pyproj_text: str) -> List[str]:
+    """Verify every tests/**/test_*.py file is covered by pyproject.toml testpaths."""
+    testpaths = _extract_toml_list(pyproj_text, "testpaths")
+    tests_dir = repo_root / "tests"
+    if not testpaths or not tests_dir.is_dir():
+        return []
+    gaps: List[str] = []
+    for dirpath, dirnames, filenames in os.walk(tests_dir):
+        dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDED_WALK_DIRS)
+        for fname in sorted(filenames):
+            if fname.startswith("test_") and fname.endswith(".py"):
+                rel = str((Path(dirpath) / fname).relative_to(repo_root)).replace("\\", "/")
+                if not _is_covered_by_testpaths(rel, testpaths):
+                    gaps.append(f"{rel}: orphaned test file outside pyproject.toml testpaths")
+    return gaps
+
+
+def _has_package_target(repo_root: Path, pkg: str) -> bool:
+    """Return True if pkg exists at repo_root/<pkg> or repo_root/src/<pkg>."""
+    return (repo_root / pkg).exists() or (repo_root / "src" / pkg).exists()
+
+
+def _audit_ci_and_entrypoints(repo_root: Path) -> List[str]:
+    """Verify CI --cov targets and Docker/config module entrypoints exist in repo_root."""
+    gaps: List[str] = []
+    ci_yml = repo_root / ".github" / "workflows" / "ci.yml"
+    if ci_yml.is_file():
+        ci_txt = ci_yml.read_text(encoding="utf-8", errors="replace")
+        for match in re.finditer(r"--cov=([A-Za-z0-9_]+)", ci_txt):
+            pkg = match.group(1)
+            if not _has_package_target(repo_root, pkg):
+                gaps.append(f".github/workflows/ci.yml: --cov={pkg} targets missing package")
+    if not _has_package_target(repo_root, "recommender"):
+        for rel in ("Dockerfile", "docker-compose.yml", "alembic/env.py", "scripts/daily-digest.sh"):
+            fp = repo_root / rel
+            if fp.is_file() and "recommender." in fp.read_text(encoding="utf-8", errors="replace"):
+                gaps.append(f"{rel}: stale entrypoint reference to deleted package recommender")
+    return gaps
+
+
+def _audit_pyproject_and_ci(repo_root: Path) -> List[str]:
+    """Audit pyproject.toml ruff cleanliness, testpaths coverage, and CI/Docker entrypoints."""
+    gaps = _audit_ci_and_entrypoints(repo_root)
+    pyproj = repo_root / "pyproject.toml"
+    if not pyproj.is_file():
+        return gaps
+    pyproj_text = pyproj.read_text(encoding="utf-8", errors="replace")
+    gaps.extend(_run_repo_ruff_check(repo_root, pyproj_text))
+    gaps.extend(_audit_pyproject_testpaths(repo_root, pyproj_text))
+    return gaps
+
+
 def audit_repo_surfaces(repo_root: Path) -> List[str]:
     """Generatively scan 100% of repo files and cross-tree surfaces for defects."""
     resolved_root = repo_root.resolve()
@@ -784,12 +875,13 @@ def audit_repo_surfaces(repo_root: Path) -> List[str]:
                 gaps.extend(
                     _audit_single_py_file(fpath, rel, extra_loaded=repo_loaded)
                 )
-            elif fpath.suffix in {".js", ".ts"}:
+            elif fpath.suffix in {".js", ".ts", ".jsx", ".tsx"}:
                 gaps.extend(_audit_single_js_file(fpath, rel))
             elif fpath.suffix == ".md":
                 gaps.extend(_audit_single_md_file(fpath, rel))
     gaps.extend(_audit_cross_tree_skill_parity(resolved_root))
     gaps.extend(_legacy_hook_and_ci_gaps(resolved_root))
+    gaps.extend(_audit_pyproject_and_ci(resolved_root))
     return gaps
 
 
@@ -906,6 +998,15 @@ def _resolve_proof_path(raw_path: Any, repo_root: Path) -> Optional[Path]:
     return cand if cand.is_file() else None
 
 
+def _matches_receipt_repo(obj: Mapping[str, Any], repo_root: Path) -> bool:
+    """Verify red-team receipt repo_name matches repo_root when present or inside git repo."""
+    expected = repo_root.resolve().name
+    declared = obj.get("repo_name")
+    if _is_nonempty_str(declared):
+        return str(declared).strip() == expected
+    return not (repo_root.resolve() / ".git").exists()
+
+
 def _check_redteam_receipt_file(raw_path: Any, repo_root: Path) -> bool:
     """Verify on-disk Phase 5 red-team receipt contains Stage 5 AIRTIGHT_HALT rubric."""
     target = _resolve_proof_path(raw_path, repo_root)
@@ -923,6 +1024,7 @@ def _check_redteam_receipt_file(raw_path: Any, repo_root: Path) -> bool:
         isinstance(obj, Mapping)
         and obj.get("stage") == 5
         and obj.get("verdict") == "AIRTIGHT_HALT"
+        and _matches_receipt_repo(obj, repo_root)
     )
 
 
