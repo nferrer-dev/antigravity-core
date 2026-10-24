@@ -40,7 +40,7 @@ To prevent catastrophic hallucinations and wild goose chases, all agents and sub
 | 2 — Technical debate | `technical-debate` | Significant design decisions, major configuration changes, vetting Stage 1 candidates — must return PROCEED before any plan is drafted |
 | 3 — Design validation | `design-validate` | A drafted `implementation_plan.md` or architecture artifact — committee consensus before code |
 | 4 — Iterative implementation | `iterative-implement` | Executing or finalizing code changes — implementation committee reviews the diff |
-| 5 — Coherence bake | `coherence-bake` | Uncapped full-system coherence, system design, optimization, and SOTA benchmark audit with BARS rubric grading and diminishing-returns gate |
+| 5 — Coherence bake | `coherence-bake` | Default 100% repo/feature (`--scope`) coverage ledger, whole-repo surface audit, BARS rubric grading, and multi-wave `AIRTIGHT_HALT` gate |
 
 **Universal Rubric-Graded Qualitative Judgment Gate (`rubric_grade_gate.py`)**: Every qualitative LLM judgment across Stages 0–5 is quantitatively graded against a stage-specific `0..3` Behaviorally Anchored Rating Scale (`<RUBRIC_SCORE>` with `"evidence"` preceding `"score"`, non-compensatory `min_score >= 2`, `total_score >= ceil(0.75 * 3 * n)`, and `cobb_douglas >= 0.75`), deterministically verified by `.claude/skills/comprehend-problem/scripts/rubric_grade_gate.py` and `.claude/hooks/brc-guard.ps1` (`rubric-score-threshold-gate`).
 

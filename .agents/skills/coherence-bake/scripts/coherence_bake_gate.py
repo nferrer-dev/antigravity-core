@@ -357,10 +357,19 @@ def _count_non_test_high_complexity(ast_data: Mapping[str, Any]) -> int:
     return count
 
 
+def _matches_scope(rel_path: str, scope_prefix: str) -> bool:
+    """Return True if rel_path is inside scope_prefix (empty or '.' matches 100% of repo)."""
+    norm = scope_prefix.strip().replace("\\", "/").strip("/")
+    if not norm or norm == ".":
+        return True
+    return rel_path == norm or rel_path.startswith(f"{norm}/")
+
+
 def build_file_coverage_ledger(
     repo_root: Path,
+    scope_prefix: str = "",
 ) -> Dict[str, Dict[str, str]]:
-    """Walk repo_root and build a deterministic SHA-256 ledger of scannable files."""
+    """Walk repo_root and build a 100% SHA-256 ledger of scannable repo or feature files."""
     resolved_root = repo_root.resolve()
     ledger: Dict[str, Dict[str, str]] = {}
     for dirpath, dirnames, filenames in os.walk(resolved_root):
@@ -372,6 +381,8 @@ def build_file_coverage_ledger(
             if fpath.suffix.lower() in BINARY_EXTENSIONS or not fpath.is_file():
                 continue
             rel = str(fpath.relative_to(resolved_root)).replace("\\", "/")
+            if not _matches_scope(rel, scope_prefix):
+                continue
             digest = hashlib.sha256(fpath.read_bytes()).hexdigest()
             ledger[rel] = {"sha256": digest, "status": "CLEAN"}
     return ledger
@@ -810,12 +821,13 @@ def _check_file_coverage_ledger(
     ledger: Any,
     repo_root: Path,
     verified_ids: Set[str],
+    scope_prefix: str = "",
 ) -> bool:
-    """Verify 100% repository file coverage and SHA-256 digests on disk."""
+    """Verify 100% repo or feature file coverage and SHA-256 digests on disk."""
     if not isinstance(ledger, Mapping):
         return False
-    expected = build_file_coverage_ledger(repo_root)
-    if set(ledger.keys()) != set(expected.keys()):
+    expected = build_file_coverage_ledger(repo_root, scope_prefix=scope_prefix)
+    if not expected or set(ledger.keys()) != set(expected.keys()):
         return False
     return all(
         _is_valid_ledger_entry(
@@ -900,8 +912,9 @@ def _check_disk_closure_proofs(
     verified_ids: Set[str],
 ) -> bool:
     """Enforce mandatory on-disk file coverage ledger and closure proofs."""
+    scope_str = str(manifest.get("scope_prefix", ""))
     if not _check_file_coverage_ledger(
-        manifest.get("file_coverage_ledger"), repo_root, verified_ids
+        manifest.get("file_coverage_ledger"), repo_root, verified_ids, scope_str
     ):
         return False
     if verified_ids:
@@ -1416,7 +1429,30 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=".",
         help="Repository root directory for validating file containment.",
     )
+    parser.add_argument(
+        "--scope",
+        default="",
+        help="Optional feature subpath prefix (defaults to 100%% of repo_root).",
+    )
     return parser
+
+
+def _normalize_cli_findings_payload(
+    findings_data: Any,
+    scope_prefix: str,
+) -> Mapping[str, Any]:
+    """Enforce 100% repo/feature manifest requirement by default on CLI inputs."""
+    if isinstance(findings_data, Mapping):
+        payload = dict(findings_data)
+    elif isinstance(findings_data, list):
+        payload = {"findings": findings_data}
+    else:
+        payload = {"findings": []}
+    if scope_prefix and isinstance(payload.get("exhaustiveness_manifest"), Mapping):
+        manifest = dict(payload["exhaustiveness_manifest"])
+        manifest.setdefault("scope_prefix", scope_prefix)
+        payload["exhaustiveness_manifest"] = manifest
+    return payload
 
 
 def _execute_cli_gate(args: argparse.Namespace) -> int:
@@ -1424,7 +1460,10 @@ def _execute_cli_gate(args: argparse.Namespace) -> int:
     try:
         ast_data = _load_json_file(Path(args.ast_json))
         z3_data = _load_json_file(Path(args.z3_json))
-        findings_data = _load_json_file(Path(args.findings_json))
+        raw_findings = _load_json_file(Path(args.findings_json))
+        findings_data = _normalize_cli_findings_payload(
+            raw_findings, args.scope
+        )
         result = evaluate_bake_inputs(
             ast_data=ast_data if isinstance(ast_data, Mapping) else {},
             z3_data=z3_data if isinstance(z3_data, Mapping) else {},
@@ -1455,7 +1494,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return code
     if args.build_ledger:
         root_p, out_p = Path(args.build_ledger[0]), Path(args.build_ledger[1])
-        _write_json_file(out_p, build_file_coverage_ledger(root_p))
+        _write_json_file(
+            out_p, build_file_coverage_ledger(root_p, scope_prefix=args.scope)
+        )
         return 0
     if args.audit_repo:
         gaps = audit_repo_surfaces(Path(args.audit_repo))
