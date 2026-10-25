@@ -1505,14 +1505,45 @@ def _has_alembic_001_drift(schema_txt: str) -> bool:
     return "source_url" in schema_txt
 
 
+def _check_alembic_index_parity(repo_root: Path) -> List[str]:
+    """Check if alembic/versions/002_add_indexes.py index names match SingleWriterDB."""
+    idx_py = repo_root / "alembic" / "versions" / "002_add_indexes.py"
+    db_py = repo_root / "src" / "orchestration" / "db.py"
+    if not idx_py.is_file() or not db_py.is_file():
+        return []
+    idx_a = set(
+        re.findall(
+            r"\bidx_[a-zA-Z0-9_]+\b",
+            idx_py.read_text(encoding="utf-8", errors="replace"),
+        )
+    )
+    idx_b = set(
+        re.findall(
+            r"\bidx_[a-zA-Z0-9_]+\b",
+            db_py.read_text(encoding="utf-8", errors="replace"),
+        )
+    )
+    if idx_a != idx_b:
+        return [
+            "alembic/versions/002_add_indexes.py: index set drift vs SingleWriterDB"
+        ]
+    return []
+
+
 def _audit_alembic_vs_runtime_schema(repo_root: Path) -> List[str]:
-    """Audit alembic/env.py fallback URL and 001_initial_schema.py vs SingleWriterDB."""
+    """Audit alembic/env.py fallback URL and 001/002 migrations vs SingleWriterDB."""
     gaps: List[str] = []
     env_py = repo_root / "alembic" / "env.py"
-    if env_py.is_file() and "sqlite:///data/api.db" in env_py.read_text(
-        encoding="utf-8", errors="replace"
-    ):
-        gaps.append("alembic/env.py: stale fallback sqlite:///data/api.db")
+    if env_py.is_file():
+        env_txt = env_py.read_text(encoding="utf-8", errors="replace")
+        if "sqlite:///data/api.db" in env_txt:
+            gaps.append("alembic/env.py: stale fallback sqlite:///data/api.db")
+        if "PP_DB_PATH" in env_txt and "DB_PATH" not in env_txt.replace(
+            "PP_DB_PATH", ""
+        ):
+            gaps.append(
+                "alembic/env.py: PP_DB_PATH read without DB_PATH fallback parity"
+            )
     init_py = repo_root / "alembic" / "versions" / "001_initial_schema.py"
     db_py = repo_root / "src" / "orchestration" / "db.py"
     if init_py.is_file() and db_py.is_file():
@@ -1522,6 +1553,7 @@ def _audit_alembic_vs_runtime_schema(repo_root: Path) -> List[str]:
             gaps.append(
                 "alembic/versions/001_initial_schema.py: schema drift vs SingleWriterDB"
             )
+    gaps.extend(_check_alembic_index_parity(repo_root))
     return gaps
 
 
@@ -1700,8 +1732,40 @@ def _audit_test_import_prefixes(repo_root: Path) -> List[str]:
     return gaps
 
 
+def _audit_scripts_and_chroma_env_parity(repo_root: Path) -> List[str]:
+    """Check scripts and chroma_client for DB_PATH/PP_DB_PATH and CHROMA_DB_DIR/PP_CHROMA_DIR parity."""
+    checks = (
+        (
+            "scripts/run_e2e_pipeline.py",
+            "DB_PATH",
+            "PP_DB_PATH",
+            "scripts/run_e2e_pipeline.py: DB_PATH set without PP_DB_PATH parity",
+        ),
+        (
+            "scripts/verify_db.py",
+            "CHROMA_DB_DIR",
+            "PP_CHROMA_DIR",
+            "scripts/verify_db.py: CHROMA_DB_DIR read without PP_CHROMA_DIR parity",
+        ),
+        (
+            "src/scoring/chroma_client.py",
+            "PP_CHROMA_DIR",
+            "CHROMA_DB_DIR",
+            "src/scoring/chroma_client.py: PP_CHROMA_DIR read without CHROMA_DB_DIR fallback parity",
+        ),
+    )
+    gaps: List[str] = []
+    for rel, present_tok, required_tok, msg in checks:
+        fp = repo_root / rel
+        if fp.is_file():
+            txt = fp.read_text(encoding="utf-8", errors="replace")
+            if present_tok in txt and required_tok not in txt:
+                gaps.append(msg)
+    return gaps
+
+
 def _audit_db_path_env_parity(repo_root: Path) -> List[str]:
-    """Flag src/**/*.py files reading DB_PATH from os.environ without PP_DB_PATH fallback."""
+    """Flag src/**/*.py and scripts reading DB_PATH/Chroma env vars without fallback parity."""
     src_dir = repo_root / "src"
     if not src_dir.is_dir():
         return []
@@ -1711,6 +1775,7 @@ def _audit_db_path_env_parity(repo_root: Path) -> List[str]:
         txt = fp.read_text(encoding="utf-8", errors="replace")
         if 'os.environ.get("DB_PATH"' in txt and "PP_DB_PATH" not in txt:
             gaps.append(f"{rel}: DB_PATH read without PP_DB_PATH fallback parity")
+    gaps.extend(_audit_scripts_and_chroma_env_parity(repo_root))
     return gaps
 
 
@@ -1734,6 +1799,22 @@ def _audit_daemon_cuda_fallback(daemon_py: Path) -> List[str]:
     return gaps
 
 
+def _audit_model_wrapper_contracts(models_py: Path) -> List[str]:
+    """Check src/gpu_pipeline/models.py for device alignment, 3D DAC unsqueeze, and pooling."""
+    if not models_py.is_file():
+        return []
+    m_txt = models_py.read_text(encoding="utf-8", errors="replace")
+    if "class DACModel" in m_txt and (
+        "unsqueeze" not in m_txt
+        or "quantized_representation" not in m_txt
+        or ".to(" not in m_txt
+    ):
+        return [
+            "src/gpu_pipeline/models.py: DACModel/MERTModel missing device alignment, 3D unsqueeze, or quantized_representation pooling"
+        ]
+    return []
+
+
 def _audit_cuda_cpu_fallback_parity(repo_root: Path) -> List[str]:
     """Flag unguarded CUDA device/memory calls in src/gpu_pipeline without CPU fallback."""
     gaps: List[str] = []
@@ -1744,6 +1825,7 @@ def _audit_cuda_cpu_fallback_parity(repo_root: Path) -> List[str]:
             gaps.append(
                 "src/gpu_pipeline/models.py: unguarded CUDA allocation without CPU fallback"
             )
+    gaps.extend(_audit_model_wrapper_contracts(models_py))
     gaps.extend(
         _audit_daemon_cuda_fallback(repo_root / "src" / "gpu_pipeline" / "daemon.py")
     )
