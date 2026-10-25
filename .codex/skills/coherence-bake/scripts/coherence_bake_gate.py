@@ -1800,17 +1800,14 @@ def _audit_daemon_cuda_fallback(daemon_py: Path) -> List[str]:
 
 
 def _audit_model_wrapper_contracts(models_py: Path) -> List[str]:
-    """Check src/gpu_pipeline/models.py for device alignment, 3D DAC unsqueeze, and pooling."""
+    """Check src/gpu_pipeline/models.py for device alignment, 3D DAC unsqueeze, pooling, and no_grad."""
     if not models_py.is_file():
         return []
     m_txt = models_py.read_text(encoding="utf-8", errors="replace")
-    if "class DACModel" in m_txt and (
-        "unsqueeze" not in m_txt
-        or "quantized_representation" not in m_txt
-        or ".to(" not in m_txt
-    ):
+    required = ("unsqueeze", "quantized_representation", ".to(", "torch.no_grad")
+    if "class DACModel" in m_txt and not all(tok in m_txt for tok in required):
         return [
-            "src/gpu_pipeline/models.py: DACModel/MERTModel missing device alignment, 3D unsqueeze, or quantized_representation pooling"
+            "src/gpu_pipeline/models.py: DACModel/MERTModel missing device alignment, 3D unsqueeze, quantized_representation pooling, or torch.no_grad"
         ]
     return []
 
