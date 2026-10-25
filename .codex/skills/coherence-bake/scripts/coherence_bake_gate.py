@@ -1470,6 +1470,21 @@ def _check_compose_nginx_mount(repo_root: Path) -> List[str]:
     return []
 
 
+def _check_prod_compose_nginx_mount(repo_root: Path) -> List[str]:
+    """Verify docker-compose.prod.yml mounts /usr/share/nginx/html when nginx.prod.conf uses it."""
+    dc_prod = repo_root / "docker-compose.prod.yml"
+    ng_prod = repo_root / "nginx.prod.conf"
+    if not dc_prod.is_file() or not ng_prod.is_file():
+        return []
+    ng_txt = ng_prod.read_text(encoding="utf-8", errors="replace")
+    dc_txt = dc_prod.read_text(encoding="utf-8", errors="replace")
+    if "root /usr/share/nginx/html" in ng_txt and "/usr/share/nginx/html" not in dc_txt:
+        return [
+            "docker-compose.prod.yml: nginx missing /usr/share/nginx/html volume mount for nginx.prod.conf"
+        ]
+    return []
+
+
 def _check_backfill_dockerfile(repo_root: Path) -> List[str]:
     """Verify Dockerfile.backfill has no legacy TensorFlow/python3.11 and copies src before pip install."""
     fp = repo_root / "Dockerfile.backfill"
@@ -1494,6 +1509,7 @@ def _audit_docker_and_compose_contracts(repo_root: Path) -> List[str]:
             gaps.append(f"{rel}: stale chroma_data path")
     gaps.extend(_check_compose_redis(repo_root))
     gaps.extend(_check_compose_nginx_mount(repo_root))
+    gaps.extend(_check_prod_compose_nginx_mount(repo_root))
     return gaps
 
 
@@ -1732,6 +1748,38 @@ def _audit_test_import_prefixes(repo_root: Path) -> List[str]:
     return gaps
 
 
+def _audit_chroma_script_metadata_and_cleanup(repo_root: Path) -> List[str]:
+    """Verify verify_db.py, sync_chroma.py, and run_e2e_pipeline.py ChromaDB parity."""
+    gaps: List[str] = []
+    v_py = repo_root / "scripts" / "verify_db.py"
+    if v_py.is_file():
+        v_txt = v_py.read_text(encoding="utf-8", errors="replace")
+        if _missing_token_count(
+            v_txt, ("hnsw:space", "file_path", "filepath", "min(4, count)")
+        ):
+            gaps.append(
+                "scripts/verify_db.py: missing cosine hnsw:space, dual file_path/filepath fallback, or min(4, count) bound"
+            )
+    s_py = repo_root / "scripts" / "sync_chroma.py"
+    if s_py.is_file():
+        s_txt = s_py.read_text(encoding="utf-8", errors="replace")
+        if _missing_token_count(
+            s_txt,
+            ("hnsw:space", "file_path", "filepath", "PP_CHROMA_DIR", "CHROMA_DB_DIR"),
+        ):
+            gaps.append(
+                "scripts/sync_chroma.py: missing cosine hnsw:space, dual file_path/filepath keys, or PP_CHROMA_DIR/CHROMA_DB_DIR fallback"
+            )
+    e2e_py = repo_root / "scripts" / "run_e2e_pipeline.py"
+    if e2e_py.is_file():
+        e_txt = e2e_py.read_text(encoding="utf-8", errors="replace")
+        if _missing_token_count(e_txt, ("_system.stop", "gc.collect")):
+            gaps.append(
+                "scripts/run_e2e_pipeline.py: missing ChromaDB _system.stop() and gc.collect() handle release before rmtree"
+            )
+    return gaps
+
+
 def _audit_scripts_and_chroma_env_parity(repo_root: Path) -> List[str]:
     """Check scripts and chroma_client for DB_PATH/PP_DB_PATH and CHROMA_DB_DIR/PP_CHROMA_DIR parity."""
     checks = (
@@ -1748,6 +1796,12 @@ def _audit_scripts_and_chroma_env_parity(repo_root: Path) -> List[str]:
             "scripts/verify_db.py: CHROMA_DB_DIR read without PP_CHROMA_DIR parity",
         ),
         (
+            "scripts/ingest_archive_1716.py",
+            "chroma_db",
+            "PP_CHROMA_DIR",
+            "scripts/ingest_archive_1716.py: chroma_db default missing PP_CHROMA_DIR/CHROMA_DB_DIR parity",
+        ),
+        (
             "src/scoring/chroma_client.py",
             "PP_CHROMA_DIR",
             "CHROMA_DB_DIR",
@@ -1761,6 +1815,7 @@ def _audit_scripts_and_chroma_env_parity(repo_root: Path) -> List[str]:
             txt = fp.read_text(encoding="utf-8", errors="replace")
             if present_tok in txt and required_tok not in txt:
                 gaps.append(msg)
+    gaps.extend(_audit_chroma_script_metadata_and_cleanup(repo_root))
     return gaps
 
 
@@ -2589,6 +2644,23 @@ def _verify_reachability_and_pin_self_test(root: Path) -> Optional[str]:
         "torch.cuda.set_per_process_memory_fraction(0.85)\n",
         encoding="utf-8",
     )
+    (root / "scripts" / "sync_chroma.py").write_text(
+        'collection = chroma_client.get_or_create_collection(name="tracks")\n',
+        encoding="utf-8",
+    )
+    (root / "scripts" / "run_e2e_pipeline.py").write_text(
+        "shutil.rmtree('e2e_chroma_db', ignore_errors=True)\n",
+        encoding="utf-8",
+    )
+    (root / "nginx.prod.conf").write_text(
+        "root /usr/share/nginx/html;\nlocation /static { proxy_pass http://api:8000; }\n"
+        "location /health { proxy_pass http://api:8000; }\n",
+        encoding="utf-8",
+    )
+    (root / "docker-compose.prod.yml").write_text(
+        "services:\n  nginx:\n    volumes:\n      - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro\n",
+        encoding="utf-8",
+    )
     gaps = _audit_cross_surface_contracts(root)
     expected = (
         "unreferenced src module missing test coverage",
@@ -2602,6 +2674,10 @@ def _verify_reachability_and_pin_self_test(root: Path) -> Optional[str]:
         "stale AST symbol or case-mismatched path StorePollerService",
         "base image or dependency version pin drift",
         "stale db.sqlite default path",
+        "scripts/verify_db.py: missing cosine hnsw:space",
+        "scripts/sync_chroma.py: missing cosine hnsw:space",
+        "scripts/run_e2e_pipeline.py: missing ChromaDB _system.stop()",
+        "docker-compose.prod.yml: nginx missing /usr/share/nginx/html volume mount",
     )
     for tok in expected:
         if not any(tok in g for g in gaps):
