@@ -979,14 +979,15 @@ def _extract_web_route_prefixes(repo_root: Path) -> Set[str]:
     prefixes: Set[str] = set()
     pat = re.compile(
         r'(?:@(?:router|app)\.[a-z]+\(\s*"/([A-Za-z0-9_-]+)'
-        r'|include_router\([^)]*prefix\s*=\s*"/([A-Za-z0-9_-]+)")'
+        r'|include_router\([^)]*prefix\s*=\s*"/([A-Za-z0-9_-]+)"'
+        r'|app\.mount\(\s*"/([A-Za-z0-9_-]+)")'
     )
     for name in ("routes.py", "server.py"):
         fp = repo_root / "src" / "web" / name
         if fp.is_file():
             txt = fp.read_text(encoding="utf-8", errors="replace")
             for m in pat.finditer(txt):
-                prefixes.add(m.group(1) or m.group(2))
+                prefixes.add(m.group(1) or m.group(2) or m.group(3))
     return prefixes
 
 
@@ -1203,6 +1204,8 @@ def _audit_nginx_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
             seg, body = m.group(1), m.group(2)
             if "proxy_pass" in body and seg not in prefixes:
                 gaps.append(f"{rel}: nginx proxies non-existent route /{seg}")
+        if "static" in prefixes and "location /static" not in txt:
+            gaps.append(f"{rel}: nginx missing location /static proxy for mounted StaticFiles")
     return gaps
 
 
@@ -1467,9 +1470,24 @@ def _check_compose_nginx_mount(repo_root: Path) -> List[str]:
     return []
 
 
+def _check_backfill_dockerfile(repo_root: Path) -> List[str]:
+    """Verify Dockerfile.backfill has no legacy TensorFlow/python3.11 and copies src before pip install."""
+    fp = repo_root / "Dockerfile.backfill"
+    if not fp.is_file():
+        return []
+    txt = fp.read_text(encoding="utf-8", errors="replace")
+    legacy = ("essentia-tensorflow", "tensorflow==", "python3.11", "musicnn.pb")
+    if any(tok in txt for tok in legacy) or "COPY src" not in txt.partition("pip install")[0]:
+        return [
+            "Dockerfile.backfill: legacy TensorFlow/python3.11 or pip install before COPY src"
+        ]
+    return []
+
+
 def _audit_docker_and_compose_contracts(repo_root: Path) -> List[str]:
     """Audit Dockerfile worker CMD, backfill chroma_data paths, and compose contracts."""
     gaps = _check_dockerfile_worker_watch(repo_root)
+    gaps.extend(_check_backfill_dockerfile(repo_root))
     for rel in ("Dockerfile.backfill", "docker-compose.backfill.yml"):
         fp = repo_root / rel
         if fp.is_file() and "chroma_data" in fp.read_text(encoding="utf-8", errors="replace"):
@@ -1549,6 +1567,7 @@ def _audit_doc_ast_and_path_parity(repo_root: Path) -> List[str]:
         "docs/API.md",
         "docs/ARCHITECTURE.md",
         "docs/architecture/task.md",
+        "docs/architecture/high_level_architecture.md",
     )
     stale_tokens = (
         "StorePollerService",
@@ -1560,6 +1579,7 @@ def _audit_doc_ast_and_path_parity(repo_root: Path) -> List[str]:
         "resolve_track_audio_path",
         "_resolve_stream_file_path",
         "docs/architecture.md",
+        "xxHash",
     )
     gaps: List[str] = []
     for rel in doc_rels:
@@ -1680,6 +1700,56 @@ def _audit_test_import_prefixes(repo_root: Path) -> List[str]:
     return gaps
 
 
+def _audit_db_path_env_parity(repo_root: Path) -> List[str]:
+    """Flag src/**/*.py files reading DB_PATH from os.environ without PP_DB_PATH fallback."""
+    src_dir = repo_root / "src"
+    if not src_dir.is_dir():
+        return []
+    gaps: List[str] = []
+    for fp in sorted(src_dir.rglob("*.py")):
+        rel = str(fp.relative_to(repo_root)).replace("\\", "/")
+        txt = fp.read_text(encoding="utf-8", errors="replace")
+        if 'os.environ.get("DB_PATH"' in txt and "PP_DB_PATH" not in txt:
+            gaps.append(f"{rel}: DB_PATH read without PP_DB_PATH fallback parity")
+    return gaps
+
+
+def _audit_daemon_cuda_fallback(daemon_py: Path) -> List[str]:
+    """Check src/gpu_pipeline/daemon.py for Windows expandable_segments and CPU fallback."""
+    if not daemon_py.is_file():
+        return []
+    d_txt = daemon_py.read_text(encoding="utf-8", errors="replace")
+    gaps: List[str] = []
+    if "expandable_segments:True" in d_txt and 'platform.system() == "Windows"' not in d_txt:
+        gaps.append(
+            "src/gpu_pipeline/daemon.py: unconditional expandable_segments on Windows"
+        )
+    if (
+        "set_per_process_memory_fraction" in d_txt
+        and "except (AssertionError, RuntimeError)" not in d_txt
+    ):
+        gaps.append(
+            "src/gpu_pipeline/daemon.py: unguarded CUDA memory fraction without CPU fallback"
+        )
+    return gaps
+
+
+def _audit_cuda_cpu_fallback_parity(repo_root: Path) -> List[str]:
+    """Flag unguarded CUDA device/memory calls in src/gpu_pipeline without CPU fallback."""
+    gaps: List[str] = []
+    models_py = repo_root / "src" / "gpu_pipeline" / "models.py"
+    if models_py.is_file():
+        m_txt = models_py.read_text(encoding="utf-8", errors="replace")
+        if 'device="cuda"' in m_txt and "except (AssertionError, RuntimeError)" not in m_txt:
+            gaps.append(
+                "src/gpu_pipeline/models.py: unguarded CUDA allocation without CPU fallback"
+            )
+    gaps.extend(
+        _audit_daemon_cuda_fallback(repo_root / "src" / "gpu_pipeline" / "daemon.py")
+    )
+    return gaps
+
+
 def _audit_cross_surface_contracts(repo_root: Path) -> List[str]:
     """Audit routes vs nginx/locust/e2e/frontend, metrics, Docker, Alembic, scripts, and deps."""
     gaps: List[str] = []
@@ -1706,6 +1776,8 @@ def _audit_cross_surface_contracts(repo_root: Path) -> List[str]:
     gaps.extend(_audit_container_static_serving(repo_root))
     gaps.extend(_audit_doc_ast_and_path_parity(repo_root))
     gaps.extend(_audit_dockerfile_pin_parity(repo_root))
+    gaps.extend(_audit_db_path_env_parity(repo_root))
+    gaps.extend(_audit_cuda_cpu_fallback_parity(repo_root))
     return gaps
 
 
@@ -2413,13 +2485,13 @@ def _verify_reachability_and_pin_self_test(root: Path) -> Optional[str]:
     """Verify module reachability, StaticFiles mount, doc AST parity, and pin drift."""
     (root / ".git").mkdir(parents=True, exist_ok=True)
     (root / "src" / "infrastructure" / "orphan.py").write_text(
-        "x = 1\n", encoding="utf-8"
+        'import os\nx = os.environ.get("DB_PATH", "/tmp/a.db")\n', encoding="utf-8"
     )
     (root / "Dockerfile.railway").write_text(
         "COPY --from=fe /out /static/public\n", encoding="utf-8"
     )
     (root / "src" / "web" / "server.py").write_text(
-        "app = None\n", encoding="utf-8"
+        'app.mount("/static", None)\n', encoding="utf-8"
     )
     (root / "README.md").write_text("StorePollerService\n", encoding="utf-8")
     (root / "Dockerfile.backend").write_text(
@@ -2429,10 +2501,25 @@ def _verify_reachability_and_pin_self_test(root: Path) -> Optional[str]:
     (root / "src" / "orchestration" / "watchdog.py").write_text(
         'db_path = "db.sqlite"\n', encoding="utf-8"
     )
+    (root / "src" / "gpu_pipeline").mkdir(parents=True, exist_ok=True)
+    (root / "src" / "gpu_pipeline" / "models.py").write_text(
+        'x = torch.zeros(1, device="cuda")\n', encoding="utf-8"
+    )
+    (root / "src" / "gpu_pipeline" / "daemon.py").write_text(
+        'os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"\n'
+        "torch.cuda.set_per_process_memory_fraction(0.85)\n",
+        encoding="utf-8",
+    )
     gaps = _audit_cross_surface_contracts(root)
     expected = (
         "unreferenced src module missing test coverage",
         "server.py does not mount StaticFiles",
+        "nginx missing location /static proxy for mounted StaticFiles",
+        "legacy TensorFlow/python3.11 or pip install before COPY src",
+        "DB_PATH read without PP_DB_PATH fallback parity",
+        "unguarded CUDA allocation without CPU fallback",
+        "unconditional expandable_segments on Windows",
+        "unguarded CUDA memory fraction without CPU fallback",
         "stale AST symbol or case-mismatched path StorePollerService",
         "base image or dependency version pin drift",
         "stale db.sqlite default path",
