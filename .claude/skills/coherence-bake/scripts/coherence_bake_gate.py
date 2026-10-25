@@ -1544,12 +1544,21 @@ def _audit_doc_ast_and_path_parity(repo_root: Path) -> List[str]:
     """Flag stale AST symbols and case-mismatched paths in architecture docs."""
     if _has_package_target(repo_root, "recommender"):
         return []
-    doc_rels = ("README.md", "docs/ARCHITECTURE.md", "docs/architecture/task.md")
+    doc_rels = (
+        "README.md",
+        "docs/API.md",
+        "docs/ARCHITECTURE.md",
+        "docs/architecture/task.md",
+    )
     stale_tokens = (
         "StorePollerService",
         "AtomicRCURegistry",
+        "RCUArbiter",
+        "RCUWrapper",
+        "TrackQueue.push",
         "apply_anti_medoid_repulsion",
         "resolve_track_audio_path",
+        "_resolve_stream_file_path",
         "docs/architecture.md",
     )
     gaps: List[str] = []
