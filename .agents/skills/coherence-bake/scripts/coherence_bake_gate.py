@@ -1315,6 +1315,7 @@ def _audit_e2e_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
 
 
 _COMPOSE_ONLY_PP_VARS: Set[str] = {
+    "NGINX_PORT",
     "PP_PROMETHEUS_PORT",
     "PP_GRAFANA_PORT",
     "PP_GRAFANA_ADMIN_USER",
@@ -1325,8 +1326,12 @@ _COMPOSE_ONLY_PP_VARS: Set[str] = {
 
 
 def _collect_declared_pp_env_vars(repo_root: Path) -> Set[str]:
-    """Extract PP_* env vars from .env.example, Dockerfiles, and loadtest compose."""
+    """Extract env vars from .env.example and PP_* vars from Docker/compose files."""
     declared: Set[str] = set()
+    env_ex = repo_root / ".env.example"
+    if env_ex.is_file():
+        env_txt = env_ex.read_text(encoding="utf-8", errors="replace")
+        declared.update(re.findall(r"(?m)^\s*([A-Z][A-Z0-9_]+)\s*=", env_txt))
     rels = (
         ".env.example",
         "Dockerfile",
@@ -1499,6 +1504,22 @@ def _check_backfill_dockerfile(repo_root: Path) -> List[str]:
     return []
 
 
+def _check_dockerignore_hygiene(repo_root: Path) -> List[str]:
+    """Verify .dockerignore excludes chroma_db and *.sqlite when .gitignore has chroma_db/."""
+    gi = repo_root / ".gitignore"
+    di = repo_root / ".dockerignore"
+    if not gi.is_file() or not di.is_file():
+        return []
+    if "chroma_db/" not in gi.read_text(encoding="utf-8", errors="replace"):
+        return []
+    di_txt = di.read_text(encoding="utf-8", errors="replace")
+    if "chroma_db" not in di_txt or "*.sqlite" not in di_txt:
+        return [
+            ".dockerignore: missing chroma_db or *.sqlite build-context exclusions"
+        ]
+    return []
+
+
 def _audit_docker_and_compose_contracts(repo_root: Path) -> List[str]:
     """Audit Dockerfile worker CMD, backfill chroma_data paths, and compose contracts."""
     gaps = _check_dockerfile_worker_watch(repo_root)
@@ -1510,6 +1531,7 @@ def _audit_docker_and_compose_contracts(repo_root: Path) -> List[str]:
     gaps.extend(_check_compose_redis(repo_root))
     gaps.extend(_check_compose_nginx_mount(repo_root))
     gaps.extend(_check_prod_compose_nginx_mount(repo_root))
+    gaps.extend(_check_dockerignore_hygiene(repo_root))
     return gaps
 
 
@@ -2569,7 +2591,9 @@ def _verify_manifest_self_test(repo_root: Path, anchor: str) -> Optional[str]:
 
 def _verify_manifest_parity_self_test(root: Path) -> Optional[str]:
     """Verify env-var, pip-extras, worker --watch, and Alembic drift checks in self-test."""
-    (root / ".env.example").write_text("PP_UNREAD_VAR=1\n", encoding="utf-8")
+    (root / ".env.example").write_text(
+        "PP_UNREAD_VAR=1\nCHROMA_HOST=127.0.0.1\n", encoding="utf-8"
+    )
     (root / "Dockerfile").write_text(
         'RUN pip install ".[ml]"\nCOPY src/ src/\nFROM runtime AS worker\nENTRYPOINT ["pp-feed"]\n',
         encoding="utf-8",
@@ -2599,6 +2623,7 @@ def _verify_manifest_parity_self_test(root: Path) -> Optional[str]:
     gaps = _audit_cross_surface_contracts(root)
     expected_tokens = (
         "unread application env var PP_UNREAD_VAR",
+        "unread application env var CHROMA_HOST",
         "undefined extra [ml]",
         "pip install local package before COPY src/",
         "missing --watch",
@@ -2618,6 +2643,8 @@ def _verify_manifest_parity_self_test(root: Path) -> Optional[str]:
 def _verify_reachability_and_pin_self_test(root: Path) -> Optional[str]:
     """Verify module reachability, StaticFiles mount, doc AST parity, and pin drift."""
     (root / ".git").mkdir(parents=True, exist_ok=True)
+    (root / ".gitignore").write_text("chroma_db/\n*.sqlite\n", encoding="utf-8")
+    (root / ".dockerignore").write_text(".git\n", encoding="utf-8")
     (root / "src" / "infrastructure" / "orphan.py").write_text(
         'import os\nx = os.environ.get("DB_PATH", "/tmp/a.db")\n', encoding="utf-8"
     )
@@ -2678,6 +2705,7 @@ def _verify_reachability_and_pin_self_test(root: Path) -> Optional[str]:
         "scripts/sync_chroma.py: missing cosine hnsw:space",
         "scripts/run_e2e_pipeline.py: missing ChromaDB _system.stop()",
         "docker-compose.prod.yml: nginx missing /usr/share/nginx/html volume mount",
+        ".dockerignore: missing chroma_db or *.sqlite build-context exclusions",
     )
     for tok in expected:
         if not any(tok in g for g in gaps):
