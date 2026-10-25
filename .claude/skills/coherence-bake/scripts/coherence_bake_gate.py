@@ -1087,19 +1087,108 @@ _DEAD_LEGACY_PYPROJECT_PKGS: Tuple[str, ...] = (
     "python-jose",
     "passlib",
 )
+_CLI_OR_RUNNER_PKGS: Set[str] = {
+    "uvicorn",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
+    "alembic",
+    "hatchling",
+    "locust",
+    "bandit",
+    "pip-audit",
+}
+_DIST_TO_IMPORT_MAP: Dict[str, str] = {
+    "beautifulsoup4": "bs4",
+    "sqlite-vec": "sqlite_vec",
+    "pydantic-settings": "pydantic_settings",
+    "pyyaml": "yaml",
+    "scikit-learn": "sklearn",
+    "prometheus-client": "prometheus_client",
+}
+_DECLARED_DEP_RE = re.compile(
+    r'"([a-zA-Z0-9_.-]+)(?:\[[a-zA-Z0-9_,-]+\])?\s*(?:>=|==|~=|<=)'
+)
+
+
+def _extract_py_import_roots(py_path: Path) -> Set[str]:
+    """Return top-level imported module names from a single Python file."""
+    try:
+        tree = ast.parse(py_path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, SyntaxError):
+        return set()
+    roots: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.split(".", 1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            roots.add(node.module.split(".", 1)[0])
+    return roots
+
+
+def _collect_repo_ast_import_roots(repo_root: Path) -> Set[str]:
+    """Collect top-level imported module roots across Python files in repo_root."""
+    imported: Set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(repo_root):
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_WALK_DIRS]
+        for fname in filenames:
+            if fname.endswith(".py"):
+                imported.update(_extract_py_import_roots(Path(dirpath) / fname))
+    return imported
+
+
+def _extract_declared_dep_names(text: str) -> List[Tuple[str, str]]:
+    """Extract (dist_name, import_root) pairs from pinned dependency strings."""
+    pairs: List[Tuple[str, str]] = []
+    for match in _DECLARED_DEP_RE.finditer(text):
+        dist = match.group(1).lower()
+        if dist in _CLI_OR_RUNNER_PKGS:
+            continue
+        mod = _DIST_TO_IMPORT_MAP.get(dist, dist.replace("-", "_"))
+        pairs.append((dist, mod))
+    return pairs
+
+
+def _audit_unimported_declared_deps(repo_root: Path) -> List[str]:
+    """Flag pinned dependencies in pyproject.toml and Dockerfiles never imported in repo."""
+    if not (repo_root / "src").is_dir():
+        return []
+    imported = _collect_repo_ast_import_roots(repo_root)
+    if not ({"fastapi", "pydantic", "numpy"} & imported):
+        return []
+    gaps: List[str] = []
+    targets = (
+        "pyproject.toml",
+        "Dockerfile",
+        "Dockerfile.backend",
+        "Dockerfile.railway",
+    )
+    for rel in targets:
+        fp = repo_root / rel
+        if not fp.is_file():
+            continue
+        for dist, mod in _extract_declared_dep_names(
+            fp.read_text(encoding="utf-8", errors="replace")
+        ):
+            if mod not in imported:
+                gaps.append(f"{rel}: unimported dependency {dist}")
+    return gaps
 
 
 def _audit_pyproject_deps(repo_root: Path) -> List[str]:
-    """Flag dead legacy song-recommender dependencies in pyproject.toml."""
+    """Flag dead legacy and unimported dependencies in pyproject.toml and Dockerfiles."""
     pyproj = repo_root / "pyproject.toml"
     if _has_package_target(repo_root, "recommender") or not pyproj.is_file():
         return []
     txt = pyproj.read_text(encoding="utf-8", errors="replace")
-    return [
+    gaps = [
         f"pyproject.toml: dead legacy dependency {pkg}"
         for pkg in _DEAD_LEGACY_PYPROJECT_PKGS
         if pkg in txt
     ]
+    gaps.extend(_audit_unimported_declared_deps(repo_root))
+    return gaps
 
 
 def _audit_nginx_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
@@ -1118,7 +1207,7 @@ def _audit_nginx_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
 
 
 def _audit_locust_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]:
-    """Verify loadtest/locustfile.py client calls target existing FastAPI route prefixes."""
+    """Verify loadtest/locustfile.py client calls, query params, and response shapes."""
     fp = repo_root / "loadtest" / "locustfile.py"
     if not fp.is_file():
         return []
@@ -1128,6 +1217,14 @@ def _audit_locust_route_parity(repo_root: Path, prefixes: Set[str]) -> List[str]
         seg = m.group(1)
         if seg not in prefixes:
             gaps.append(f"loadtest/locustfile.py: loadtest targets non-existent route /{seg}")
+    if "isinstance(data, list)" in txt and "/catalog/top" in txt:
+        gaps.append(
+            "loadtest/locustfile.py: /catalog/top returns dict {'count', 'tracks'}, not list"
+        )
+    if "?tab=" in txt:
+        gaps.append(
+            "loadtest/locustfile.py: /catalog/feed does not accept ?tab= query parameter"
+        )
     return gaps
 
 
@@ -1322,17 +1419,23 @@ def _audit_pip_extras_parity(repo_root: Path) -> List[str]:
 
 
 def _check_dockerfile_worker_watch(repo_root: Path) -> List[str]:
-    """Verify Dockerfile worker stage ENTRYPOINT pp-feed includes --watch."""
+    """Verify Dockerfile worker stage ENTRYPOINT pp-feed includes --watch and COPY src order."""
     df = repo_root / "Dockerfile"
     if not df.is_file():
         return []
     txt = df.read_text(encoding="utf-8", errors="replace")
+    gaps: List[str] = []
+    if re.search(
+        r'RUN\s+pip\s+install[^\n]*\.\[?[A-Za-z0-9_,-]*\]?["\']?\s*\n+\s*COPY\s+src',
+        txt,
+    ):
+        gaps.append("Dockerfile: pip install local package before COPY src/")
     match = re.search(
         r"(?im)^FROM\s+\S+\s+AS\s+worker\b([\s\S]*?)(?=^FROM\s|\Z)", txt
     )
     if match and 'ENTRYPOINT ["pp-feed"]' in match.group(1) and "--watch" not in match.group(1):
-        return ["Dockerfile: worker stage ENTRYPOINT pp-feed missing --watch"]
-    return []
+        gaps.append("Dockerfile: worker stage ENTRYPOINT pp-feed missing --watch")
+    return gaps
 
 
 def _check_compose_redis(repo_root: Path) -> List[str]:
@@ -1404,6 +1507,49 @@ def _audit_alembic_vs_runtime_schema(repo_root: Path) -> List[str]:
     return gaps
 
 
+def _audit_api_doc_parity(repo_root: Path) -> List[str]:
+    """Flag stale route parameter and response documentation in docs/API.md."""
+    api_md = repo_root / "docs" / "API.md"
+    if not api_md.is_file() or _has_package_target(repo_root, "recommender"):
+        return []
+    txt = api_md.read_text(encoding="utf-8", errors="replace")
+    stale_tokens = (
+        "SingleWriterDB.compact_database()",
+        "store_candidate",
+        "thumbs_up",
+        "thumbs_down",
+        "cursor/offset pagination",
+    )
+    return [
+        f"docs/API.md: stale API contract token {tok}"
+        for tok in stale_tokens
+        if tok in txt
+    ]
+
+
+def _has_bare_infra_import(txt: str) -> bool:
+    """Return True if txt contains bare infrastructure imports or mock patches."""
+    tokens = (
+        "from infrastructure.",
+        'patch("infrastructure.',
+        'patch(\n    "infrastructure.',
+    )
+    return any(tok in txt for tok in tokens)
+
+
+def _audit_test_import_prefixes(repo_root: Path) -> List[str]:
+    """Flag test files using bare infrastructure.* imports instead of src.infrastructure.*."""
+    tests_dir = repo_root / "tests"
+    if not tests_dir.is_dir() or not (repo_root / "src" / "infrastructure").is_dir():
+        return []
+    gaps: List[str] = []
+    for fp in sorted(tests_dir.rglob("*.py")):
+        rel = str(fp.relative_to(repo_root)).replace("\\", "/")
+        if _has_bare_infra_import(fp.read_text(encoding="utf-8", errors="replace")):
+            gaps.append(f"{rel}: bare infrastructure import missing src. prefix")
+    return gaps
+
+
 def _audit_cross_surface_contracts(repo_root: Path) -> List[str]:
     """Audit routes vs nginx/locust/e2e/frontend, metrics, Docker, Alembic, scripts, and deps."""
     gaps: List[str] = []
@@ -1424,6 +1570,8 @@ def _audit_cross_surface_contracts(repo_root: Path) -> List[str]:
     gaps.extend(_audit_pip_extras_parity(repo_root))
     gaps.extend(_audit_docker_and_compose_contracts(repo_root))
     gaps.extend(_audit_alembic_vs_runtime_schema(repo_root))
+    gaps.extend(_audit_api_doc_parity(repo_root))
+    gaps.extend(_audit_test_import_prefixes(repo_root))
     return gaps
 
 
@@ -2083,7 +2231,8 @@ def _verify_manifest_parity_self_test(root: Path) -> Optional[str]:
     """Verify env-var, pip-extras, worker --watch, and Alembic drift checks in self-test."""
     (root / ".env.example").write_text("PP_UNREAD_VAR=1\n", encoding="utf-8")
     (root / "Dockerfile").write_text(
-        'FROM runtime AS worker\nENTRYPOINT ["pp-feed"]\n', encoding="utf-8"
+        'RUN pip install ".[ml]"\nCOPY src/ src/\nFROM runtime AS worker\nENTRYPOINT ["pp-feed"]\n',
+        encoding="utf-8",
     )
     (root / "Dockerfile.backfill").write_text(
         "RUN pip install .[ml]\n", encoding="utf-8"
@@ -2092,12 +2241,33 @@ def _verify_manifest_parity_self_test(root: Path) -> Optional[str]:
     (root / "alembic" / "env.py").write_text(
         'url = "sqlite:///data/api.db"\n', encoding="utf-8"
     )
+    (root / "loadtest").mkdir(parents=True, exist_ok=True)
+    (root / "loadtest" / "locustfile.py").write_text(
+        'self.client.get("/catalog/top")\nisinstance(data, list)\nself.client.get("/catalog/feed?tab=golden")\n',
+        encoding="utf-8",
+    )
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "API.md").write_text(
+        "SingleWriterDB.compact_database()\n", encoding="utf-8"
+    )
+    (root / "src" / "infrastructure").mkdir(parents=True, exist_ok=True)
+    (root / "tests").mkdir(parents=True, exist_ok=True)
+    (root / "tests" / "test_inf.py").write_text(
+        "import fastapi\nfrom infrastructure.network import foo\n",
+        encoding="utf-8",
+    )
     gaps = _audit_cross_surface_contracts(root)
     expected_tokens = (
         "unread application env var PP_UNREAD_VAR",
         "undefined extra [ml]",
+        "pip install local package before COPY src/",
         "missing --watch",
         "stale fallback sqlite:///data/api.db",
+        "unimported dependency flask",
+        "/catalog/top returns dict",
+        "/catalog/feed does not accept ?tab=",
+        "stale API contract token SingleWriterDB.compact_database()",
+        "bare infrastructure import missing src. prefix",
     )
     for tok in expected_tokens:
         if not any(tok in g for g in gaps):
