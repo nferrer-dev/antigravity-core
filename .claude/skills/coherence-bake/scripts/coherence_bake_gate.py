@@ -1515,16 +1515,137 @@ def _audit_api_doc_parity(repo_root: Path) -> List[str]:
     txt = api_md.read_text(encoding="utf-8", errors="replace")
     stale_tokens = (
         "SingleWriterDB.compact_database()",
+        "DatabaseCompactor",
+        "LiveStoreFeedPoller",
+        "SingleWriterDB.enqueue_track",
         "store_candidate",
         "thumbs_up",
         "thumbs_down",
         "cursor/offset pagination",
     )
-    return [
+    gaps = [
         f"docs/API.md: stale API contract token {tok}"
         for tok in stale_tokens
         if tok in txt
     ]
+    routes_py = repo_root / "src" / "web" / "routes.py"
+    if (
+        routes_py.is_file()
+        and "/catalog/store-redirect/" in routes_py.read_text(encoding="utf-8", errors="replace")
+        and "/catalog/store-redirect/" not in txt
+    ):
+        gaps.append(
+            "docs/API.md: undocumented route /catalog/store-redirect/{track_id}"
+        )
+    return gaps
+
+
+def _audit_doc_ast_and_path_parity(repo_root: Path) -> List[str]:
+    """Flag stale AST symbols and case-mismatched paths in architecture docs."""
+    if _has_package_target(repo_root, "recommender"):
+        return []
+    doc_rels = ("README.md", "docs/ARCHITECTURE.md", "docs/architecture/task.md")
+    stale_tokens = (
+        "StorePollerService",
+        "AtomicRCURegistry",
+        "apply_anti_medoid_repulsion",
+        "resolve_track_audio_path",
+        "docs/architecture.md",
+    )
+    gaps: List[str] = []
+    for rel in doc_rels:
+        fp = repo_root / rel
+        if not fp.is_file():
+            continue
+        txt = fp.read_text(encoding="utf-8", errors="replace")
+        gaps.extend(
+            f"{rel}: stale AST symbol or case-mismatched path {tok}"
+            for tok in stale_tokens
+            if tok in txt
+        )
+    return gaps
+
+
+def _collect_tests_blob(repo_root: Path) -> str:
+    """Return concatenated text of tests/**/*.py when src/, tests/, and .git exist."""
+    if (
+        not (repo_root / "src").is_dir()
+        or not (repo_root / "tests").is_dir()
+        or not (repo_root / ".git").exists()
+    ):
+        return ""
+    return "\n".join(
+        fp.read_text(encoding="utf-8", errors="replace")
+        for fp in sorted((repo_root / "tests").rglob("*.py"))
+        if fp.is_file()
+    )
+
+
+def _audit_src_module_reachability(repo_root: Path) -> List[str]:
+    """Flag src/**/*.py modules (excluding __init__.py and cli.py) unreferenced in tests."""
+    test_blob = _collect_tests_blob(repo_root)
+    if not test_blob.strip():
+        return []
+    gaps: List[str] = []
+    for py_file in sorted((repo_root / "src").rglob("*.py")):
+        if py_file.name in {"__init__.py", "cli.py"}:
+            continue
+        rel = str(py_file.relative_to(repo_root)).replace("\\", "/")
+        dotted = rel[:-3].replace("/", ".")
+        short_dotted = dotted[4:]
+        stem = py_file.stem
+        if dotted not in test_blob and short_dotted not in test_blob and stem not in test_blob:
+            gaps.append(f"{rel}: unreferenced src module missing test coverage")
+    return gaps
+
+
+def _dockerfile_has_static_public(repo_root: Path) -> bool:
+    """Return True if Dockerfile or Dockerfile.railway references /static/public."""
+    for rel in ("Dockerfile", "Dockerfile.railway"):
+        fp = repo_root / rel
+        if fp.is_file() and "/static/public" in fp.read_text(encoding="utf-8", errors="replace"):
+            return True
+    return False
+
+
+def _audit_container_static_serving(repo_root: Path) -> List[str]:
+    """Verify src/web/server.py mounts StaticFiles when Dockerfiles copy /static/public."""
+    srv = repo_root / "src" / "web" / "server.py"
+    if not srv.is_file() or not _dockerfile_has_static_public(repo_root):
+        return []
+    if "StaticFiles" not in srv.read_text(encoding="utf-8", errors="replace"):
+        return [
+            "src/web/server.py: Dockerfile copies /static/public but server.py does not mount StaticFiles"
+        ]
+    return []
+
+
+def _has_backend_dockerfile_drift(repo_root: Path) -> bool:
+    """Return True if Dockerfile.backend has python:3.11 or stale scipy/sqlite-vec pins."""
+    fp = repo_root / "Dockerfile.backend"
+    if not fp.is_file():
+        return False
+    txt = fp.read_text(encoding="utf-8", errors="replace")
+    return any(
+        tok in txt
+        for tok in ("python:3.11", "scipy>=1.10.0", "sqlite-vec>=0.1.0")
+    )
+
+
+def _audit_dockerfile_pin_parity(repo_root: Path) -> List[str]:
+    """Flag base-image/version pin drift in Dockerfiles and stale watchdog DB path."""
+    gaps: List[str] = []
+    if _has_backend_dockerfile_drift(repo_root):
+        gaps.append(
+            "Dockerfile.backend: base image or dependency version pin drift vs pyproject.toml"
+        )
+    fe_df = repo_root / "frontend" / "Dockerfile"
+    if fe_df.is_file() and "node:20" in fe_df.read_text(encoding="utf-8", errors="replace"):
+        gaps.append("frontend/Dockerfile: node:20 base image drift vs node:22")
+    wd = repo_root / "src" / "orchestration" / "watchdog.py"
+    if wd.is_file() and "db.sqlite" in wd.read_text(encoding="utf-8", errors="replace"):
+        gaps.append("src/orchestration/watchdog.py: stale db.sqlite default path")
+    return gaps
 
 
 def _has_bare_infra_import(txt: str) -> bool:
@@ -1572,6 +1693,10 @@ def _audit_cross_surface_contracts(repo_root: Path) -> List[str]:
     gaps.extend(_audit_alembic_vs_runtime_schema(repo_root))
     gaps.extend(_audit_api_doc_parity(repo_root))
     gaps.extend(_audit_test_import_prefixes(repo_root))
+    gaps.extend(_audit_src_module_reachability(repo_root))
+    gaps.extend(_audit_container_static_serving(repo_root))
+    gaps.extend(_audit_doc_ast_and_path_parity(repo_root))
+    gaps.extend(_audit_dockerfile_pin_parity(repo_root))
     return gaps
 
 
@@ -2272,6 +2397,40 @@ def _verify_manifest_parity_self_test(root: Path) -> Optional[str]:
     for tok in expected_tokens:
         if not any(tok in g for g in gaps):
             return f"Expected '{tok}' in self-test gaps, got {gaps}"
+    return _verify_reachability_and_pin_self_test(root)
+
+
+def _verify_reachability_and_pin_self_test(root: Path) -> Optional[str]:
+    """Verify module reachability, StaticFiles mount, doc AST parity, and pin drift."""
+    (root / ".git").mkdir(parents=True, exist_ok=True)
+    (root / "src" / "infrastructure" / "orphan.py").write_text(
+        "x = 1\n", encoding="utf-8"
+    )
+    (root / "Dockerfile.railway").write_text(
+        "COPY --from=fe /out /static/public\n", encoding="utf-8"
+    )
+    (root / "src" / "web" / "server.py").write_text(
+        "app = None\n", encoding="utf-8"
+    )
+    (root / "README.md").write_text("StorePollerService\n", encoding="utf-8")
+    (root / "Dockerfile.backend").write_text(
+        "FROM python:3.11-slim\n", encoding="utf-8"
+    )
+    (root / "src" / "orchestration").mkdir(parents=True, exist_ok=True)
+    (root / "src" / "orchestration" / "watchdog.py").write_text(
+        'db_path = "db.sqlite"\n', encoding="utf-8"
+    )
+    gaps = _audit_cross_surface_contracts(root)
+    expected = (
+        "unreferenced src module missing test coverage",
+        "server.py does not mount StaticFiles",
+        "stale AST symbol or case-mismatched path StorePollerService",
+        "base image or dependency version pin drift",
+        "stale db.sqlite default path",
+    )
+    for tok in expected:
+        if not any(tok in g for g in gaps):
+            return f"Expected '{tok}' in reachability self-test, got {gaps}"
     return None
 
 
