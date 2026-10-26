@@ -789,7 +789,18 @@ class LiveTree(unittest.TestCase):
         self.assertIn("SearchDirectory", brc_text)
         self.assertIn("DirectoryPath", brc_text)
 
-
+    def test_inv10_constitutional_universal_qualitative_rubric_rule_codex(self):
+        self.assertEqual(
+            vt._check_constitutional_qualitative_rubric_rule(REPO_ROOT), []
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            t_root = Path(tmp)
+            (t_root / "CODEX.md").write_text(
+                "# Minimal Constitution without rubric rule\n", encoding="utf-8"
+            )
+            errs = vt._check_constitutional_qualitative_rubric_rule(t_root)
+            self.assertEqual(len(errs), 1)
+            self.assertIn("INV-10: CODEX.md", errs[0])
 
 
 class Meta(unittest.TestCase):

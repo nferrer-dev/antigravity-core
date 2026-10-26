@@ -1071,6 +1071,19 @@ def _check_rubric_schema_and_script_parity(root):
     return violations
 
 
+def _check_constitutional_qualitative_rubric_rule(root):
+    cl_md = root / "CLAUDE.md"
+    if not cl_md.is_file():
+        return []
+    txt = cl_md.read_bytes().decode("utf-8", errors="replace").lower()
+    req = ("qualitative judgment", "<rubric_score>", "0..3", "architectural", "curation")
+    if any(token not in txt for token in req):
+        return [
+            "INV-10: CLAUDE.md: missing Universal Rubric-Graded Qualitative Judgment (<RUBRIC_SCORE> 0..3 BARS) rule"
+        ]
+    return []
+
+
 def check_inv10_skill_security(root):
     violations = []
     skills_dir = root / ".claude" / "skills"
@@ -1126,6 +1139,7 @@ def check_inv10_skill_security(root):
             for k in ('"stage"', '"role"', '"verdict"', '"criteria"', '"id"', '"evidence"', '"score"'):
                 if k not in ag_txt:
                     violations.append("INV-10: %s: missing required <RUBRIC_SCORE> schema key %s" % (_rel(root, ag_path), k))
+    violations.extend(_check_constitutional_qualitative_rubric_rule(root))
     violations.extend(_check_rubric_schema_and_script_parity(root))
     for test_py in sorted((root / ".claude" / "tests").glob("test_*.py")):
         t_label = _rel(root, test_py)

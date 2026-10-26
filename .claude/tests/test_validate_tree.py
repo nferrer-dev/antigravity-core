@@ -857,8 +857,18 @@ class LiveTree(unittest.TestCase):
         self.assertIn("replace_file_content", settings_text)
         self.assertIn("spawn_agent", settings_text)
 
-
-
+    def test_inv10_constitutional_universal_qualitative_rubric_rule_claude(self):
+        self.assertEqual(
+            vt._check_constitutional_qualitative_rubric_rule(REPO_ROOT), []
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            t_root = Path(tmp)
+            (t_root / "CLAUDE.md").write_text(
+                "# Minimal Constitution without rubric rule\n", encoding="utf-8"
+            )
+            errs = vt._check_constitutional_qualitative_rubric_rule(t_root)
+            self.assertEqual(len(errs), 1)
+            self.assertIn("INV-10: CLAUDE.md", errs[0])
 
 
 class Meta(unittest.TestCase):

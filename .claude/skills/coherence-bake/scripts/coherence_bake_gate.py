@@ -67,6 +67,9 @@ EXCLUDED_WALK_DIRS: Set[str] = {
     ".mypy_cache",
     ".ruff_cache",
     ".claude",
+    "vendor",
+    "core",
+    ".tmp",
 }
 BINARY_EXTENSIONS: Set[str] = {
     ".png",

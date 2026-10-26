@@ -36,6 +36,9 @@ IGNORED_DIRS = {
     ".next",
     "coverage",
     ".claude",
+    "vendor",
+    "core",
+    ".tmp",
 }
 _BRANCH_AST_TYPES = (
     ast.If,
