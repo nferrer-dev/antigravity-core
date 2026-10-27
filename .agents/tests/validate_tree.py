@@ -1556,7 +1556,7 @@ def _check_constitutional_qualitative_rubric_rule(root):
     if not ag_md.is_file():
         return []
     txt = ag_md.read_bytes().decode("utf-8", errors="replace").lower()
-    req = ("qualitative judgment", "<rubric_score>", "0..3", "architectural", "curation")
+    req = ("qualitative judgment", "<rubric_score>", "0..3", "architectural", "curation", "markdown table")
     if any(token not in txt for token in req):
         return [
             "INV-10: .agents/AGENTS.md: missing Universal Rubric-Graded Qualitative Judgment (<RUBRIC_SCORE> 0..3 BARS) rule"
