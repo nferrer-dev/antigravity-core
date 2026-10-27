@@ -4,14 +4,15 @@ To prevent catastrophic operational errors, accidental infrastructure deletion, 
 
 ## Mandatory State Mutation Audit
 
-Before executing any terminal command that mutates global infrastructure, external databases, or performs broad/recursive filesystem deletions, pause execution and explicitly output a structured XML assessment:
+Before executing any terminal command that mutates global infrastructure, external databases, or performs broad/recursive filesystem deletions, pause execution and render a user-facing Markdown table preceded by an invisible `<!-- <BLAST_RADIUS> -->` HTML comment anchor (never emit raw `<BLAST_RADIUS>` XML tags directly in chat):
 
-```xml
-<BLAST_RADIUS>
-  <TARGET>[Description of the resources being modified]</TARGET>
-  <REVERSIBILITY>[High|Medium|Low|None]</REVERSIBILITY>
-  <WORST_CASE_IMPACT>[Low|Medium|High]</WORST_CASE_IMPACT>
-</BLAST_RADIUS>
+```markdown
+<!-- <BLAST_RADIUS> -->
+| Blast Radius Dimension | Assessment |
+| :--- | :--- |
+| **Target** | [Description of the resources being modified] |
+| **Reversibility** | `High` \| `Medium` \| `Low` \| `None` |
+| **Worst-Case Impact** | `Low` \| `Medium` \| `High` |
 ```
 
 ## Proactive Yielding

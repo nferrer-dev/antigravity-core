@@ -71,15 +71,16 @@ OpenAI Codex sessions operating on non-Codex tasks MUST treat other harness dire
 
 ## Blast Radius Containment (BRC) & Causal Telemetry
 
-1. **Mandatory State Mutation Audit**: Before any command that mutates global infrastructure, drops database objects, or recursively deletes outside `scratch/`/`tmp/`, emit:
-   ```xml
-   <BLAST_RADIUS>
-     <TARGET>[Resources modified]</TARGET>
-     <REVERSIBILITY>[High|Medium|Low|None]</REVERSIBILITY>
-     <WORST_CASE_IMPACT>[Low|Medium|High]</WORST_CASE_IMPACT>
-   </BLAST_RADIUS>
+1. **Mandatory State Mutation Audit**: Before any command that mutates global infrastructure, drops database objects, or recursively deletes outside `scratch/`/`tmp/`, render a Markdown table preceded by an invisible `<!-- <BLAST_RADIUS> -->` HTML comment (never emit raw `<BLAST_RADIUS>` XML in chat):
+   ```markdown
+   <!-- <BLAST_RADIUS> -->
+   | Blast Radius Dimension | Assessment |
+   | :--- | :--- |
+   | **Target** | [Resources modified] |
+   | **Reversibility** | `High` \| `Medium` \| `Low` \| `None` |
+   | **Worst-Case Impact** | `Low` \| `Medium` \| `High` |
    ```
-   If `<WORST_CASE_IMPACT>` is `High`, halt and wait for explicit user authorization. Dual-layer enforcement is active via `.codex/rules/antigravity.rules` (Starlark `prefix_rule` sandbox blocks) and `.codex/hooks/brc-guard.ps1` (`PreToolUse`).
+   If **Worst-Case Impact** is `High`, halt and wait for explicit user authorization. Dual-layer enforcement is active via `.codex/rules/antigravity.rules` (Starlark `prefix_rule` sandbox blocks) and `.codex/hooks/brc-guard.ps1` (`PreToolUse`).
 2. **Causal Telemetry (`.codex/telemetry/agentic_telemetry.md`)**: Log only Critical Autonomous Decisions (`[VERDICT: REJECT]`, `[GLOBAL VERDICT: REJECT]`, `[GLOBAL VERDICT: PROCEED]`, `<BLAST_RADIUS>`, `BLOCKING:`). Subagents never write the telemetry file directly; `.codex/hooks/telemetry-append.ps1` (`Stop` / `SubagentStop`) and the parent orchestrator append SHA-256 hash-chained (`[chain:<8hex>]`) entries.
 
 ## Rules (Always Loaded)
