@@ -91,7 +91,7 @@ Apply TDD to complex logic, features, and bug fixes via the `Bounded Pre-Flight 
 ---
 # Blast Radius Containment (BRC) Protocol
 
-1. **Mandatory State Mutation Audit**: Before commands that mutate global infrastructure, external databases, or recursively delete files, render a Markdown table (`| Blast Radius Dimension | Assessment |` with rows `**Target**`, `**Reversibility**` [`High|Medium|Low|None`], `**Worst-Case Impact**` [`Low|Medium|High`]) preceded by `<!-- <BLAST_RADIUS> -->` (never emit raw `<BLAST_RADIUS>` XML in chat).
+1. **Mandatory State Mutation Audit**: Before commands that mutate global infrastructure, external databases, or recursively delete files, render a Markdown table (`| Blast Radius Dimension | Assessment |`: `**Target**`, `**Reversibility**` [`High|Medium|Low|None`], `**Worst-Case Impact**` [`Low|Medium|High`]) preceded by `<!-- <BLAST_RADIUS> -->` (never raw XML in chat).
 2. **Proactive Yielding & High Impact**: If **Worst-Case Impact** is `High` (modifying/dropping external DBs, `npm publish`/`docker push`/`terraform apply`, or `rm -rf` on tracked files in `inherit`), halt and wait for user authorization.
 3. **Low Impact Exemptions**: Local builds (`go build`, `tsc`), dependency installs (`npm install`, `pip install`), cache cleanups (`rm -rf node_modules/`, `rm -rf build/`), and commands inside `Workspace: 'branch'` or `scratch/`.
 
