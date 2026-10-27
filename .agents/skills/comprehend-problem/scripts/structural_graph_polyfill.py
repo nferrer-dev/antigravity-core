@@ -219,22 +219,34 @@ def _is_test_path(rel_path):
     return "tests" in Path(norm).parts or _is_test_file(norm)
 
 
-def _build_reverse_importers(graph, node_ids):
-    """Map each node ID to the set of node IDs that import or call it."""
+def _build_mod_to_nodes(node_ids):
+    """Map module path, stem, and dotted path to matching node IDs."""
     mod_to_nodes = {}
     for nid in node_ids:
         p = Path(nid)
         dotted = ".".join(p.with_suffix("").parts)
         for m in (nid, p.stem, dotted):
             mod_to_nodes.setdefault(m, set()).add(nid)
+    return mod_to_nodes
 
+
+def _resolve_edge_targets(edge, mod_to_nodes):
+    """Return matching target_nid set from mod_to_nodes for an edge."""
+    target_mod = edge["target"]
+    targets = set()
+    for candidate_mod in (target_mod, target_mod.split(".")[-1]):
+        targets.update(mod_to_nodes.get(candidate_mod, ()))
+    return targets
+
+
+def _build_reverse_importers(graph, node_ids):
+    """Map each node ID to the set of node IDs that import or call it."""
+    mod_to_nodes = _build_mod_to_nodes(node_ids)
     reverse_importers = {nid: set() for nid in node_ids}
     for edge in graph["edges"]:
         src = edge["source"]
-        target_mod = edge["target"]
-        for candidate_mod in (target_mod, target_mod.split(".")[-1]):
-            for target_nid in mod_to_nodes.get(candidate_mod, ()):
-                reverse_importers.setdefault(target_nid, set()).add(src)
+        for target_nid in _resolve_edge_targets(edge, mod_to_nodes):
+            reverse_importers.setdefault(target_nid, set()).add(src)
     return reverse_importers
 
 
@@ -280,6 +292,85 @@ def find_impacted_tests(directory_or_graph, changed_files):
                 queue.append(importer)
 
     return sorted(nid for nid in visited if _is_test_file(nid))
+
+
+def _build_ppr_transitions(graph, node_ids):
+    """Build bidirectional weighted adjacency map for Personalized PageRank."""
+    mod_to_nodes = _build_mod_to_nodes(node_ids)
+    transitions = {nid: {} for nid in node_ids}
+    for edge in graph.get("edges", []):
+        src = edge["source"]
+        weight = 2.0 if edge.get("type") == "CALLS" else 1.0
+        for target_nid in _resolve_edge_targets(edge, mod_to_nodes):
+            if target_nid != src:
+                transitions[src][target_nid] = (
+                    transitions[src].get(target_nid, 0.0) + weight
+                )
+                transitions[target_nid][src] = (
+                    transitions[target_nid].get(src, 0.0) + weight
+                )
+    return transitions
+
+
+def _build_seed_vector(node_ids, seed_files):
+    """Build normalized personalization vector over node_ids from seed_files."""
+    if seed_files:
+        _, matched = _seed_changed_nodes(node_ids, seed_files)
+        if matched:
+            inv = 1.0 / float(len(matched))
+            return {nid: (inv if nid in matched else 0.0) for nid in node_ids}
+    uniform = 1.0 / float(len(node_ids))
+    return {nid: uniform for nid in node_ids}
+
+
+def _ppr_step(node_ids, transitions, scores, seed_vec, alpha):
+    """Perform one Personalized PageRank power-iteration step."""
+    dangling_mass = sum(scores[nid] for nid in node_ids if not transitions.get(nid))
+    dangling_share = alpha * dangling_mass / float(len(node_ids))
+    next_scores = {
+        nid: (1.0 - alpha) * seed_vec[nid] + dangling_share for nid in node_ids
+    }
+    for src in node_ids:
+        nbrs = transitions.get(src, {})
+        total_w = sum(nbrs.values())
+        if total_w > 0.0:
+            scale = alpha * scores[src] / total_w
+            for dst, w in nbrs.items():
+                next_scores[dst] += scale * w
+    l1_diff = sum(abs(next_scores[nid] - scores[nid]) for nid in node_ids)
+    return next_scores, l1_diff
+
+
+def compute_personalized_pagerank(
+    directory_or_graph, seed_files=None, alpha=0.85, max_iter=40, tol=1e-6
+):
+    """Compute Personalized PageRank scores over repository files for fault localization."""
+    graph = (
+        directory_or_graph
+        if isinstance(directory_or_graph, dict)
+        else build_graph(directory_or_graph)
+    )
+    node_ids = [n["id"] for n in graph.get("nodes", [])]
+    if not node_ids:
+        return {}
+    transitions = _build_ppr_transitions(graph, node_ids)
+    seed_vec = _build_seed_vector(node_ids, seed_files)
+    scores = dict(seed_vec)
+    for _ in range(max_iter):
+        scores, l1_diff = _ppr_step(node_ids, transitions, scores, seed_vec, alpha)
+        if l1_diff < tol:
+            break
+    return {nid: round(scores[nid], 6) for nid in sorted(node_ids)}
+
+
+def rank_impacted_nodes(directory_or_graph, seed_files=None, top_k=15):
+    """Return top_k files ranked by Personalized PageRank proximity to seed_files."""
+    scores = compute_personalized_pagerank(directory_or_graph, seed_files=seed_files)
+    ranked = sorted(scores.keys(), key=lambda nid: (-scores[nid], nid))
+    return [
+        {"id": nid, "score": scores[nid], "is_test": _is_test_file(nid)}
+        for nid in ranked[: int(top_k)]
+    ]
 
 
 def _format_positional_args(args_obj):
@@ -430,22 +521,26 @@ def _verify_loaded_graph(loaded):
 
 
 def _verify_diff_and_cli_helpers(tmp_dir, loaded):
-    """Verify high-complexity finder, impacted tests, AST surface diff, and --out CLI flag."""
+    """Verify high-complexity finder, impacted tests, PageRank, AST surface diff, and --out CLI flag."""
     if not find_high_complexity_functions(loaded, threshold=3):
         print("SELF-TEST FAIL: find_high_complexity_functions empty", file=sys.stderr)
         return False
     if find_impacted_tests(str(tmp_dir), ["sample.py"]) != ["test_widget.py"]:
         print("SELF-TEST FAIL: unexpected find_impacted_tests output", file=sys.stderr)
         return False
+    ranked = rank_impacted_nodes(loaded, seed_files=["sample.py"])
+    if not ranked or ranked[0]["id"] != "sample.py":
+        print("SELF-TEST FAIL: rank_impacted_nodes failed", file=sys.stderr)
+        return False
     surf_diff = compute_ast_surface_diff(
         "import os\ndef f(a):\n    return a\n",
         "import os\nimport sys\ndef f(a, b=1):\n    return a + b\ndef g():\n    return 0\n",
     )
-    if surf_diff["added_symbols"] != ["g"] or not surf_diff["signature_changes"]:
+    if (surf_diff["added_symbols"], bool(surf_diff["signature_changes"])) != (["g"], True):
         print("SELF-TEST FAIL: compute_ast_surface_diff failed", file=sys.stderr)
         return False
     out_flag_target = tmp_dir / "scratch" / "stage0_graph.json"
-    if main([str(tmp_dir), "--out", str(out_flag_target)]) != 0 or not out_flag_target.is_file():
+    if (main([str(tmp_dir), "--out", str(out_flag_target)]), out_flag_target.is_file()) != (0, True):
         print("SELF-TEST FAIL: --out flag failed", file=sys.stderr)
         return False
     return True
@@ -494,6 +589,12 @@ def _build_arg_parser():
         nargs="+",
         dest="impacted_tests",
         help="Return transitive test_*.py files impacted by the given changed files.",
+    )
+    parser.add_argument(
+        "--pagerank",
+        nargs="*",
+        dest="pagerank",
+        help="Rank repository files by Personalized PageRank optionally seeded by changed files.",
     )
     parser.add_argument(
         "--high-complexity",
@@ -553,7 +654,8 @@ def _run_high_complexity_cli(target_dir, threshold, dest_str):
 
 
 def _dispatch_analysis_flag(args, dest_str):
-    """Handle --ast-diff, --high-complexity, or --impacted-tests; return exit code or None."""
+    """Handle --ast-diff, --high-complexity, --impacted-tests, or --pagerank; return exit code or None."""
+    target_dir = args.target_directory or "."
     if args.ast_diff:
         old_p, new_p = Path(args.ast_diff[0]), Path(args.ast_diff[1])
         diff = compute_ast_surface_diff(
@@ -563,13 +665,15 @@ def _dispatch_analysis_flag(args, dest_str):
         return 0
     if args.high_complexity is not None:
         return _run_high_complexity_cli(
-            args.target_directory or ".", args.high_complexity, dest_str
+            target_dir, args.high_complexity, dest_str
         )
     if args.impacted_tests:
-        impacted = find_impacted_tests(
-            args.target_directory or ".", args.impacted_tests
-        )
+        impacted = find_impacted_tests(target_dir, args.impacted_tests)
         print(json.dumps({"impacted_tests": impacted}, indent=2))
+        return 0
+    if args.pagerank is not None:
+        ranked = rank_impacted_nodes(target_dir, seed_files=args.pagerank)
+        print(json.dumps({"pagerank": ranked}, indent=2))
         return 0
     return None
 

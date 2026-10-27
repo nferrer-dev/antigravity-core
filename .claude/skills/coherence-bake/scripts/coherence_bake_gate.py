@@ -382,6 +382,33 @@ def _matches_scope(rel_path: str, scope_prefix: str) -> bool:
     return rel_path == norm or rel_path.startswith(f"{norm}/")
 
 
+def _is_reparse_or_symlink(path: Path) -> bool:
+    """Return True if path is a symlink or NTFS junction/reparse point."""
+    if path.is_symlink():
+        return True
+    return os.path.normcase(os.path.realpath(path)) != os.path.normcase(
+        os.path.abspath(path)
+    )
+
+
+def _should_exclude_walk_dir(
+    dirname: str,
+    parent_path: Path,
+    repo_root: Path,
+) -> bool:
+    """Return True if dirname under parent_path should be excluded from repo walk."""
+    if dirname not in EXCLUDED_WALK_DIRS:
+        return False
+    if dirname == "." + "claude" and parent_path == repo_root:
+        candidate = repo_root / dirname
+        if (
+            (candidate / "tests" / "validate_tree.py").is_file()
+            and not _is_reparse_or_symlink(candidate)
+        ):
+            return False
+    return True
+
+
 def build_file_coverage_ledger(
     repo_root: Path,
     scope_prefix: str = "",
@@ -391,7 +418,9 @@ def build_file_coverage_ledger(
     ledger: Dict[str, Dict[str, str]] = {}
     for dirpath, dirnames, filenames in os.walk(resolved_root):
         dirnames[:] = sorted(
-            d for d in dirnames if d not in EXCLUDED_WALK_DIRS
+            d
+            for d in dirnames
+            if not _should_exclude_walk_dir(d, Path(dirpath), resolved_root)
         )
         for fname in sorted(filenames):
             fpath = Path(dirpath) / fname
@@ -442,9 +471,14 @@ def _extract_py_loaded_names(py_path: Path) -> Set[str]:
 
 def _collect_repo_loaded_names(repo_root: Path) -> Set[str]:
     """Collect all AST Name load identifiers across Python files in repo_root."""
+    resolved_root = repo_root.resolve()
     loaded: Set[str] = set()
-    for dirpath, dirnames, filenames in os.walk(repo_root):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_WALK_DIRS]
+    for dirpath, dirnames, filenames in os.walk(resolved_root):
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if not _should_exclude_walk_dir(d, Path(dirpath), resolved_root)
+        ]
         for fname in filenames:
             if fname.endswith(".py"):
                 loaded.update(_extract_py_loaded_names(Path(dirpath) / fname))
@@ -1961,7 +1995,9 @@ def audit_repo_surfaces(repo_root: Path) -> List[str]:
     gaps: List[str] = []
     for dirpath, dirnames, filenames in os.walk(resolved_root):
         dirnames[:] = sorted(
-            d for d in dirnames if d not in EXCLUDED_WALK_DIRS
+            d
+            for d in dirnames
+            if not _should_exclude_walk_dir(d, Path(dirpath), resolved_root)
         )
         for fname in sorted(filenames):
             fpath = Path(dirpath) / fname
@@ -2589,6 +2625,12 @@ def _verify_manifest_self_test(repo_root: Path, anchor: str) -> Optional[str]:
     )
     if res_halt["status"] != "AIRTIGHT_HALT":
         return f"Expected manifest AIRTIGHT_HALT, got {res_halt}"
+    cl_vt = repo_root / ("." + "claude") / "tests" / "validate_tree.py"
+    cl_vt.parent.mkdir(parents=True, exist_ok=True)
+    cl_vt.write_text("# validator\n", encoding="utf-8")
+    cl_rel = ("." + "claude") + "/tests/validate_tree.py"
+    if cl_rel not in build_file_coverage_ledger(repo_root):
+        return "Expected peer harness tree in file_coverage_ledger"
     return None
 
 

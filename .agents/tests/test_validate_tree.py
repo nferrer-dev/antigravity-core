@@ -371,6 +371,12 @@ class LiveTree(unittest.TestCase):
         raw = agents_md.read_bytes()
         self.assertLessEqual(
             len(raw),
+            vt.AGENTS_MD_MAX_BYTES,
+            ".agents/AGENTS.md (%d bytes) should stay <= %d bytes"
+            % (len(raw), vt.AGENTS_MD_MAX_BYTES),
+        )
+        self.assertLessEqual(
+            len(raw),
             17500,
             ".agents/AGENTS.md (%d bytes) should stay <= 17,500 bytes with modular rules extracted"
             % len(raw),
@@ -2958,6 +2964,94 @@ class LiveTree(unittest.TestCase):
             errs = vt._check_constitutional_qualitative_rubric_rule(t_root)
             self.assertEqual(len(errs), 1)
             self.assertIn("INV-10: .agents/AGENTS.md", errs[0])
+
+    def test_classify_stage0_prompt_features_jev_adapter_and_anti_loophole_clamp(self):
+        import importlib.util
+
+        rgg_path = (
+            REPO_ROOT
+            / ".agents"
+            / "skills"
+            / "comprehend-problem"
+            / "scripts"
+            / "rubric_grade_gate.py"
+        )
+        rgg_spec = importlib.util.spec_from_file_location(
+            "rubric_grade_gate_stage0_prompt", rgg_path
+        )
+        rgg = importlib.util.module_from_spec(rgg_spec)
+        rgg_spec.loader.exec_module(rgg)
+
+        t_hook = rgg.classify_stage0_prompt_features(
+            target_paths=["hooks.json"],
+            touches_execution_or_global_state=False,
+            jev_probabilities={"architectural_ambiguity": 0.05},
+            jev_noul_bits=0.2,
+        )
+        self.assertEqual(t_hook, "TIER_2")
+
+        t_prob = rgg.classify_stage0_prompt_features(
+            target_paths=["src/app.py"],
+            touches_execution_or_global_state=False,
+            jev_probabilities={"crosses_module_boundary": 0.75},
+            jev_noul_bits=0.2,
+        )
+        self.assertEqual(t_prob, "TIER_1")
+
+        t_noul = rgg.classify_stage0_prompt_features(
+            target_paths=["src/app.py"],
+            touches_execution_or_global_state=False,
+            jev_probabilities={"crosses_module_boundary": 0.10},
+            jev_noul_bits=1.5,
+            noul_tier2_threshold=1.0,
+        )
+        self.assertEqual(t_noul, "TIER_2")
+
+        t_low = rgg.classify_stage0_prompt_features(
+            target_paths=["src/app.py"],
+            touches_execution_or_global_state=False,
+            jev_probabilities={"crosses_module_boundary": 0.10},
+            jev_noul_bits=0.2,
+        )
+        self.assertEqual(t_low, "TIER_0")
+
+        with self.assertRaises(ValueError):
+            rgg.classify_stage0_prompt_features(
+                target_paths=["src/app.py"],
+                jev_probabilities={"crosses_module_boundary": 1.5},
+            )
+
+    def test_sync_global_config_hermes_dir_opt_in(self):
+        import importlib.util
+
+        sync_path = REPO_ROOT / ".agents" / "scripts" / "sync_global_config.py"
+        sync_spec = importlib.util.spec_from_file_location(
+            "sync_global_config_hermes", sync_path
+        )
+        sync_mod = importlib.util.module_from_spec(sync_spec)
+        sync_spec.loader.exec_module(sync_mod)
+        self.assertEqual(sync_mod.HERMES_DIR_NAME, ".hermes")
+        with tempfile.TemporaryDirectory() as tmp:
+            hermes_dir = Path(tmp) / sync_mod.HERMES_DIR_NAME
+            custom_skill = hermes_dir / "skills" / "custom-user-hermes-skill"
+            custom_skill.mkdir(parents=True, exist_ok=True)
+            (custom_skill / "SKILL.md").write_text("# Custom\n", encoding="utf-8")
+
+            errs_before = sync_mod.sync_hermes_target(
+                REPO_ROOT, hermes_dir, apply=False
+            )
+            self.assertTrue(len(errs_before) > 0)
+
+            errs_apply = sync_mod.sync_hermes_target(REPO_ROOT, hermes_dir, apply=True)
+            self.assertEqual(errs_apply, [])
+            self.assertTrue((hermes_dir / "AGENTS.md").is_file())
+            self.assertTrue((custom_skill / "SKILL.md").is_file())
+            self.assertTrue(
+                (hermes_dir / "skills" / "comprehend-problem" / "SKILL.md").is_file()
+            )
+
+            errs_after = sync_mod.sync_hermes_target(REPO_ROOT, hermes_dir, apply=False)
+            self.assertEqual(errs_after, [])
 
 
 class Meta(unittest.TestCase):

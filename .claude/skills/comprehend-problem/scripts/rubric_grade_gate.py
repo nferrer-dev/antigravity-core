@@ -46,6 +46,9 @@ _PROSE_VERDICT_RE = re.compile(
     r"\[(?:GLOBAL\s+)?VERDICT:\s*([A-Za-z0-9_]+)\]",
     re.IGNORECASE,
 )
+ANTI_LOOPHOLE_PATH_RE = re.compile(
+    r"(?i)(?:^|[/\\])(?:\.github[/\\]workflows[/\\]|hooks[/\\]|scripts[/\\]|(?:AGENTS|CLAUDE|CODEX)\.md$|mcp_config\.json$|\.mcp\.json$|hooks\.json$|settings\.json$|config\.toml$|\.gitignore$|\.pre-commit-config\.yaml$)|(?:\.ps1|\.sh|\.bat|\.cmd)$"
+)
 
 
 def _is_strict_int(value: Any) -> bool:
@@ -368,6 +371,23 @@ def _check_panel_roles_and_prose(
     return None
 
 
+def _compute_conformal_panel_stats(
+    results: Sequence[Mapping[str, Any]],
+) -> Dict[str, float]:
+    """Compute panel mean, standard deviation, and 90% Conformal Lower Confidence Bound."""
+    scores = [float(r["cobb_douglas"]) for r in results]
+    n = float(len(scores))
+    mean_val = sum(scores) / n
+    variance = sum((s - mean_val) ** 2 for s in scores) / n
+    std_val = math.sqrt(variance)
+    lcb = max(0.0, mean_val - 1.28155 * std_val * math.sqrt((n + 1.0) / n))
+    return {
+        "panel_mean": round(mean_val, 4),
+        "panel_std": round(std_val, 4),
+        "conformal_lcb": round(lcb, 4),
+    }
+
+
 def _combine_valid_rubric_results(
     results: Sequence[Mapping[str, Any]],
 ) -> Dict[str, Any]:
@@ -388,6 +408,7 @@ def _combine_valid_rubric_results(
         "total_score": sum(int(r["total_score"]) for r in results),
         "threshold": sum(int(r["threshold"]) for r in results),
         "cobb_douglas": min(float(r["cobb_douglas"]) for r in results),
+        **_compute_conformal_panel_stats(results),
     }
 
 
@@ -429,6 +450,72 @@ def derive_stage0_tier(
     if files_touched > 1 or crosses_module_boundary:
         return "TIER_1"
     return "TIER_0"
+
+
+def _has_anti_loophole_path(target_paths: Sequence[str]) -> bool:
+    """Return True if any path in target_paths touches an Anti-Loophole surface."""
+    return any(
+        isinstance(p, str) and bool(ANTI_LOOPHOLE_PATH_RE.search(p.strip()))
+        for p in target_paths
+    )
+
+
+def _is_valid_unit_float(val: Any) -> bool:
+    """Return True if val is a numeric float/int in [0.0, 1.0] and not a bool."""
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return False
+    return 0.0 <= float(val) <= 1.0
+
+
+def _validate_jev_inputs(
+    probs: Mapping[str, float],
+    probability_threshold: float,
+    jev_noul_bits: float,
+    noul_tier2_threshold: float,
+) -> None:
+    """Validate calibrated probability bounds and Noul entropy thresholds."""
+    if (
+        not _is_valid_unit_float(probability_threshold)
+        or float(probability_threshold) <= 0.0
+    ):
+        raise ValueError("probability_threshold must be in (0.0, 1.0]")
+    if float(jev_noul_bits) < 0.0 or float(noul_tier2_threshold) <= 0.0:
+        raise ValueError("jev_noul_bits must be >= 0.0 and noul_tier2_threshold > 0.0")
+    if not all(_is_valid_unit_float(v) for v in probs.values()):
+        raise ValueError("jev_probabilities values must be in [0.0, 1.0]")
+
+
+def classify_stage0_prompt_features(
+    *,
+    target_paths: Sequence[str] = (),
+    touches_execution_or_global_state: bool = False,
+    jev_probabilities: Optional[Mapping[str, float]] = None,
+    probability_threshold: float = 0.5,
+    jev_noul_bits: float = 0.0,
+    noul_tier2_threshold: float = 1.0,
+) -> str:
+    """Route Stage 0 prompt features with calibrated Jev probabilities and Anti-Loophole floor."""
+    probs: Mapping[str, float] = jev_probabilities or {}
+    _validate_jev_inputs(
+        probs, probability_threshold, jev_noul_bits, noul_tier2_threshold
+    )
+    effective_touches = bool(
+        touches_execution_or_global_state or _has_anti_loophole_path(target_paths)
+    )
+    thr = float(probability_threshold)
+    crosses = float(probs.get("crosses_module_boundary", 0.0)) >= thr
+    sec_deps = float(probs.get("modifies_security_or_deps", 0.0)) >= thr
+    ambig = (
+        float(probs.get("architectural_ambiguity", 0.0)) >= thr
+        or float(jev_noul_bits) >= float(noul_tier2_threshold)
+    )
+    return derive_stage0_tier(
+        files_touched=len(target_paths),
+        crosses_module_boundary=crosses,
+        touches_execution_or_global_state=effective_touches,
+        modifies_security_or_deps=sec_deps,
+        architectural_ambiguity=ambig,
+    )
 
 
 def _claim_rank_tuple(res: Mapping[str, Any]) -> Tuple[int, int]:
@@ -501,6 +588,44 @@ def _run_negative_self_tests(repo_root: Path) -> Optional[str]:
     res_path = evaluate_rubric_payload(bad_path, repo_root=repo_root)
     if res_path.get("reason") != "evidence_path_outside_repo_or_missing":
         return f"Expected missing path error, got {res_path}"
+    return _run_jev_stage0_self_tests()
+
+
+def _run_jev_stage0_self_tests() -> Optional[str]:
+    """Verify Anti-Loophole hard clamp and calibrated Jev Stage 0 routing."""
+    if (
+        classify_stage0_prompt_features(
+            target_paths=["hooks/brc-guard.ps1"],
+            jev_probabilities={"architectural_ambiguity": 0.0},
+        )
+        != "TIER_2"
+    ):
+        return "Expected Anti-Loophole path to clamp to TIER_2"
+    if (
+        classify_stage0_prompt_features(
+            target_paths=["src/app.py"],
+            jev_probabilities={"crosses_module_boundary": 0.8},
+        )
+        != "TIER_1"
+    ):
+        return "Expected crosses_module_boundary >= 0.5 to route to TIER_1"
+    if (
+        classify_stage0_prompt_features(
+            target_paths=["src/app.py"],
+            jev_noul_bits=1.2,
+            noul_tier2_threshold=1.0,
+        )
+        != "TIER_2"
+    ):
+        return "Expected high Noul entropy to escalate to TIER_2"
+    if (
+        classify_stage0_prompt_features(
+            target_paths=["src/app.py"],
+            jev_probabilities={"crosses_module_boundary": 0.1},
+        )
+        != "TIER_0"
+    ):
+        return "Expected low-probability single file to route to TIER_0"
     return None
 
 
@@ -534,8 +659,14 @@ def run_self_test() -> Tuple[int, List[str]]:
         panel_ok = evaluate_rubric_text(
             good_txt + "\n" + good_txt_2, repo_root=repo_root
         )
-        if panel_ok.get("status") != "VALID" or panel_ok.get("block_count") != 2:
+        if (
+            panel_ok.get("status"),
+            panel_ok.get("block_count"),
+            "conformal_lcb" in panel_ok,
+        ) != ("VALID", 2, True):
             return 1, [f"Expected 2-block VALID panel, got {panel_ok}"]
+        if panel_ok["conformal_lcb"] > panel_ok["panel_mean"]:
+            return 1, [f"Expected conformal_lcb <= panel_mean, got {panel_ok}"]
         dup_res = evaluate_rubric_text(
             good_txt + "\n" + good_txt, repo_root=repo_root
         )

@@ -204,25 +204,6 @@ def _all_constraints_hold(constraints, assignment):
     return all(_eval_expr(c, assignment) for c in constraints)
 
 
-def _find_satisfying_assignment(variables, constraints):
-    """Return a satisfying assignment dict for variables and constraints, or None."""
-    var_names = sorted(variables.keys())
-
-    def backtrack(idx, assignment):
-        if idx == len(var_names):
-            return dict(assignment) if _all_constraints_hold(constraints, assignment) else None
-        name = var_names[idx]
-        for val in variables[name]:
-            assignment[name] = val
-            result = backtrack(idx + 1, assignment)
-            if result is not None:
-                return result
-            del assignment[name]
-        return None
-
-    return backtrack(0, {})
-
-
 def _extract_referenced_vars(exprs):
     """Return the set of variable identifiers referenced across a list of expressions."""
     refs = set()
@@ -233,6 +214,59 @@ def _extract_referenced_vars(exprs):
             if isinstance(node, ast.Name) and node.id not in excluded:
                 refs.add(node.id)
     return refs
+
+
+def _compile_constraint_scopes(constraints, var_set):
+    """Pair each constraint expression with its referenced variable scope."""
+    return [
+        (c, frozenset(_extract_referenced_vars([c]) & var_set))
+        for c in constraints
+    ]
+
+
+def _order_mrv_variables(variables, scoped_constraints):
+    """Order variables by Minimum Remaining Values (domain size) and degree heuristic."""
+    degree = {v: 0 for v in variables}
+    for _, scope in scoped_constraints:
+        for v in scope:
+            if v in degree:
+                degree[v] += 1
+    return sorted(
+        variables.keys(),
+        key=lambda v: (len(variables[v]), -degree[v], v),
+    )
+
+
+def _consistent_partial(assignment, scoped_constraints):
+    """Return True if all constraints whose scope is bound in assignment evaluate to True."""
+    return all(
+        _eval_expr(c, assignment)
+        for c, scope in scoped_constraints
+        if scope.issubset(assignment.keys())
+    )
+
+
+def _find_satisfying_assignment(variables, constraints):
+    """Return a satisfying assignment dict for variables and constraints, or None."""
+    scoped = _compile_constraint_scopes(constraints, set(variables.keys()))
+    if not _consistent_partial({}, scoped):
+        return None
+    var_names = _order_mrv_variables(variables, scoped)
+
+    def backtrack(idx, assignment):
+        if idx == len(var_names):
+            return {k: assignment[k] for k in sorted(assignment.keys())}
+        name = var_names[idx]
+        for val in variables[name]:
+            assignment[name] = val
+            if _consistent_partial(assignment, scoped):
+                result = backtrack(idx + 1, assignment)
+                if result is not None:
+                    return result
+            del assignment[name]
+        return None
+
+    return backtrack(0, {})
 
 
 def _extract_implies_antecedent(inv_expr):

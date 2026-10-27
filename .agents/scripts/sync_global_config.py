@@ -46,6 +46,7 @@ CLAUDE_HOOKS_VAR = "$CLAUDE_PROJECT_DIR/" + CLAUDE_DIR_NAME + "/hooks"
 CODEX_MD_NAME = "CODEX" + ".md"
 CODEX_DIR_NAME = "." + "codex"
 CODEX_HOOKS_REL = "./" + CODEX_DIR_NAME + "/hooks"
+HERMES_DIR_NAME = "." + "hermes"
 _TEXT_EXTS = {".md", ".json", ".toml", ".rules", ".yaml", ".ps1", ".py", ".js"}
 
 
@@ -1012,10 +1013,32 @@ def _check_root_skills_junction(skills_link, expected_skills):
     return [], ["Skills junction OK: %s -> %s" % (skills_link, resolved_skills)]
 
 
+def sync_hermes_target(repo_root, hermes_dir, apply=False, backup_dir=None):
+    """Verify or apply one-way .agents/AGENTS.md and skills sync to hermes_dir."""
+    repo_root = Path(repo_root)
+    hermes_dir = Path(hermes_dir)
+    pairs = [(repo_root / ".agents" / "AGENTS.md", hermes_dir / "AGENTS.md")]
+    errors, _ = _sync_file_pairs(
+        pairs, hermes_dir, "Hermes", apply, backup_dir, "hermes"
+    )
+    sk_errs, _ = _sync_skill_junctions(
+        repo_root / ".agents" / "skills", hermes_dir, "Hermes", apply
+    )
+    errors.extend(sk_errs)
+    return errors
+
+
 def _sync_optional_peer_harnesses(
-    repo_root, global_config_dir, claude_dir, claude_json, codex_dir, apply_changes, backup_dir
+    repo_root,
+    global_config_dir,
+    claude_dir,
+    claude_json,
+    codex_dir,
+    apply_changes,
+    backup_dir,
+    hermes_dir=None,
 ):
-    """Run optional Claude and Codex verification/sync passes."""
+    """Run optional Claude, Codex, and Hermes verification/sync passes."""
     errors = []
     messages = []
     if claude_dir is not None:
@@ -1039,6 +1062,11 @@ def _sync_optional_peer_harnesses(
         )
         errors.extend(x_errs)
         messages.extend(x_msgs)
+    if hermes_dir is not None:
+        h_errs = sync_hermes_target(
+            repo_root, hermes_dir, apply=apply_changes, backup_dir=backup_dir
+        )
+        errors.extend(h_errs)
     return errors, messages
 
 
@@ -1050,8 +1078,9 @@ def verify_or_sync(
     claude_dir=None,
     claude_json=None,
     codex_dir=None,
+    hermes_dir=None,
 ):
-    """Verify or apply UTF-8 LF sync from .agents/ (and optionally Claude/Codex trees) to global dirs."""
+    """Verify or apply UTF-8 LF sync from .agents/ (and optionally Claude/Codex/Hermes trees) to global dirs."""
     repo_root = Path(repo_root)
     global_config_dir = Path(global_config_dir)
     sync_pairs = _build_agents_sync_pairs(repo_root, global_config_dir)
@@ -1094,6 +1123,7 @@ def verify_or_sync(
         codex_dir,
         apply_changes,
         backup_dir,
+        hermes_dir=hermes_dir,
     )
     errors.extend(peer_errs)
     messages.extend(peer_msgs)
@@ -1263,6 +1293,34 @@ def _self_test_codex_sync(repo_root, tmp_path, fake_global, fake_backup):
     return []
 
 
+def _self_test_hermes_sync(repo_root, tmp_path, fake_backup):
+    """Run hermetic twice-applied idempotency and check self-tests for Hermes sync."""
+    fake_hermes = tmp_path / "hermes"
+    (fake_hermes / "skills" / "custom-hermes-skill").mkdir(parents=True, exist_ok=True)
+    (fake_hermes / "skills" / "custom-hermes-skill" / "SKILL.md").write_text(
+        "# Custom Hermes skill\n", encoding="utf-8"
+    )
+    if not sync_hermes_target(repo_root, fake_hermes, apply=False):
+        return ["Self-test failed: Hermes check before apply should report missing files"]
+    for apply_flag in (True, True, False):
+        h_errs = sync_hermes_target(
+            repo_root=Path(repo_root),
+            hermes_dir=fake_hermes,
+            apply=apply_flag,
+            backup_dir=fake_backup if apply_flag else None,
+        )
+        if h_errs:
+            return [
+                "Self-test failed during Hermes sync (apply=%s): %s"
+                % (apply_flag, h_errs)
+            ]
+    if not (fake_hermes / "AGENTS.md").is_file():
+        return ["Self-test failed: Hermes AGENTS.md not synced"]
+    if not (fake_hermes / "skills" / "custom-hermes-skill" / "SKILL.md").is_file():
+        return ["Self-test failed: custom Hermes skill was not preserved"]
+    return []
+
+
 def run_self_test(repo_root):
     """Run an isolated tempdir self-test of sync_global_config."""
     import tempfile
@@ -1283,12 +1341,22 @@ def run_self_test(repo_root):
             lambda: _self_test_backup_and_double_load(repo_root, fake_global, fake_backup),
             lambda: _self_test_claude_sync(repo_root, tmp_path, fake_global, fake_backup),
             lambda: _self_test_codex_sync(repo_root, tmp_path, fake_global, fake_backup),
+            lambda: _self_test_hermes_sync(repo_root, tmp_path, fake_backup),
         ):
             errs = step()
             if errs:
                 return 1, errs
 
     return 0, ["sync_global_config.py self-test: PASS"]
+
+
+def _resolve_hermes_cli_dir(args):
+    """Return target Hermes directory from CLI args if opted in, else None."""
+    if args.hermes_dir is not None:
+        return Path(args.hermes_dir)
+    if args.hermes:
+        return Path.home() / HERMES_DIR_NAME
+    return None
 
 
 def main():
@@ -1305,6 +1373,17 @@ def main():
         "--backup-dir",
         default=None,
         help="Optional directory to back up overwritten files.",
+    )
+    parser.add_argument(
+        "--hermes",
+        action="store_true",
+        help="Opt-in sync/check for Nous Hermes Agent (~/.hermes).",
+    )
+    parser.add_argument(
+        "--hermes-dir",
+        type=Path,
+        default=None,
+        help="Optional explicit target directory for Nous Hermes Agent sync.",
     )
     args = parser.parse_args()
 
@@ -1324,6 +1403,7 @@ def main():
             claude_dir=claude_dir,
             claude_json=claude_json,
             codex_dir=codex_dir,
+            hermes_dir=_resolve_hermes_cli_dir(args),
         )
     for line in lines:
         print(line)
