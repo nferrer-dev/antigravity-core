@@ -1193,6 +1193,38 @@ class LiveTree(unittest.TestCase):
                 "unfalsified_fault_mutation",
             )
 
+    def test_veriharness_prompt_and_agent_wiring(self):
+        cp_md = (
+            REPO_ROOT / ".codex" / "skills" / "comprehend-problem" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        for tok in (
+            "program_target",
+            "state_machine",
+            "must_refute",
+            "witness_symbol",
+            "sha256_anchor",
+            "z3_receipt",
+        ):
+            self.assertIn(tok, cp_md, "comprehend-problem/SKILL.md missing %s" % tok)
+
+        for agent_name in ("stage3-design-reviewer.toml", "stage4-code-auditor.toml"):
+            ag_txt = (REPO_ROOT / ".codex" / "agents" / agent_name).read_text(
+                encoding="utf-8"
+            )
+            for req_key in (
+                '"stage"',
+                '"role"',
+                '"verdict"',
+                '"criteria"',
+                '"id"',
+                '"evidence"',
+                '"score"',
+                "witness_symbol",
+                "sha256_anchor",
+                "z3_receipt",
+            ):
+                self.assertIn(req_key, ag_txt, "%s missing %s" % (agent_name, req_key))
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):
