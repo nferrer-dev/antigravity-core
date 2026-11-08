@@ -802,6 +802,55 @@ class LiveTree(unittest.TestCase):
             self.assertEqual(len(errs), 1)
             self.assertIn("INV-10: CODEX.md", errs[0])
 
+    def test_stage0_json_receipt_positive_signature_guard_codex(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            scratch_dir = tmp_path / "scratch"
+            scratch_dir.mkdir(parents=True, exist_ok=True)
+            plan_path = str(tmp_path / "implementation_plan.md")
+
+            raw_spec = scratch_dir / "stage0_spec.json"
+            raw_spec.write_text(
+                json.dumps({"variables": {"x": [1, 2]}}), encoding="utf-8"
+            )
+            res_raw = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Write",
+                    "tool_input": {"file_path": plan_path, "content": "# Plan\n"},
+                }
+            )
+            self.assertEqual(res_raw.returncode, 2)
+            raw_spec.unlink()
+
+            proof_f = scratch_dir / "stage0_proof.json"
+            proof_f.write_text(
+                json.dumps({"status": "SAT", "engine": "stdlib-finite-domain"}),
+                encoding="utf-8",
+            )
+            res_proof = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Write",
+                    "tool_input": {"file_path": plan_path, "content": "# Plan\n"},
+                }
+            )
+            self.assertEqual(res_proof.returncode, 0, res_proof.stderr)
+            proof_f.unlink()
+
+            graph_f = scratch_dir / "stage0_graph.json"
+            graph_f.write_text(
+                json.dumps({"nodes": [], "edges": []}), encoding="utf-8"
+            )
+            res_graph = self._run_codex_brc_guard(
+                {
+                    "cwd": str(tmp_path),
+                    "tool_name": "Write",
+                    "tool_input": {"file_path": plan_path, "content": "# Plan\n"},
+                }
+            )
+            self.assertEqual(res_graph.returncode, 0, res_graph.stderr)
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

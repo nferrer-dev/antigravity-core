@@ -10,6 +10,7 @@ Usage:
     python logical_z3_polyfill.py --self-test
 """
 import ast
+import hashlib
 import json
 import operator
 import sys
@@ -295,6 +296,84 @@ def _extract_unsat_core_finite(variables, constraints):
     return core
 
 
+def _is_domain_tautology(inv, variables, constraints):
+    """Return True if inv already holds over raw variable domains without constraints."""
+    if not constraints or _extract_implies_antecedent(inv) is not None:
+        return False
+    return _find_satisfying_assignment(variables, ["Not(%s)" % inv]) is None
+
+
+def _check_clause_equivalence(
+    variables, constraints, eq_constraints, engine_name, model, unconstrained
+):
+    """Verify mutual entailment between constraints and eq_constraints."""
+    for premises, clauses in (
+        (constraints, eq_constraints),
+        (eq_constraints, constraints),
+    ):
+        for clause in clauses:
+            ce = _find_satisfying_assignment(
+                variables, list(premises) + ["Not(%s)" % clause]
+            )
+            if ce is not None:
+                return {
+                    "status": "REFUTED",
+                    "engine": engine_name,
+                    "model": model,
+                    "refuted_equivalence": clause,
+                    "counterexample": ce,
+                    "unconstrained_variables": unconstrained,
+                    "constraints_count": len(constraints),
+                }
+    return None
+
+
+def _compute_proof_certificate(spec, engine_name, model):
+    """Return deterministic SHA-256 hex digest over spec, engine, and model."""
+    payload = {
+        "engine": engine_name,
+        "model": model,
+        "constraints": list(spec.get("constraints", [])),
+        "invariants": list(spec.get("invariants", [])),
+        "equivalence_constraints": list(
+            spec.get("equivalence_constraints", [])
+        ),
+    }
+    raw = json.dumps(payload, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _finalize_sat_result(
+    spec, engine_name, variables, constraints, model, unconstrained
+):
+    """Check optional equivalence_constraints and build SAT receipt with certificate."""
+    eq_constraints = spec.get("equivalence_constraints", [])
+    if eq_constraints:
+        eq_fail = _check_clause_equivalence(
+            variables,
+            constraints,
+            eq_constraints,
+            engine_name,
+            model,
+            unconstrained,
+        )
+        if eq_fail is not None:
+            return eq_fail
+    out = {
+        "status": "SAT",
+        "engine": engine_name,
+        "model": model,
+        "unconstrained_variables": unconstrained,
+        "constraints_count": len(constraints),
+        "proof_certificate_sha256": _compute_proof_certificate(
+            spec, engine_name, model
+        ),
+    }
+    if eq_constraints:
+        out["equivalence_verified"] = True
+    return out
+
+
 def _check_finite_invariant(inv, variables, constraints, model, unconstrained):
     """Verify a single invariant over finite domains; return failure dict or None."""
     negated_constraints = list(constraints) + ["Not(%s)" % inv]
@@ -322,6 +401,16 @@ def _check_finite_invariant(inv, variables, constraints, model, unconstrained):
                 "unconstrained_variables": unconstrained,
                 "constraints_count": len(constraints),
             }
+    if _is_domain_tautology(inv, variables, constraints):
+        return {
+            "status": "VACUOUS",
+            "engine": "stdlib-finite-domain",
+            "model": model,
+            "vacuous_invariant": inv,
+            "vacuous_reason": "domain_tautology",
+            "unconstrained_variables": unconstrained,
+            "constraints_count": len(constraints),
+        }
     return None
 
 
@@ -330,7 +419,10 @@ def solve_finite_domain(spec):
     variables = spec.get("variables", {})
     constraints = spec.get("constraints", [])
     invariants = spec.get("invariants", [])
-    referenced = _extract_referenced_vars(list(constraints) + list(invariants))
+    eq_constraints = spec.get("equivalence_constraints", [])
+    referenced = _extract_referenced_vars(
+        list(constraints) + list(invariants) + list(eq_constraints)
+    )
     unconstrained = sorted(set(variables.keys()) - referenced)
 
     model = _find_satisfying_assignment(variables, constraints)
@@ -349,13 +441,9 @@ def solve_finite_domain(spec):
         if failure is not None:
             return failure
 
-    return {
-        "status": "SAT",
-        "engine": "stdlib-finite-domain",
-        "model": model,
-        "unconstrained_variables": unconstrained,
-        "constraints_count": len(constraints),
-    }
+    return _finalize_sat_result(
+        spec, "stdlib-finite-domain", variables, constraints, model, unconstrained
+    )
 
 
 def _eval_z3_name(node, env):
@@ -457,7 +545,9 @@ def _build_z3_solver(z3_mod, variables, constraints):
     return solver, z3_vars, env
 
 
-def _check_z3_invariant(inv, solver, env, z3_vars, z3_mod, model_dict, unconstrained, constraints_count):
+def _check_z3_invariant(
+    inv, variables, constraints, solver, env, z3_vars, z3_mod, model_dict, unconstrained
+):
     """Check one invariant in Z3 for refutation or vacuity; return failure dict or None."""
     solver.push()
     inv_tree = ast.parse(inv, mode="eval")
@@ -473,11 +563,21 @@ def _check_z3_invariant(inv, solver, env, z3_vars, z3_mod, model_dict, unconstra
             "refuted_invariant": inv,
             "counterexample": ce_dict,
             "unconstrained_variables": unconstrained,
-            "constraints_count": constraints_count,
+            "constraints_count": len(constraints),
         }
     solver.pop()
     antecedent = _extract_implies_antecedent(inv)
     if antecedent is None:
+        if _is_domain_tautology(inv, variables, constraints):
+            return {
+                "status": "VACUOUS",
+                "engine": "z3-solver",
+                "model": model_dict,
+                "vacuous_invariant": inv,
+                "vacuous_reason": "domain_tautology",
+                "unconstrained_variables": unconstrained,
+                "constraints_count": len(constraints),
+            }
         return None
     solver.push()
     ant_tree = ast.parse(antecedent, mode="eval")
@@ -492,7 +592,7 @@ def _check_z3_invariant(inv, solver, env, z3_vars, z3_mod, model_dict, unconstra
             "vacuous_invariant": inv,
             "vacuous_reason": "antecedent_unsat",
             "unconstrained_variables": unconstrained,
-            "constraints_count": constraints_count,
+            "constraints_count": len(constraints),
         }
     return None
 
@@ -502,7 +602,10 @@ def _solve_with_z3(spec, z3_mod):
     variables = spec.get("variables", {})
     constraints = spec.get("constraints", [])
     invariants = spec.get("invariants", [])
-    referenced = _extract_referenced_vars(list(constraints) + list(invariants))
+    eq_constraints = spec.get("equivalence_constraints", [])
+    referenced = _extract_referenced_vars(
+        list(constraints) + list(invariants) + list(eq_constraints)
+    )
     unconstrained = sorted(set(variables.keys()) - referenced)
     solver, z3_vars, env = _build_z3_solver(z3_mod, variables, constraints)
     if solver.check() != z3_mod.sat:
@@ -518,22 +621,23 @@ def _solve_with_z3(spec, z3_mod):
     model_dict = {name: m[var].as_long() for name, var in sorted(z3_vars.items())}
     for inv in invariants:
         failure = _check_z3_invariant(
-            inv, solver, env, z3_vars, z3_mod, model_dict, unconstrained, len(constraints)
+            inv, variables, constraints, solver, env, z3_vars, z3_mod, model_dict, unconstrained
         )
         if failure is not None:
             return failure
-    return {
-        "status": "SAT",
-        "engine": "z3-solver",
-        "model": model_dict,
-        "unconstrained_variables": unconstrained,
-        "constraints_count": len(constraints),
-    }
+    return _finalize_sat_result(
+        spec, "z3-solver", variables, constraints, model_dict, unconstrained
+    )
 
 
 def solve_spec(spec):
     """Solve constraint spec using z3 if available, otherwise stdlib fallback."""
-    for expr in list(spec.get("constraints", [])) + list(spec.get("invariants", [])):
+    all_exprs = (
+        list(spec.get("constraints", []))
+        + list(spec.get("invariants", []))
+        + list(spec.get("equivalence_constraints", []))
+    )
+    for expr in all_exprs:
         _validate_safe_ast(ast.parse(expr, mode="eval"))
     try:
         import z3  # type: ignore
@@ -614,6 +718,48 @@ def _check_unsat_and_vacuous_cases():
     vac_res = solve_spec(vac_spec)
     if vac_res["status"] != "VACUOUS" or vac_res.get("vacuous_invariant") != "Implies(x == 2, x == 99)":
         print("Self-test VACUOUS failed: %r" % (vac_res,))
+        return False
+    return _check_pcv_tautology_and_equivalence_cases()
+
+
+def _check_pcv_tautology_and_equivalence_cases():
+    """Verify domain_tautology vacuity, equivalence_constraints, and proof_certificate_sha256."""
+    taut_res = solve_spec(
+        {
+            "variables": {"x": [1, 2]},
+            "constraints": ["x == 1"],
+            "invariants": ["x >= 1"],
+        }
+    )
+    if (taut_res.get("status"), taut_res.get("vacuous_reason")) != (
+        "VACUOUS",
+        "domain_tautology",
+    ):
+        print("Self-test domain_tautology failed: %r" % (taut_res,))
+        return False
+    eq_ok = solve_spec(
+        {
+            "variables": {"x": [1, 2, 3], "y": [1, 2, 3]},
+            "constraints": ["x < y", "y <= 2"],
+            "equivalence_constraints": ["x == 1", "y == 2"],
+        }
+    )
+    if (
+        eq_ok.get("status"),
+        eq_ok.get("equivalence_verified"),
+        len(eq_ok.get("proof_certificate_sha256", "")),
+    ) != ("SAT", True, 64):
+        print("Self-test equivalence SAT failed: %r" % (eq_ok,))
+        return False
+    eq_bad = solve_spec(
+        {
+            "variables": {"x": [1, 2, 3], "y": [1, 2, 3]},
+            "constraints": ["x < y"],
+            "equivalence_constraints": ["x == 1", "y == 2"],
+        }
+    )
+    if eq_bad.get("status") != "REFUTED" or "refuted_equivalence" not in eq_bad:
+        print("Self-test equivalence REFUTED failed: %r" % (eq_bad,))
         return False
     return True
 

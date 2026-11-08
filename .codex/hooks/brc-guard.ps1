@@ -258,6 +258,26 @@ function Test-UnsafeFetchUrl {
     return $false
 }
 
+function Test-ValidStageArtifactFile {
+    param([System.IO.FileInfo]$FileObj, [string]$StageFilter)
+    if ($null -eq $FileObj -or $FileObj.Length -le 0) { return $false }
+    $rawBody = Get-Content -LiteralPath $FileObj.FullName -Raw -ErrorAction SilentlyContinue
+    if ($FileObj.Extension -ieq '.json') {
+        if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
+        if ($StageFilter -eq 'stage0*') {
+            $hasSat = ($rawBody -match '"status"\s*:\s*"SAT"') -and ($rawBody -match '"engine"\s*:\s*"(z3-solver|stdlib-finite-domain)"')
+            $hasGraph = ($rawBody -match '"nodes"\s*:') -and ($rawBody -match '"edges"\s*:')
+            $hasRubric = ($rawBody -match '(?i)<RUBRIC_SCORE>') -and -not (Test-InvalidRubricScoreBlock $rawBody)
+            if (-not ($hasSat -or $hasGraph -or $hasRubric)) { return $false }
+        }
+    }
+    if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
+    if ($StageFilter -eq 'stage3*') {
+        if (($rawBody -match '"verdict"\s*:\s*"(REJECT|HALT)"') -or ($rawBody -match '(?i)\[(?:GLOBAL\s+)?VERDICT:\s*(REJECT|HALT)\]') -or ($rawBody -match '(?i)<REJECTION_EVIDENCE>')) { return $false }
+    }
+    return $true
+}
+
 function Test-MissingStage0Artifact {
     param([string]$PathStr, $PayloadObj)
     if ([string]::IsNullOrWhiteSpace($PathStr)) { return $false }
@@ -298,27 +318,11 @@ function Test-MissingStage0Artifact {
     foreach ($dir in $searchDirs) {
         $scratchDir = Join-Path $dir 'scratch'
         if (Test-Path -LiteralPath $scratchDir) {
-            $hits = @(Get-ChildItem -LiteralPath $scratchDir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object {
-                if ($_.Length -le 0) { return $false }
-                $rawBody = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
-                if ($_.Extension -ieq '.json') {
-                    if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
-                }
-                if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
-                return $true
-            })
+            $hits = @(Get-ChildItem -LiteralPath $scratchDir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object { Test-ValidStageArtifactFile $_ 'stage0*' })
             if ($hits.Count -gt 0) { return $false }
         }
         if (Test-Path -LiteralPath $dir) {
-            $rootHits = @(Get-ChildItem -LiteralPath $dir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object {
-                if ($_.Length -le 0) { return $false }
-                $rawBody = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
-                if ($_.Extension -ieq '.json') {
-                    if ($rawBody -match '"status"\s*:\s*"(UNSAT|REFUTED|VACUOUS|INVALID)"') { return $false }
-                }
-                if ($rawBody -match '(?i)<RUBRIC_SCORE>' -and (Test-InvalidRubricScoreBlock $rawBody)) { return $false }
-                return $true
-            })
+            $rootHits = @(Get-ChildItem -LiteralPath $dir -Filter 'stage0*' -File -ErrorAction SilentlyContinue | Where-Object { Test-ValidStageArtifactFile $_ 'stage0*' })
             if ($rootHits.Count -gt 0) { return $false }
         }
     }

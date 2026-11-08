@@ -3053,6 +3053,253 @@ class LiveTree(unittest.TestCase):
             errs_after = sync_mod.sync_hermes_target(REPO_ROOT, hermes_dir, apply=False)
             self.assertEqual(errs_after, [])
 
+    def test_veriharness_proof_carrying_verification(self):
+        import hashlib
+        import importlib.util
+
+        scripts_dir = (
+            REPO_ROOT / ".agents" / "skills" / "comprehend-problem" / "scripts"
+        )
+        rgg_spec = importlib.util.spec_from_file_location(
+            "rgg_pcv", scripts_dir / "rubric_grade_gate.py"
+        )
+        rgg = importlib.util.module_from_spec(rgg_spec)
+        rgg_spec.loader.exec_module(rgg)
+
+        lz3_spec = importlib.util.spec_from_file_location(
+            "lz3_pcv", scripts_dir / "logical_z3_polyfill.py"
+        )
+        lz3 = importlib.util.module_from_spec(lz3_spec)
+        lz3_spec.loader.exec_module(lz3)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t_root = Path(tmp)
+            src_file = t_root / "src" / "mod.py"
+            src_file.parent.mkdir(parents=True, exist_ok=True)
+            src_lines = [
+                "def alpha(x: int) -> int:",
+                "    return x + 1",
+                "def beta(y: int) -> int:",
+                "    return y * 2",
+            ]
+            src_file.write_text("\n".join(src_lines) + "\n", encoding="utf-8")
+            slice_sha = hashlib.sha256(
+                "\n".join(src_lines[0:2]).encode("utf-8")
+            ).hexdigest()[:12]
+
+            proof_ok = t_root / "scratch" / "stage0_proof.json"
+            proof_ok.parent.mkdir(parents=True, exist_ok=True)
+            proof_ok.write_text(
+                json.dumps({"status": "SAT", "engine": "stdlib-finite-domain"}),
+                encoding="utf-8",
+            )
+            proof_bad = t_root / "scratch" / "stage0_bad.json"
+            proof_bad.write_text(
+                json.dumps({"status": "UNSAT", "engine": "stdlib-finite-domain"}),
+                encoding="utf-8",
+            )
+
+            valid_payload = {
+                "stage": 3,
+                "role": "System Architect",
+                "verdict": "APPROVE",
+                "criteria": [
+                    {
+                        "id": "c1",
+                        "evidence": "src/mod.py:1-2",
+                        "witness_symbol": "alpha",
+                        "sha256_anchor": slice_sha,
+                        "score": 3,
+                    },
+                    {
+                        "id": "c2",
+                        "evidence": "src/mod.py:3-4",
+                        "witness_symbol": "beta",
+                        "score": 3,
+                    },
+                    {
+                        "id": "c3",
+                        "evidence": "src/mod.py:1-2",
+                        "z3_receipt": "scratch/stage0_proof.json",
+                        "score": 3,
+                    },
+                ],
+            }
+            res_valid = rgg.evaluate_rubric_payload(
+                valid_payload, repo_root=t_root, require_witness=True
+            )
+            self.assertEqual(res_valid["status"], "VALID", res_valid)
+
+            # Wrong AST symbol in span -> evidence_witness_symbol_missing
+            bad_sym_payload = dict(
+                valid_payload,
+                criteria=[
+                    {
+                        "id": "c1",
+                        "evidence": "src/mod.py:1-2",
+                        "witness_symbol": "beta",
+                        "score": 3,
+                    },
+                    valid_payload["criteria"][1],
+                    valid_payload["criteria"][2],
+                ],
+            )
+            res_bad_sym = rgg.evaluate_rubric_payload(bad_sym_payload, repo_root=t_root)
+            self.assertEqual(res_bad_sym["status"], "INVALID")
+            self.assertEqual(res_bad_sym["reason"], "evidence_witness_symbol_missing")
+
+            # Mismatched sha256_anchor -> evidence_sha256_anchor_mismatch
+            bad_sha_payload = dict(
+                valid_payload,
+                criteria=[
+                    {
+                        "id": "c1",
+                        "evidence": "src/mod.py:1-2",
+                        "sha256_anchor": "deadbeef0000",
+                        "score": 3,
+                    },
+                    valid_payload["criteria"][1],
+                    valid_payload["criteria"][2],
+                ],
+            )
+            res_bad_sha = rgg.evaluate_rubric_payload(bad_sha_payload, repo_root=t_root)
+            self.assertEqual(res_bad_sha["status"], "INVALID")
+            self.assertEqual(res_bad_sha["reason"], "evidence_sha256_anchor_mismatch")
+
+            # Non-SAT z3_receipt -> invalid_z3_witness_receipt
+            bad_z3_payload = dict(
+                valid_payload,
+                criteria=[
+                    valid_payload["criteria"][0],
+                    valid_payload["criteria"][1],
+                    {
+                        "id": "c3",
+                        "evidence": "src/mod.py:1-2",
+                        "z3_receipt": "scratch/stage0_bad.json",
+                        "score": 3,
+                    },
+                ],
+            )
+            res_bad_z3 = rgg.evaluate_rubric_payload(bad_z3_payload, repo_root=t_root)
+            self.assertEqual(res_bad_z3["status"], "INVALID")
+            self.assertEqual(res_bad_z3["reason"], "invalid_z3_witness_receipt")
+
+            # require_witness=True rejects criteria without witnesses
+            no_witness_payload = {
+                "stage": 3,
+                "role": "System Architect",
+                "verdict": "APPROVE",
+                "criteria": [
+                    {"id": "c1", "evidence": "src/mod.py:1-2", "score": 3},
+                    {"id": "c2", "evidence": "src/mod.py:3-4", "score": 3},
+                    {"id": "c3", "evidence": "src/mod.py:1-4", "score": 3},
+                ],
+            }
+            self.assertEqual(
+                rgg.evaluate_rubric_payload(
+                    no_witness_payload, repo_root=t_root, require_witness=False
+                )["status"],
+                "VALID",
+            )
+            res_req_wit = rgg.evaluate_rubric_payload(
+                no_witness_payload, repo_root=t_root, require_witness=True
+            )
+            self.assertEqual(res_req_wit["status"], "INVALID")
+            self.assertEqual(res_req_wit["reason"], "missing_criterion_witness")
+
+            # 2. logical_z3_polyfill.py: domain_tautology, equivalence_constraints, proof_certificate_sha256
+            taut_res = lz3.solve_spec(
+                {
+                    "variables": {"x": [1, 2]},
+                    "constraints": ["x == 1"],
+                    "invariants": ["x >= 1"],
+                }
+            )
+            self.assertEqual(taut_res["status"], "VACUOUS")
+            self.assertEqual(taut_res.get("vacuous_reason"), "domain_tautology")
+
+            eq_ok_res = lz3.solve_spec(
+                {
+                    "variables": {"x": [1, 2, 3], "y": [1, 2, 3]},
+                    "constraints": ["x < y", "y <= 2"],
+                    "equivalence_constraints": ["x == 1", "y == 2"],
+                }
+            )
+            self.assertEqual(eq_ok_res["status"], "SAT")
+            self.assertTrue(eq_ok_res.get("equivalence_verified"))
+            self.assertEqual(len(eq_ok_res.get("proof_certificate_sha256", "")), 64)
+
+            eq_bad_res = lz3.solve_spec(
+                {
+                    "variables": {"x": [1, 2, 3], "y": [1, 2, 3]},
+                    "constraints": ["x < y"],
+                    "equivalence_constraints": ["x == 1", "y == 2"],
+                }
+            )
+            self.assertEqual(eq_bad_res["status"], "REFUTED")
+            self.assertIn("refuted_equivalence", eq_bad_res)
+            self.assertIsNotNone(eq_bad_res.get("counterexample"))
+
+            # 3. brc-guard.ps1: raw stage0_spec.json blocked, verified stage0_proof.json & stage0_graph.json allowed
+            brc_dir = t_root / "brc_stage0"
+            brc_scratch = brc_dir / "scratch"
+            brc_scratch.mkdir(parents=True, exist_ok=True)
+            plan_file = str(brc_dir / "implementation_plan.md")
+
+            raw_spec_f = brc_scratch / "stage0_spec.json"
+            raw_spec_f.write_text(
+                json.dumps({"variables": {"x": [1, 2]}}), encoding="utf-8"
+            )
+            res_raw_spec = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(brc_dir),
+                    "toolCall": {
+                        "name": "write_file",
+                        "args": {"Path": plan_file, "Content": "# Plan\n"},
+                    },
+                }
+            )
+            self.assertEqual(
+                json.loads(res_raw_spec.stdout.strip())["decision"], "deny"
+            )
+            raw_spec_f.unlink()
+
+            proof_f = brc_scratch / "stage0_proof.json"
+            proof_f.write_text(
+                json.dumps({"status": "SAT", "engine": "stdlib-finite-domain"}),
+                encoding="utf-8",
+            )
+            res_proof_ok = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(brc_dir),
+                    "toolCall": {
+                        "name": "write_file",
+                        "args": {"Path": plan_file, "Content": "# Plan\n"},
+                    },
+                }
+            )
+            self.assertEqual(
+                json.loads(res_proof_ok.stdout.strip())["decision"], "allow"
+            )
+            proof_f.unlink()
+
+            graph_f = brc_scratch / "stage0_graph.json"
+            graph_f.write_text(
+                json.dumps({"nodes": [], "edges": []}), encoding="utf-8"
+            )
+            res_graph_ok = self._run_brc_guard(
+                {
+                    "artifactDirectoryPath": str(brc_dir),
+                    "toolCall": {
+                        "name": "write_file",
+                        "args": {"Path": plan_file, "Content": "# Plan\n"},
+                    },
+                }
+            )
+            self.assertEqual(
+                json.loads(res_graph_ok.stdout.strip())["decision"], "allow"
+            )
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

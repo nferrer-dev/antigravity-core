@@ -11,6 +11,7 @@ Usage:
     python rubric_grade_gate.py --self-test
 """
 import argparse
+import ast
 import hashlib
 import json
 import math
@@ -112,51 +113,227 @@ def _resolve_repo_target(
     return target, "ok"
 
 
-def _resolve_evidence_span(
+_HEX_ANCHOR_RE = re.compile(r"^[0-9a-f]{8,64}$")
+_VALID_Z3_ENGINES: Tuple[str, ...] = ("z3-solver", "stdlib-finite-domain")
+_WITNESS_KEYS: Tuple[str, ...] = (
+    "sha256_anchor",
+    "witness_symbol",
+    "z3_receipt",
+)
+
+
+def _extract_file_span_slice(
     evidence_str: str,
     repo_root: Path,
-) -> Tuple[bool, str]:
-    """Verify file existence and line range when evidence is a file span."""
+) -> Tuple[Optional[Tuple[Path, List[str], int, int]], str]:
+    """Extract (target, slice_lines, start_line, end_line) when evidence is a file span."""
     cleaned = evidence_str.strip()
     match = _FILE_SPAN_RE.match(cleaned)
     if cleaned.startswith(("https://", "http://")) or not match:
-        return True, "ok"
+        return None, "ok"
     start_line = int(match.group("start"))
     end_grp = match.group("end")
     end_line = int(end_grp) if end_grp else start_line
     if start_line < 1 or end_line < start_line:
-        return False, "invalid_evidence_line_range"
+        return None, "invalid_evidence_line_range"
 
     target, path_reason = _resolve_repo_target(
         match.group("path").strip(), repo_root
     )
     if target is None:
-        return False, path_reason
+        return None, path_reason
     lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
     if end_line > len(lines):
-        return False, "evidence_line_range_out_of_bounds"
+        return None, "evidence_line_range_out_of_bounds"
+    return (target, lines[start_line - 1 : end_line], start_line, end_line), "ok"
+
+
+def _resolve_evidence_span(
+    evidence_str: str,
+    repo_root: Path,
+) -> Tuple[bool, str]:
+    """Verify file existence and line range when evidence is a file span."""
+    _, reason = _extract_file_span_slice(evidence_str, repo_root)
+    return reason == "ok", reason
+
+
+def _verify_slice_sha256(
+    slice_lines: Sequence[str],
+    expected_prefix: str,
+) -> Tuple[bool, str]:
+    """Verify slice_lines SHA-256 hex digest matches expected_prefix (>=8 hex chars)."""
+    prefix = expected_prefix.strip().lower()
+    actual = hashlib.sha256("\n".join(slice_lines).encode("utf-8")).hexdigest()
+    if not _HEX_ANCHOR_RE.match(prefix) or not actual.startswith(prefix):
+        return False, "evidence_sha256_anchor_mismatch"
     return True, "ok"
+
+
+def _node_matches_symbol_in_span(
+    node: ast.AST,
+    symbol: str,
+    start_line: int,
+    end_line: int,
+) -> bool:
+    """Return True if AST node matches symbol and overlaps [start_line, end_line]."""
+    lineno = getattr(node, "lineno", None)
+    if lineno is None:
+        return False
+    end_lineno = getattr(node, "end_lineno", lineno) or lineno
+    if end_lineno < start_line or lineno > end_line:
+        return False
+    names = (
+        getattr(node, "name", None),
+        getattr(node, "id", None),
+        getattr(node, "attr", None),
+    )
+    return symbol in names
+
+
+def _py_ast_has_symbol_in_span(
+    full_text: str,
+    symbol: str,
+    start_line: int,
+    end_line: int,
+) -> bool:
+    """Return True if full_text AST contains symbol overlapping [start_line, end_line]."""
+    try:
+        tree = ast.parse(full_text)
+    except SyntaxError:
+        return False
+    return any(
+        _node_matches_symbol_in_span(node, symbol, start_line, end_line)
+        for node in ast.walk(tree)
+    )
+
+
+def _verify_ast_symbol_span(
+    target: Path,
+    slice_lines: Sequence[str],
+    start_line: int,
+    end_line: int,
+    symbol: str,
+) -> Tuple[bool, str]:
+    """Verify symbol exists in AST span (for .py) or slice text (for non-.py)."""
+    sym = symbol.strip()
+    if not sym:
+        return False, "evidence_witness_symbol_missing"
+    if target.suffix.lower() == ".py":
+        full_text = target.read_text(encoding="utf-8", errors="replace")
+        found = _py_ast_has_symbol_in_span(full_text, sym, start_line, end_line)
+    else:
+        found = sym in "\n".join(slice_lines)
+    return (True, "ok") if found else (False, "evidence_witness_symbol_missing")
+
+
+def _verify_z3_receipt_ref(
+    raw_ref: str,
+    repo_root: Path,
+) -> Tuple[bool, str]:
+    """Verify raw_ref points to a JSON Stage 0 proof receipt with status=SAT."""
+    target, _ = _resolve_repo_target(raw_ref.strip(), repo_root)
+    if target is None:
+        return False, "invalid_z3_witness_receipt"
+    try:
+        data = json.loads(target.read_text(encoding="utf-8", errors="replace"))
+    except ValueError:
+        data = None
+    if not isinstance(data, Mapping):
+        return False, "invalid_z3_witness_receipt"
+    if (data.get("status"), data.get("engine") in _VALID_Z3_ENGINES) != (
+        "SAT",
+        True,
+    ):
+        return False, "invalid_z3_witness_receipt"
+    return True, "ok"
+
+
+def _has_any_witness_key(item: Mapping[str, Any]) -> bool:
+    """Return True if item has at least one non-empty witness field."""
+    return any(_is_nonempty_str(item.get(k)) for k in _WITNESS_KEYS)
+
+
+def _verify_span_witnesses(
+    item: Mapping[str, Any],
+    span_info: Optional[Tuple[Path, List[str], int, int]],
+) -> Tuple[bool, str]:
+    """Verify optional sha256_anchor and witness_symbol against extracted file slice."""
+    sha_val = item.get("sha256_anchor")
+    if sha_val is not None:
+        if span_info is None:
+            return False, "evidence_sha256_anchor_mismatch"
+        ok_sha, reason = _verify_slice_sha256(span_info[1], str(sha_val))
+        if not ok_sha:
+            return False, reason
+    sym_val = item.get("witness_symbol")
+    if sym_val is not None:
+        if span_info is None:
+            return False, "evidence_witness_symbol_missing"
+        return _verify_ast_symbol_span(
+            span_info[0], span_info[1], span_info[2], span_info[3], str(sym_val)
+        )
+    return True, "ok"
+
+
+def _verify_evidence_and_span_witnesses(
+    item: Mapping[str, Any],
+    repo_root: Path,
+) -> Tuple[bool, str]:
+    """Verify evidence file span and optional sha256_anchor / witness_symbol."""
+    span_info, span_reason = _extract_file_span_slice(
+        str(item.get("evidence", "")), repo_root
+    )
+    if span_reason != "ok":
+        return False, span_reason
+    return _verify_span_witnesses(item, span_info)
+
+
+def _verify_criterion_witnesses(
+    item: Mapping[str, Any],
+    repo_root: Optional[Path],
+    require_witness: bool = False,
+) -> Tuple[bool, str]:
+    """Verify optional or required PCV witnesses (sha256_anchor, witness_symbol, z3_receipt)."""
+    if require_witness and not _has_any_witness_key(item):
+        return False, "missing_criterion_witness"
+    if repo_root is None:
+        return True, "ok"
+    ok_span, span_reason = _verify_evidence_and_span_witnesses(item, repo_root)
+    if not ok_span:
+        return False, span_reason
+    z3_val = item.get("z3_receipt")
+    return (
+        _verify_z3_receipt_ref(str(z3_val), repo_root)
+        if z3_val is not None
+        else (True, "ok")
+    )
+
+
+def _is_valid_criterion_score(score: Any) -> bool:
+    """Return True if score is a strict int in 0..3."""
+    return _is_strict_int(score) and 0 <= int(score) <= 3
 
 
 def _validate_single_criterion(
     item: Any,
     repo_root: Optional[Path],
+    require_witness: bool = False,
 ) -> Tuple[Optional[int], str]:
     """Validate one criterion dict and return (score, reason)."""
     if not isinstance(item, Mapping):
         return None, "criterion_not_an_object"
     if not _is_nonempty_str(item.get("id")):
         return None, "missing_criterion_id"
-    evidence = item.get("evidence")
-    if not _is_nonempty_str(evidence):
+    if not _is_nonempty_str(item.get("evidence")):
         return None, "missing_criterion_evidence"
     score = item.get("score")
-    if not _is_strict_int(score) or int(score) < 0 or int(score) > 3:
+    if not _is_valid_criterion_score(score):
         return None, "invalid_criterion_score"
-    if repo_root is not None:
-        ok_span, span_reason = _resolve_evidence_span(str(evidence), repo_root)
-        if not ok_span:
-            return None, span_reason
+    ok_wit, wit_reason = _verify_criterion_witnesses(
+        item, repo_root, require_witness
+    )
+    if not ok_wit:
+        return None, wit_reason
     return int(score), "ok"
 
 
@@ -164,6 +341,7 @@ def _validate_criteria_list(
     criteria: Any,
     min_criteria: int,
     repo_root: Optional[Path],
+    require_witness: bool = False,
 ) -> Tuple[Optional[List[int]], str]:
     """Validate the criteria list and return extracted integer scores."""
     if not isinstance(criteria, list) or len(criteria) < min_criteria:
@@ -171,7 +349,9 @@ def _validate_criteria_list(
     scores: List[int] = []
     seen_ids = set()
     for item in criteria:
-        score, reason = _validate_single_criterion(item, repo_root)
+        score, reason = _validate_single_criterion(
+            item, repo_root, require_witness=require_witness
+        )
         if score is None:
             return None, reason
         cid = str(item.get("id")).strip()
@@ -269,6 +449,7 @@ def evaluate_rubric_payload(
     payload: Mapping[str, Any],
     repo_root: Optional[Path] = None,
     raw_json_str: Optional[str] = None,
+    require_witness: bool = False,
 ) -> Dict[str, Any]:
     """Validate a parsed rubric payload and return a structured decision."""
     if raw_json_str is not None:
@@ -282,7 +463,10 @@ def evaluate_rubric_payload(
 
     min_crit = 1 if int(payload["stage"]) == 0 else 3
     scores, crit_reason = _validate_criteria_list(
-        payload.get("criteria"), min_crit, repo_root
+        payload.get("criteria"),
+        min_crit,
+        repo_root,
+        require_witness=require_witness,
     )
     if scores is None:
         return {"status": "INVALID", "reason": crit_reason}
@@ -316,6 +500,7 @@ def evaluate_rubric_payload(
 def _evaluate_single_rubric_json(
     raw_json: str,
     repo_root: Optional[Path] = None,
+    require_witness: bool = False,
 ) -> Dict[str, Any]:
     """Parse and validate a single rubric JSON string."""
     try:
@@ -325,7 +510,10 @@ def _evaluate_single_rubric_json(
     if not isinstance(parsed, Mapping):
         return {"status": "INVALID", "reason": "rubric_root_not_an_object"}
     return evaluate_rubric_payload(
-        parsed, repo_root=repo_root, raw_json_str=raw_json
+        parsed,
+        repo_root=repo_root,
+        raw_json_str=raw_json,
+        require_witness=require_witness,
     )
 
 
@@ -415,6 +603,7 @@ def _combine_valid_rubric_results(
 def evaluate_rubric_text(
     raw_text: str,
     repo_root: Optional[Path] = None,
+    require_witness: bool = False,
 ) -> Dict[str, Any]:
     """Extract and validate all <RUBRIC_SCORE> blocks or a raw JSON string."""
     blocks = extract_all_rubric_json_strs(raw_text)
@@ -422,7 +611,9 @@ def evaluate_rubric_text(
         return {"status": "INVALID", "reason": "missing_rubric_score_block"}
     valid_results: List[Dict[str, Any]] = []
     for idx, raw_json in enumerate(blocks):
-        res = _evaluate_single_rubric_json(raw_json, repo_root=repo_root)
+        res = _evaluate_single_rubric_json(
+            raw_json, repo_root=repo_root, require_witness=require_witness
+        )
         if res.get("status") != "VALID":
             res["failed_block_index"] = idx
             return res
@@ -588,7 +779,107 @@ def _run_negative_self_tests(repo_root: Path) -> Optional[str]:
     res_path = evaluate_rubric_payload(bad_path, repo_root=repo_root)
     if res_path.get("reason") != "evidence_path_outside_repo_or_missing":
         return f"Expected missing path error, got {res_path}"
+    wit_err = _run_witness_self_tests(repo_root)
+    if wit_err is not None:
+        return wit_err
     return _run_jev_stage0_self_tests()
+
+
+def _run_witness_self_tests(repo_root: Path) -> Optional[str]:
+    """Verify positive and negative PCV witness cases (sha256, AST symbol, z3_receipt)."""
+    z3_ok = repo_root / "scratch" / "stage0_ok.json"
+    z3_ok.parent.mkdir(parents=True, exist_ok=True)
+    z3_ok.write_text(
+        json.dumps({"status": "SAT", "engine": "stdlib-finite-domain"}),
+        encoding="utf-8",
+    )
+    sha_f = hashlib.sha256(
+        b"def f(x: int) -> int:\n    return x + 1"
+    ).hexdigest()[:12]
+    wit_ok = {
+        "stage": 3,
+        "role": "Reviewer",
+        "verdict": "APPROVE",
+        "criteria": [
+            {
+                "id": "c1",
+                "evidence": "src/engine.py:1-2",
+                "sha256_anchor": sha_f,
+                "witness_symbol": "f",
+                "score": 3,
+            },
+            {
+                "id": "c2",
+                "evidence": "src/engine.py:3-4",
+                "witness_symbol": "g",
+                "score": 3,
+            },
+            {
+                "id": "c3",
+                "evidence": "src/engine.py:1-2",
+                "z3_receipt": "scratch/stage0_ok.json",
+                "score": 3,
+            },
+        ],
+    }
+    if (
+        evaluate_rubric_payload(
+            wit_ok, repo_root=repo_root, require_witness=True
+        ).get("status")
+        != "VALID"
+    ):
+        return "Expected wit_ok to pass with require_witness=True"
+    return _run_negative_witness_checks(repo_root, wit_ok)
+
+
+def _run_negative_witness_checks(
+    repo_root: Path,
+    base_payload: Mapping[str, Any],
+) -> Optional[str]:
+    """Verify negative failure reasons for PCV witnesses."""
+    c_list = list(base_payload["criteria"])
+    bad_sym = dict(
+        base_payload,
+        criteria=[
+            {"id": "c1", "evidence": "src/engine.py:1-2", "witness_symbol": "g", "score": 3},
+            c_list[1],
+            c_list[2],
+        ],
+    )
+    if (
+        evaluate_rubric_payload(bad_sym, repo_root=repo_root).get("reason")
+        != "evidence_witness_symbol_missing"
+    ):
+        return "Expected evidence_witness_symbol_missing"
+    bad_sha = dict(
+        base_payload,
+        criteria=[
+            {"id": "c1", "evidence": "src/engine.py:1-2", "sha256_anchor": "00000000", "score": 3},
+            c_list[1],
+            c_list[2],
+        ],
+    )
+    if (
+        evaluate_rubric_payload(bad_sha, repo_root=repo_root).get("reason")
+        != "evidence_sha256_anchor_mismatch"
+    ):
+        return "Expected evidence_sha256_anchor_mismatch"
+    no_wit = dict(
+        base_payload,
+        criteria=[
+            {"id": "c1", "evidence": "src/engine.py:1-2", "score": 3},
+            c_list[1],
+            c_list[2],
+        ],
+    )
+    if (
+        evaluate_rubric_payload(
+            no_wit, repo_root=repo_root, require_witness=True
+        ).get("reason")
+        != "missing_criterion_witness"
+    ):
+        return "Expected missing_criterion_witness"
+    return None
 
 
 def _run_jev_stage0_self_tests() -> Optional[str]:
@@ -698,6 +989,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional repository root for verifying evidence file spans.",
     )
+    parser.add_argument(
+        "--require-witness",
+        action="store_true",
+        help="Require at least one proof-carrying witness per criterion.",
+    )
     return parser
 
 
@@ -717,6 +1013,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     result = evaluate_rubric_text(
         target.read_text(encoding="utf-8", errors="replace"),
         repo_root=repo_root,
+        require_witness=bool(args.require_witness),
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result.get("status") == "VALID" else 1
