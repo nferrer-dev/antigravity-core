@@ -19,6 +19,7 @@ from pathlib import Path
 _ALLOWED_CALLS = {"And", "Or", "Not", "Implies", "abs", "min", "max"}
 _SAFE_AST_TYPES = (
     ast.Expression,
+    ast.IfExp,
     ast.BoolOp,
     ast.BinOp,
     ast.UnaryOp,
@@ -42,6 +43,20 @@ _SAFE_AST_TYPES = (
     ast.LtE,
     ast.Gt,
     ast.GtE,
+)
+_SAFE_FUNC_AST_TYPES = _SAFE_AST_TYPES + (
+    ast.FunctionDef,
+    ast.arguments,
+    ast.arg,
+    ast.Return,
+    ast.Assign,
+    ast.AnnAssign,
+    ast.AugAssign,
+    ast.If,
+    ast.Pass,
+    ast.Assert,
+    ast.Expr,
+    ast.Store,
 )
 _BIN_OPS = {
     ast.Add: operator.add,
@@ -172,9 +187,17 @@ def _eval_call_node(node, env):
     raise ValueError("Unsupported function call: %s" % fn_name)
 
 
+def _eval_ifexp_node(node, env):
+    """Evaluate a conditional expression (body if test else orelse) node."""
+    if _eval_ast_node(node.test, env):
+        return _eval_ast_node(node.body, env)
+    return _eval_ast_node(node.orelse, env)
+
+
 _AST_EVAL_DISPATCH = {
     ast.Constant: lambda node, env: _eval_constant_node(node),
     ast.Name: _eval_name_node,
+    ast.IfExp: _eval_ifexp_node,
     ast.UnaryOp: _eval_unary_node,
     ast.BinOp: _eval_bin_node,
     ast.BoolOp: _eval_bool_op_node,
@@ -339,6 +362,8 @@ def _compute_proof_certificate(spec, engine_name, model):
             spec.get("equivalence_constraints", [])
         ),
     }
+    if "program_target" in spec:
+        payload["program_target"] = spec["program_target"]
     raw = json.dumps(payload, sort_keys=True).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
@@ -499,9 +524,19 @@ def _eval_z3_bin_op(node, env, z3_mod):
     )
 
 
+def _eval_z3_ifexp(node, env, z3_mod):
+    """Evaluate an IfExp AST node into a Z3 If expression."""
+    return z3_mod.If(
+        _eval_z3_ast_node(node.test, env, z3_mod),
+        _eval_z3_ast_node(node.body, env, z3_mod),
+        _eval_z3_ast_node(node.orelse, env, z3_mod),
+    )
+
+
 _Z3_AST_DISPATCH = {
     ast.Constant: lambda node, env, z3_mod: node.value,
     ast.Name: lambda node, env, z3_mod: _eval_z3_name(node, env),
+    ast.IfExp: _eval_z3_ifexp,
     ast.UnaryOp: _eval_z3_unary,
     ast.BinOp: _eval_z3_bin_op,
     ast.BoolOp: _eval_z3_bool_op,
@@ -630,21 +665,230 @@ def _solve_with_z3(spec, z3_mod):
     )
 
 
+def compute_function_ast_sha256(func_node):
+    """Compute canonical SHA-256 hex digest of an ast.FunctionDef node."""
+    raw = ast.dump(func_node, include_attributes=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _check_vcgen_func_signature(func_node):
+    """Reject decorators and variadic arguments on a VCGen target function."""
+    has_varargs = bool(func_node.args.vararg or func_node.args.kwarg)
+    if func_node.decorator_list or has_varargs:
+        raise ValueError("VCGen target forbids decorators and *args/**kwargs")
+
+
+def _is_valid_vcgen_node(node, func_name):
+    """Return True if node is allowed inside a VCGen target function."""
+    if isinstance(node, _SAFE_FUNC_AST_TYPES):
+        return True
+    if isinstance(node, ast.Call) and _is_safe_call_node(node):
+        return node.func.id != func_name
+    return False
+
+
+def _validate_vcgen_func_ast(func_node):
+    """Ensure a FunctionDef AST contains only safe closed-set VCGen nodes."""
+    _check_vcgen_func_signature(func_node)
+    for node in ast.walk(func_node):
+        if not _is_valid_vcgen_node(node, func_node.name):
+            raise ValueError(
+                "Unsafe AST node in VCGen function: %s" % type(node).__name__
+            )
+
+
+class _SymSubstTransformer(ast.NodeTransformer):
+    """Substitute bound local variable ast.Name loads from sym_env."""
+
+    def __init__(self, sym_env):
+        self.sym_env = sym_env
+
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Load) and node.id in self.sym_env:
+            return ast.parse(ast.unparse(self.sym_env[node.id]), mode="eval").body
+        return node
+
+
+def _subst_ast_names(node, sym_env):
+    """Return a fresh expression AST with bound local variables substituted."""
+    cloned = ast.parse(ast.unparse(node), mode="eval").body
+    return _SymSubstTransformer(sym_env).visit(cloned)
+
+
+def _extract_assign_pair(stmt):
+    """Extract (target_node, value_expr) from Assign, AnnAssign, or AugAssign."""
+    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+        return stmt.targets[0], stmt.value
+    if isinstance(stmt, ast.AnnAssign):
+        return stmt.target, stmt.value
+    if isinstance(stmt, ast.AugAssign) and isinstance(stmt.target, ast.Name):
+        lhs = ast.Name(id=stmt.target.id, ctx=ast.Load())
+        return stmt.target, ast.BinOp(left=lhs, op=stmt.op, right=stmt.value)
+    return None, None
+
+
+def _lower_assign_stmt(stmt, sym_env):
+    """Symbolic-execute an assignment statement and update sym_env in place."""
+    target, val_node = _extract_assign_pair(stmt)
+    if not isinstance(target, ast.Name) or val_node is None:
+        raise ValueError("Unsupported VCGen assignment: %s" % type(stmt).__name__)
+    sym_env[target.id] = _subst_ast_names(val_node, sym_env)
+
+
+def _lower_assert_stmt(stmt, sym_env, path_guards, asserts_out):
+    """Lower an ast.Assert statement into a path-guarded invariant string."""
+    cond_str = ast.unparse(_subst_ast_names(stmt.test, sym_env))
+    if not path_guards:
+        asserts_out.append(cond_str)
+        return
+    guard_expr = (
+        path_guards[0]
+        if len(path_guards) == 1
+        else "And(%s)" % ", ".join(path_guards)
+    )
+    asserts_out.append("Implies(%s, %s)" % (guard_expr, cond_str))
+
+
+def _lower_return_stmt(stmt, sym_env):
+    """Lower an ast.Return statement into a substituted expression AST."""
+    if stmt.value is None:
+        raise ValueError("VCGen return statement must return a value")
+    return _subst_ast_names(stmt.value, sym_env)
+
+
+def _is_ignorable_stmt(stmt):
+    """Return True if stmt is Pass or a constant docstring Expr."""
+    if isinstance(stmt, ast.Pass):
+        return True
+    return isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant)
+
+
+def _lower_if_stmt(stmt, rest_stmts, sym_env, path_guards, asserts_out):
+    """Lower an ast.If statement by continuation-passing over both branches."""
+    cond_ast = _subst_ast_names(stmt.test, sym_env)
+    cond_str = ast.unparse(cond_ast)
+    then_stmts = list(stmt.body) + list(rest_stmts)
+    else_stmts = list(stmt.orelse) + list(rest_stmts)
+    then_expr = _lower_stmt_block(
+        then_stmts,
+        dict(sym_env),
+        path_guards + ["(%s)" % cond_str],
+        asserts_out,
+    )
+    else_expr = _lower_stmt_block(
+        else_stmts,
+        dict(sym_env),
+        path_guards + ["Not(%s)" % cond_str],
+        asserts_out,
+    )
+    return ast.IfExp(test=cond_ast, body=then_expr, orelse=else_expr)
+
+
+def _lower_stmt_block(stmts, sym_env, path_guards, asserts_out):
+    """Lower a sequence of statements into a symbolic return expression AST."""
+    for idx, stmt in enumerate(stmts):
+        if _is_ignorable_stmt(stmt):
+            continue
+        if isinstance(stmt, ast.Return):
+            return _lower_return_stmt(stmt, sym_env)
+        if isinstance(stmt, ast.If):
+            return _lower_if_stmt(
+                stmt, stmts[idx + 1 :], sym_env, path_guards, asserts_out
+            )
+        if isinstance(stmt, ast.Assert):
+            _lower_assert_stmt(stmt, sym_env, path_guards, asserts_out)
+        else:
+            _lower_assign_stmt(stmt, sym_env)
+    raise ValueError("VCGen function path missing explicit return statement")
+
+
+def _resolve_vcgen_file(raw_file, repo_root=None):
+    """Resolve a VCGen target Python file path, enforcing repo_root containment when given."""
+    candidate = Path(str(raw_file).strip())
+    if repo_root is None:
+        return candidate.resolve(strict=True)
+    root_res = Path(repo_root).resolve()
+    if not candidate.is_absolute():
+        candidate = root_res / candidate
+    resolved = candidate.resolve(strict=True)
+    resolved.relative_to(root_res)
+    return resolved
+
+
+def _find_function_def(tree, func_name):
+    """Locate an ast.FunctionDef node by name."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == func_name:
+            return node
+    raise ValueError("VCGen target function not found: %r" % func_name)
+
+
+def _compile_program_target_spec(spec, repo_root=None):
+    """Compile program_target Python AST into formal constraints and invariants."""
+    prog = spec.get("program_target")
+    if not isinstance(prog, dict):
+        return dict(spec)
+    target_path = _resolve_vcgen_file(prog.get("file", ""), repo_root=repo_root)
+    func_name = str(prog.get("function", "")).strip()
+    result_var = str(prog.get("result_var", "result")).strip() or "result"
+    tree = ast.parse(target_path.read_text(encoding="utf-8"))
+    func_node = _find_function_def(tree, func_name)
+    _validate_vcgen_func_ast(func_node)
+    fn_sha = compute_function_ast_sha256(func_node)
+    sym_env = {
+        arg.arg: ast.Name(id=arg.arg, ctx=ast.Load())
+        for arg in func_node.args.args
+    }
+    asserts_out = []
+    ret_ast = _lower_stmt_block(func_node.body, sym_env, [], asserts_out)
+    lowered_str = ast.unparse(ret_ast)
+    compiled = dict(spec)
+    compiled["constraints"] = (
+        list(spec.get("constraints", []))
+        + list(prog.get("preconditions", []))
+        + ["%s == (%s)" % (result_var, lowered_str)]
+    )
+    compiled["invariants"] = (
+        list(spec.get("invariants", []))
+        + asserts_out
+        + list(prog.get("postconditions", []))
+    )
+    compiled["function_ast_sha256"] = fn_sha
+    compiled["program_target"] = {
+        "file": str(prog.get("file", "")),
+        "function": func_name,
+        "result_var": result_var,
+        "function_ast_sha256": fn_sha,
+        "lowered_return_expr": lowered_str,
+    }
+    return compiled
+
+
+def _attach_program_target_metadata(result, compiled_spec):
+    """Attach program_target and function_ast_sha256 metadata to solver result when present."""
+    if "program_target" in compiled_spec:
+        result["program_target"] = compiled_spec["program_target"]
+        result["function_ast_sha256"] = compiled_spec["function_ast_sha256"]
+    return result
+
+
 def solve_spec(spec):
     """Solve constraint spec using z3 if available, otherwise stdlib fallback."""
+    compiled = _compile_program_target_spec(spec)
     all_exprs = (
-        list(spec.get("constraints", []))
-        + list(spec.get("invariants", []))
-        + list(spec.get("equivalence_constraints", []))
+        list(compiled.get("constraints", []))
+        + list(compiled.get("invariants", []))
+        + list(compiled.get("equivalence_constraints", []))
     )
     for expr in all_exprs:
         _validate_safe_ast(ast.parse(expr, mode="eval"))
     try:
         import z3  # type: ignore
 
-        return _solve_with_z3(spec, z3)
+        res = _solve_with_z3(compiled, z3)
     except Exception:
-        return solve_finite_domain(spec)
+        res = solve_finite_domain(compiled)
+    return _attach_program_target_metadata(res, compiled)
 
 
 def _check_ast_sandbox_safety():
@@ -764,6 +1008,64 @@ def _check_pcv_tautology_and_equivalence_cases():
     return True
 
 
+def _check_vcgen_program_target_cases():
+    """Verify Python AST-to-SMT VCGen SAT and REFUTED cases."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        py_f = Path(tmp) / "vcgen_self_test.py"
+        py_f.write_text(
+            "def clamp_val(x: int, lo: int, hi: int) -> int:\n"
+            "    if x < lo:\n"
+            "        return lo\n"
+            "    if x > hi:\n"
+            "        res = hi\n"
+            "    else:\n"
+            "        res = x\n"
+            "    assert res >= lo\n"
+            "    return res\n\n"
+            "def buggy_withdraw(balance: int, amt: int) -> int:\n"
+            "    return balance + amt\n",
+            encoding="utf-8",
+        )
+        ok_res = solve_spec(
+            {
+                "variables": {
+                    "x": [-1, 1, 3],
+                    "lo": [0, 1],
+                    "hi": [2],
+                    "result": [-1, 0, 1, 2, 3],
+                },
+                "program_target": {
+                    "file": str(py_f),
+                    "function": "clamp_val",
+                    "result_var": "result",
+                    "preconditions": ["lo <= hi"],
+                    "postconditions": ["result >= lo", "result <= hi"],
+                },
+            }
+        )
+        if ok_res.get("status") != "SAT" or len(ok_res.get("function_ast_sha256", "")) != 64:
+            print("Self-test VCGen SAT failed: %r" % (ok_res,))
+            return False
+        bad_res = solve_spec(
+            {
+                "variables": {"balance": [10], "amt": [5], "result": [5, 15]},
+                "program_target": {
+                    "file": str(py_f),
+                    "function": "buggy_withdraw",
+                    "result_var": "result",
+                    "preconditions": ["amt > 0"],
+                    "postconditions": ["result == balance - amt"],
+                },
+            }
+        )
+        if bad_res.get("status") != "REFUTED":
+            print("Self-test VCGen REFUTED failed: %r" % (bad_res,))
+            return False
+    return True
+
+
 def run_self_test():
     """Verify SAT, UNSAT, REFUTED, VACUOUS proofs and AST sandbox safety deterministically."""
     if not _check_ast_sandbox_safety():
@@ -772,6 +1074,8 @@ def run_self_test():
     if not ok_sat:
         return 1
     if not _check_unsat_and_vacuous_cases():
+        return 1
+    if not _check_vcgen_program_target_cases():
         return 1
     print("logical_z3_polyfill self-test: PASS (%s)" % engine)
     return 0

@@ -851,6 +851,186 @@ class LiveTree(unittest.TestCase):
             )
             self.assertEqual(res_graph.returncode, 0, res_graph.stderr)
 
+    def test_veriharness_proof_carrying_verification(self):
+        import importlib.util
+
+        scripts_dir = (
+            REPO_ROOT / ".codex" / "skills" / "comprehend-problem" / "scripts"
+        )
+        rgg_spec = importlib.util.spec_from_file_location(
+            "rgg_pcv_codex", scripts_dir / "rubric_grade_gate.py"
+        )
+        rgg = importlib.util.module_from_spec(rgg_spec)
+        rgg_spec.loader.exec_module(rgg)
+
+        lz3_spec = importlib.util.spec_from_file_location(
+            "lz3_pcv_codex", scripts_dir / "logical_z3_polyfill.py"
+        )
+        lz3 = importlib.util.module_from_spec(lz3_spec)
+        lz3_spec.loader.exec_module(lz3)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t_root = Path(tmp)
+            vcgen_py = t_root / "src" / "vcgen_targets.py"
+            vcgen_py.parent.mkdir(parents=True, exist_ok=True)
+            vcgen_py.write_text(
+                "def clamp_val(x: int, lo: int, hi: int) -> int:\n"
+                "    if x < lo:\n"
+                "        return lo\n"
+                "    if x > hi:\n"
+                "        res = hi\n"
+                "    else:\n"
+                "        res = x\n"
+                "    assert res >= lo\n"
+                "    return res\n\n"
+                "def buggy_withdraw(balance: int, amt: int) -> int:\n"
+                "    return balance + amt\n\n"
+                "def bad_assert(x: int) -> int:\n"
+                "    assert x > 0\n"
+                "    return x\n\n"
+                "def other_fn(z: int) -> int:\n"
+                "    return z\n",
+                encoding="utf-8",
+            )
+            clamp_res = lz3.solve_spec(
+                {
+                    "variables": {
+                        "x": [-2, 0, 2, 4],
+                        "lo": [0, 1],
+                        "hi": [2, 3],
+                        "result": [-2, 0, 1, 2, 3, 4],
+                    },
+                    "program_target": {
+                        "file": str(vcgen_py),
+                        "function": "clamp_val",
+                        "result_var": "result",
+                        "preconditions": ["lo <= hi"],
+                        "postconditions": [
+                            "result >= lo",
+                            "result <= hi",
+                            "Implies(And(x >= lo, x <= hi), result == x)",
+                        ],
+                    },
+                }
+            )
+            self.assertEqual(clamp_res["status"], "SAT", clamp_res)
+            self.assertEqual(len(clamp_res.get("function_ast_sha256", "")), 64)
+            self.assertIn("program_target", clamp_res)
+
+            withdraw_res = lz3.solve_spec(
+                {
+                    "variables": {
+                        "balance": [10, 20],
+                        "amt": [5, 10],
+                        "result": [0, 5, 10, 15, 20, 25, 30],
+                    },
+                    "program_target": {
+                        "file": str(vcgen_py),
+                        "function": "buggy_withdraw",
+                        "result_var": "result",
+                        "preconditions": ["amt > 0", "balance >= amt"],
+                        "postconditions": ["result == balance - amt"],
+                    },
+                }
+            )
+            self.assertEqual(withdraw_res["status"], "REFUTED", withdraw_res)
+            self.assertEqual(
+                withdraw_res.get("refuted_invariant"), "result == balance - amt"
+            )
+            self.assertIsNotNone(withdraw_res.get("counterexample"))
+
+            assert_res = lz3.solve_spec(
+                {
+                    "variables": {"x": [0, 1], "result": [0, 1]},
+                    "program_target": {
+                        "file": str(vcgen_py),
+                        "function": "bad_assert",
+                        "result_var": "result",
+                        "preconditions": [],
+                        "postconditions": ["result == x"],
+                    },
+                }
+            )
+            self.assertEqual(assert_res["status"], "REFUTED", assert_res)
+
+            clamp_receipt = dict(clamp_res)
+            clamp_receipt["program_target"] = dict(
+                clamp_res["program_target"], file="src/vcgen_targets.py"
+            )
+            vcgen_receipt_p = t_root / "scratch" / "stage0_vcgen_clamp.json"
+            vcgen_receipt_p.parent.mkdir(parents=True, exist_ok=True)
+            vcgen_receipt_p.write_text(
+                json.dumps(clamp_receipt), encoding="utf-8"
+            )
+            base_c2 = {
+                "id": "c2",
+                "evidence": "src/vcgen_targets.py:11-12",
+                "witness_symbol": "buggy_withdraw",
+                "score": 3,
+            }
+            base_c3 = {
+                "id": "c3",
+                "evidence": "src/vcgen_targets.py:18-19",
+                "witness_symbol": "other_fn",
+                "score": 3,
+            }
+            vcgen_rubric_ok = {
+                "stage": 4,
+                "role": "Python Style Expert",
+                "verdict": "APPROVE",
+                "criteria": [
+                    {
+                        "id": "c1",
+                        "evidence": "src/vcgen_targets.py:1-9",
+                        "witness_symbol": "clamp_val",
+                        "z3_receipt": "scratch/stage0_vcgen_clamp.json",
+                        "score": 3,
+                    },
+                    base_c2,
+                    base_c3,
+                ],
+            }
+            res_vcgen_ok = rgg.evaluate_rubric_payload(
+                vcgen_rubric_ok, repo_root=t_root, require_witness=True
+            )
+            self.assertEqual(res_vcgen_ok["status"], "VALID", res_vcgen_ok)
+
+            vcgen_sym_mismatch = dict(
+                vcgen_rubric_ok,
+                criteria=[
+                    {
+                        "id": "c1",
+                        "evidence": "src/vcgen_targets.py:1-19",
+                        "witness_symbol": "other_fn",
+                        "z3_receipt": "scratch/stage0_vcgen_clamp.json",
+                        "score": 3,
+                    },
+                    base_c2,
+                    base_c3,
+                ],
+            )
+            res_sym_mismatch = rgg.evaluate_rubric_payload(
+                vcgen_sym_mismatch, repo_root=t_root, require_witness=True
+            )
+            self.assertEqual(res_sym_mismatch["status"], "INVALID")
+            self.assertEqual(
+                res_sym_mismatch["reason"], "z3_receipt_symbol_mismatch"
+            )
+
+            vcgen_py.write_text(
+                vcgen_py.read_text(encoding="utf-8").replace(
+                    "return res", "return res + 1"
+                ),
+                encoding="utf-8",
+            )
+            res_stale_ast = rgg.evaluate_rubric_payload(
+                vcgen_rubric_ok, repo_root=t_root, require_witness=True
+            )
+            self.assertEqual(res_stale_ast["status"], "INVALID")
+            self.assertEqual(
+                res_stale_ast["reason"], "stale_z3_function_ast_sha256"
+            )
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):

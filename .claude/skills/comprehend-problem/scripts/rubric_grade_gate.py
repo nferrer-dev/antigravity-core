@@ -226,9 +226,66 @@ def _verify_ast_symbol_span(
     return (True, "ok") if found else (False, "evidence_witness_symbol_missing")
 
 
+def _find_func_node_in_tree(
+    tree: ast.AST,
+    func_name: str,
+) -> Optional[ast.FunctionDef]:
+    """Return the first ast.FunctionDef in tree matching func_name, or None."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == func_name:
+            return node
+    return None
+
+
+def _compute_live_func_ast_sha256(
+    raw_file: str,
+    func_name: str,
+    repo_root: Path,
+) -> Optional[str]:
+    """Resolve raw_file in repo_root and return live AST SHA-256 of func_name, or None."""
+    target, _ = _resolve_repo_target(raw_file, repo_root)
+    if target is None:
+        return None
+    try:
+        tree = ast.parse(target.read_text(encoding="utf-8", errors="replace"))
+    except SyntaxError:
+        return None
+    fn_node = _find_func_node_in_tree(tree, func_name)
+    if fn_node is None:
+        return None
+    return hashlib.sha256(
+        ast.dump(fn_node, include_attributes=False).encode("utf-8")
+    ).hexdigest()
+
+
+def _verify_receipt_program_target(
+    data: Mapping[str, Any],
+    item: Mapping[str, Any],
+    repo_root: Path,
+) -> Tuple[bool, str]:
+    """Verify optional program_target symbol match and live AST SHA-256 parity."""
+    prog = data.get("program_target")
+    if prog is None:
+        return True, "ok"
+    if not isinstance(prog, Mapping):
+        return False, "invalid_z3_witness_receipt"
+    fn_name = str(prog.get("function", "")).strip()
+    wit_sym = str(item.get("witness_symbol", "")).strip()
+    if wit_sym not in ("", fn_name):
+        return False, "z3_receipt_symbol_mismatch"
+    live_sha = _compute_live_func_ast_sha256(
+        str(prog.get("file", "")).strip(), fn_name, repo_root
+    )
+    expected_sha = str(prog.get("function_ast_sha256", "")).strip()
+    if live_sha != expected_sha:
+        return False, "stale_z3_function_ast_sha256"
+    return True, "ok"
+
+
 def _verify_z3_receipt_ref(
     raw_ref: str,
     repo_root: Path,
+    item: Optional[Mapping[str, Any]] = None,
 ) -> Tuple[bool, str]:
     """Verify raw_ref points to a JSON Stage 0 proof receipt with status=SAT."""
     target, _ = _resolve_repo_target(raw_ref.strip(), repo_root)
@@ -245,7 +302,7 @@ def _verify_z3_receipt_ref(
         True,
     ):
         return False, "invalid_z3_witness_receipt"
-    return True, "ok"
+    return _verify_receipt_program_target(data, item or {}, repo_root)
 
 
 def _has_any_witness_key(item: Mapping[str, Any]) -> bool:
@@ -303,7 +360,7 @@ def _verify_criterion_witnesses(
         return False, span_reason
     z3_val = item.get("z3_receipt")
     return (
-        _verify_z3_receipt_ref(str(z3_val), repo_root)
+        _verify_z3_receipt_ref(str(z3_val), repo_root, item=item)
         if z3_val is not None
         else (True, "ok")
     )
@@ -879,6 +936,83 @@ def _run_negative_witness_checks(
         != "missing_criterion_witness"
     ):
         return "Expected missing_criterion_witness"
+    return _run_program_target_receipt_checks(repo_root, base_payload)
+
+
+def _run_program_target_receipt_checks(
+    repo_root: Path,
+    base_payload: Mapping[str, Any],
+) -> Optional[str]:
+    """Verify live AST SHA-256 and witness_symbol checks for program_target receipts."""
+    c_list = list(base_payload["criteria"])
+    f_sha = _compute_live_func_ast_sha256("src/engine.py", "f", repo_root)
+    z3_pt = repo_root / "scratch" / "stage0_pt.json"
+    z3_pt.write_text(
+        json.dumps(
+            {
+                "status": "SAT",
+                "engine": "stdlib-finite-domain",
+                "program_target": {
+                    "file": "src/engine.py",
+                    "function": "f",
+                    "function_ast_sha256": f_sha,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    pt_sym_bad = dict(
+        base_payload,
+        criteria=[
+            c_list[0],
+            c_list[1],
+            {
+                "id": "c3",
+                "evidence": "src/engine.py:1-4",
+                "witness_symbol": "g",
+                "z3_receipt": "scratch/stage0_pt.json",
+                "score": 3,
+            },
+        ],
+    )
+    if (
+        evaluate_rubric_payload(pt_sym_bad, repo_root=repo_root).get("reason")
+        != "z3_receipt_symbol_mismatch"
+    ):
+        return "Expected z3_receipt_symbol_mismatch"
+    z3_pt.write_text(
+        json.dumps(
+            {
+                "status": "SAT",
+                "engine": "stdlib-finite-domain",
+                "program_target": {
+                    "file": "src/engine.py",
+                    "function": "f",
+                    "function_ast_sha256": "0" * 64,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    pt_stale = dict(
+        base_payload,
+        criteria=[
+            c_list[0],
+            c_list[1],
+            {
+                "id": "c3",
+                "evidence": "src/engine.py:1-2",
+                "witness_symbol": "f",
+                "z3_receipt": "scratch/stage0_pt.json",
+                "score": 3,
+            },
+        ],
+    )
+    if (
+        evaluate_rubric_payload(pt_stale, repo_root=repo_root).get("reason")
+        != "stale_z3_function_ast_sha256"
+    ):
+        return "Expected stale_z3_function_ast_sha256"
     return None
 
 

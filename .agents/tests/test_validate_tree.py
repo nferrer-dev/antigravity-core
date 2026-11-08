@@ -3300,6 +3300,157 @@ class LiveTree(unittest.TestCase):
                 json.loads(res_graph_ok.stdout.strip())["decision"], "allow"
             )
 
+            # 4. Python AST-to-SMT VCGen (program_target) & Live AST Receipt Binding
+            vcgen_py = t_root / "src" / "vcgen_targets.py"
+            vcgen_py.write_text(
+                "def clamp_val(x: int, lo: int, hi: int) -> int:\n"
+                "    if x < lo:\n"
+                "        return lo\n"
+                "    if x > hi:\n"
+                "        res = hi\n"
+                "    else:\n"
+                "        res = x\n"
+                "    assert res >= lo\n"
+                "    return res\n\n"
+                "def buggy_withdraw(balance: int, amt: int) -> int:\n"
+                "    return balance + amt\n\n"
+                "def bad_assert(x: int) -> int:\n"
+                "    assert x > 0\n"
+                "    return x\n\n"
+                "def other_fn(z: int) -> int:\n"
+                "    return z\n",
+                encoding="utf-8",
+            )
+            clamp_spec = {
+                "variables": {
+                    "x": [-2, 0, 2, 4],
+                    "lo": [0, 1],
+                    "hi": [2, 3],
+                    "result": [-2, 0, 1, 2, 3, 4],
+                },
+                "program_target": {
+                    "file": str(vcgen_py),
+                    "function": "clamp_val",
+                    "result_var": "result",
+                    "preconditions": ["lo <= hi"],
+                    "postconditions": [
+                        "result >= lo",
+                        "result <= hi",
+                        "Implies(And(x >= lo, x <= hi), result == x)",
+                    ],
+                },
+            }
+            clamp_res = lz3.solve_spec(clamp_spec)
+            self.assertEqual(clamp_res["status"], "SAT", clamp_res)
+            self.assertEqual(len(clamp_res.get("function_ast_sha256", "")), 64)
+            self.assertIn("program_target", clamp_res)
+            self.assertEqual(clamp_res["program_target"]["function"], "clamp_val")
+            self.assertEqual(clamp_res["program_target"]["file"], "src/vcgen_targets.py" if not Path(clamp_res["program_target"]["file"]).is_absolute() else str(vcgen_py))
+
+            withdraw_res = lz3.solve_spec(
+                {
+                    "variables": {
+                        "balance": [10, 20],
+                        "amt": [5, 10],
+                        "result": [0, 5, 10, 15, 20, 25, 30],
+                    },
+                    "program_target": {
+                        "file": str(vcgen_py),
+                        "function": "buggy_withdraw",
+                        "result_var": "result",
+                        "preconditions": ["amt > 0", "balance >= amt"],
+                        "postconditions": ["result == balance - amt"],
+                    },
+                }
+            )
+            self.assertEqual(withdraw_res["status"], "REFUTED", withdraw_res)
+            self.assertEqual(
+                withdraw_res.get("refuted_invariant"), "result == balance - amt"
+            )
+            self.assertIsNotNone(withdraw_res.get("counterexample"))
+
+            assert_res = lz3.solve_spec(
+                {
+                    "variables": {"x": [0, 1], "result": [0, 1]},
+                    "program_target": {
+                        "file": str(vcgen_py),
+                        "function": "bad_assert",
+                        "result_var": "result",
+                        "preconditions": [],
+                        "postconditions": ["result == x"],
+                    },
+                }
+            )
+            self.assertEqual(assert_res["status"], "REFUTED", assert_res)
+
+            # Live AST receipt binding in rubric_grade_gate
+            clamp_receipt = dict(clamp_res)
+            clamp_receipt["program_target"] = dict(
+                clamp_res["program_target"], file="src/vcgen_targets.py"
+            )
+            vcgen_receipt_p = t_root / "scratch" / "stage0_vcgen_clamp.json"
+            vcgen_receipt_p.write_text(
+                json.dumps(clamp_receipt), encoding="utf-8"
+            )
+            vcgen_rubric_ok = {
+                "stage": 4,
+                "role": "Python Style Expert",
+                "verdict": "APPROVE",
+                "criteria": [
+                    {
+                        "id": "c1",
+                        "evidence": "src/vcgen_targets.py:1-9",
+                        "witness_symbol": "clamp_val",
+                        "z3_receipt": "scratch/stage0_vcgen_clamp.json",
+                        "score": 3,
+                    },
+                    valid_payload["criteria"][1],
+                    valid_payload["criteria"][2],
+                ],
+            }
+            res_vcgen_ok = rgg.evaluate_rubric_payload(
+                vcgen_rubric_ok, repo_root=t_root, require_witness=True
+            )
+            self.assertEqual(res_vcgen_ok["status"], "VALID", res_vcgen_ok)
+
+            # Mismatched witness_symbol vs program_target.function -> z3_receipt_symbol_mismatch
+            vcgen_sym_mismatch = dict(
+                vcgen_rubric_ok,
+                criteria=[
+                    {
+                        "id": "c1",
+                        "evidence": "src/vcgen_targets.py:1-19",
+                        "witness_symbol": "other_fn",
+                        "z3_receipt": "scratch/stage0_vcgen_clamp.json",
+                        "score": 3,
+                    },
+                    valid_payload["criteria"][1],
+                    valid_payload["criteria"][2],
+                ],
+            )
+            res_sym_mismatch = rgg.evaluate_rubric_payload(
+                vcgen_sym_mismatch, repo_root=t_root, require_witness=True
+            )
+            self.assertEqual(res_sym_mismatch["status"], "INVALID")
+            self.assertEqual(
+                res_sym_mismatch["reason"], "z3_receipt_symbol_mismatch"
+            )
+
+            # Mutate clamp_val on disk after receipt creation -> stale_z3_function_ast_sha256
+            vcgen_py.write_text(
+                vcgen_py.read_text(encoding="utf-8").replace(
+                    "return res", "return res + 1"
+                ),
+                encoding="utf-8",
+            )
+            res_stale_ast = rgg.evaluate_rubric_payload(
+                vcgen_rubric_ok, repo_root=t_root, require_witness=True
+            )
+            self.assertEqual(res_stale_ast["status"], "INVALID")
+            self.assertEqual(
+                res_stale_ast["reason"], "stale_z3_function_ast_sha256"
+            )
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):
