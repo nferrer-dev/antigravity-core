@@ -282,6 +282,29 @@ def _verify_receipt_program_target(
     return True, "ok"
 
 
+def _is_valid_temporal_receipt(data: Mapping[str, Any]) -> bool:
+    """Return True if state_machine receipt fields are verified and positive."""
+    reach = data.get("reachable_states_count", 0)
+    tx_cnt = data.get("transitions_explored_count", 0)
+    counts_ok = (
+        _is_strict_int(reach)
+        and _is_strict_int(tx_cnt)
+        and min(reach, tx_cnt) >= 1
+    )
+    return data.get("temporal_verified") is True and counts_ok
+
+
+def _verify_receipt_extensions(
+    data: Mapping[str, Any],
+) -> Tuple[bool, str]:
+    """Verify optional state_machine and must_refute fields in a z3_receipt."""
+    if "state_machine" in data and not _is_valid_temporal_receipt(data):
+        return False, "unverified_temporal_z3_receipt"
+    if "must_refute" in data and data.get("must_refute_verified") is not True:
+        return False, "unverified_must_refute_z3_receipt"
+    return True, "ok"
+
+
 def _verify_z3_receipt_ref(
     raw_ref: str,
     repo_root: Path,
@@ -302,6 +325,9 @@ def _verify_z3_receipt_ref(
         True,
     ):
         return False, "invalid_z3_witness_receipt"
+    ext_ok, ext_reason = _verify_receipt_extensions(data)
+    if not ext_ok:
+        return False, ext_reason
     return _verify_receipt_program_target(data, item or {}, repo_root)
 
 
@@ -1013,6 +1039,22 @@ def _run_program_target_receipt_checks(
         != "stale_z3_function_ast_sha256"
     ):
         return "Expected stale_z3_function_ast_sha256"
+    z3_pt.write_text(
+        json.dumps(
+            {
+                "status": "SAT",
+                "engine": "stdlib-finite-domain",
+                "state_machine": {"state_vars": ["s"]},
+                "temporal_verified": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    if (
+        evaluate_rubric_payload(pt_stale, repo_root=repo_root).get("reason")
+        != "unverified_temporal_z3_receipt"
+    ):
+        return "Expected unverified_temporal_z3_receipt"
     return None
 
 

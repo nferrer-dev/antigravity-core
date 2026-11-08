@@ -10,12 +10,15 @@ Usage:
     python logical_z3_polyfill.py --self-test
 """
 import ast
+from collections import deque
 import hashlib
+import itertools
 import json
 import operator
 import sys
 from pathlib import Path
 
+_MAX_TEMPORAL_STATES = 2048
 _ALLOWED_CALLS = {"And", "Or", "Not", "Implies", "abs", "min", "max"}
 _SAFE_AST_TYPES = (
     ast.Expression,
@@ -351,6 +354,398 @@ def _check_clause_equivalence(
     return None
 
 
+def _normalize_str_list(val):
+    """Normalize a string or list of strings into a list of strings."""
+    if isinstance(val, str):
+        return [val] if val.strip() else []
+    return list(val) if isinstance(val, list) else []
+
+
+def _collect_sm_exprs(spec):
+    """Collect all constraint and property expression strings from state_machine."""
+    sm = spec.get("state_machine")
+    if not isinstance(sm, dict):
+        return []
+    return (
+        _normalize_str_list(sm.get("init"))
+        + _normalize_str_list(sm.get("transitions"))
+        + _normalize_str_list(sm.get("invariants"))
+        + _normalize_str_list(sm.get("terminal"))
+        + _normalize_str_list(sm.get("liveness"))
+    )
+
+
+def _collect_all_spec_exprs(spec):
+    """Collect all expression strings across constraints, invariants, equivalence, must_refute, and state_machine."""
+    return (
+        list(spec.get("constraints", []))
+        + list(spec.get("invariants", []))
+        + list(spec.get("equivalence_constraints", []))
+        + _normalize_str_list(spec.get("must_refute"))
+        + _collect_sm_exprs(spec)
+    )
+
+
+def _check_must_refute(
+    spec, variables, constraints, engine_name, model, unconstrained
+):
+    """Verify every fault expression in must_refute is falsified by at least one valid state."""
+    if "must_refute" not in spec:
+        return None
+    faults = spec.get("must_refute")
+    if not isinstance(faults, list) or not faults:
+        return {
+            "status": "VACUOUS",
+            "engine": engine_name,
+            "model": model,
+            "vacuous_invariant": "",
+            "vacuous_reason": "unfalsified_fault_mutation",
+            "unconstrained_variables": unconstrained,
+            "constraints_count": len(constraints),
+        }
+    base_clauses = list(constraints) + list(spec.get("invariants", []))
+    for fault in faults:
+        ce = _find_satisfying_assignment(
+            variables, base_clauses + ["Not(%s)" % fault]
+        )
+        if ce is None:
+            return {
+                "status": "VACUOUS",
+                "engine": engine_name,
+                "model": model,
+                "vacuous_invariant": fault,
+                "vacuous_reason": "unfalsified_fault_mutation",
+                "unconstrained_variables": unconstrained,
+                "constraints_count": len(constraints),
+            }
+    return None
+
+
+def _partition_sm_constraints(constraints, state_set, sm):
+    """Partition constraints into state-only clauses and relational step clauses."""
+    state_only = []
+    step_clauses = []
+    for clause in constraints:
+        if _extract_referenced_vars([clause]).issubset(state_set):
+            state_only.append(clause)
+        else:
+            step_clauses.append(clause)
+    step_clauses.extend(_normalize_str_list(sm.get("transitions")))
+    return state_only, step_clauses
+
+
+def _enumerate_tuples(variables, var_names):
+    """Return Cartesian product tuples over domains of var_names."""
+    if not var_names:
+        return [()]
+    return list(itertools.product(*(variables[v] for v in var_names)))
+
+
+def _find_initial_states(variables, state_vars, clauses):
+    """Return list of state tuples over state_vars satisfying clauses."""
+    out = []
+    for s in _enumerate_tuples(variables, state_vars):
+        if _all_constraints_hold(clauses, dict(zip(state_vars, s))):
+            out.append(s)
+    return out
+
+
+def _step_enabled(base_env, next_env, action_vars, action_tuples, step_clauses):
+    """Return True if any action assignment satisfies step_clauses for (base_env, next_env)."""
+    env = dict(base_env)
+    env.update(next_env)
+    for act_vals in action_tuples:
+        env.update(zip(action_vars, act_vals))
+        if _all_constraints_hold(step_clauses, env):
+            return True
+    return False
+
+
+def _find_outgoing_states(
+    s, state_vars, next_vars, action_vars, action_tuples, valid_states, step_clauses
+):
+    """Return list of next state tuples reachable in one transition from state tuple s."""
+    if not step_clauses:
+        return []
+    base_env = dict(zip(state_vars, s))
+    succs = []
+    for next_s in valid_states:
+        next_env = dict(zip(next_vars, next_s))
+        if _step_enabled(
+            base_env, next_env, action_vars, action_tuples, step_clauses
+        ):
+            succs.append(next_s)
+    return succs
+
+
+def _explore_state_graph(
+    init_states,
+    state_vars,
+    next_vars,
+    action_vars,
+    action_tuples,
+    valid_states,
+    step_clauses,
+):
+    """Explore reachable states via bounded iterative BFS using collections.deque."""
+    parent = {s0: None for s0 in init_states}
+    queue = deque(init_states)
+    reachable = list(init_states)
+    adj = {}
+    total_transitions = 0
+    while queue:
+        s = queue.popleft()
+        succs = _find_outgoing_states(
+            s,
+            state_vars,
+            next_vars,
+            action_vars,
+            action_tuples,
+            valid_states,
+            step_clauses,
+        )
+        adj[s] = succs
+        total_transitions += len(succs)
+        for nxt in succs:
+            if nxt not in parent and len(reachable) < _MAX_TEMPORAL_STATES:
+                parent[nxt] = s
+                reachable.append(nxt)
+                queue.append(nxt)
+    return reachable, adj, parent, total_transitions
+
+
+def _reconstruct_trace(parent, target_s, state_vars):
+    """Reconstruct shortest-path state dict trace from an initial state to target_s."""
+    path = []
+    curr = target_s
+    while curr is not None:
+        path.append(dict(zip(state_vars, curr)))
+        curr = parent.get(curr)
+    path.reverse()
+    return path
+
+
+def _check_sm_safety(reachable, parent, state_vars, sm_invariants):
+    """Verify all state_machine invariants hold on every reachable state."""
+    for s in reachable:
+        env = dict(zip(state_vars, s))
+        for inv in sm_invariants:
+            if not _eval_expr(inv, env):
+                return inv, _reconstruct_trace(parent, s, state_vars)
+    return None, None
+
+
+def _check_sm_deadlock(reachable, adj, parent, state_vars, terminal_expr):
+    """Verify every 0-outdegree reachable state satisfies terminal_expr."""
+    for s in reachable:
+        if adj.get(s):
+            continue
+        env = dict(zip(state_vars, s))
+        if not terminal_expr or not _eval_expr(terminal_expr, env):
+            return _reconstruct_trace(parent, s, state_vars)
+    return None
+
+
+def _build_non_goal_adj(reachable, adj, state_vars, goal_expr):
+    """Build adjacency list restricted to reachable states where goal_expr is False."""
+    non_goal = [
+        s
+        for s in reachable
+        if not _eval_expr(goal_expr, dict(zip(state_vars, s)))
+    ]
+    ng_set = set(non_goal)
+    return {
+        s: [nxt for nxt in adj.get(s, []) if nxt in ng_set] for s in non_goal
+    }
+
+
+def _find_non_goal_cycle(start_s, ng_adj, state_vars):
+    """Return cycle trace from start_s back to start_s within ng_adj, or None."""
+    cycle_parent = {}
+    queue = deque()
+    for nxt in ng_adj.get(start_s, []):
+        cycle_parent[nxt] = None
+        queue.append(nxt)
+    while queue:
+        curr = queue.popleft()
+        if curr == start_s:
+            return _reconstruct_trace(cycle_parent, start_s, state_vars)
+        for nxt in ng_adj.get(curr, []):
+            if nxt not in cycle_parent:
+                cycle_parent[nxt] = curr
+                queue.append(nxt)
+    return None
+
+
+def _check_single_liveness_goal(reachable, adj, parent, state_vars, goal_expr):
+    """Verify a single liveness goal holds along all paths; return trace on violation."""
+    ng_adj = _build_non_goal_adj(reachable, adj, state_vars, goal_expr)
+    for s in ng_adj:
+        if not adj.get(s):
+            return _reconstruct_trace(parent, s, state_vars)
+        cycle = _find_non_goal_cycle(s, ng_adj, state_vars)
+        if cycle is not None:
+            return _reconstruct_trace(parent, s, state_vars) + cycle
+    return None
+
+
+def _check_sm_liveness(reachable, adj, parent, state_vars, liveness_exprs):
+    """Verify all liveness goal expressions hold; return (goal, trace) on failure."""
+    for goal in liveness_exprs:
+        trace = _check_single_liveness_goal(
+            reachable, adj, parent, state_vars, goal
+        )
+        if trace is not None:
+            return goal, trace
+    return None, None
+
+
+def _build_temporal_refuted(
+    engine_name, model, unconstrained, constraints, violation, inv, trace
+):
+    """Construct a REFUTED result dictionary for a state_machine temporal violation."""
+    return {
+        "status": "REFUTED",
+        "engine": engine_name,
+        "model": model,
+        "temporal_violation": violation,
+        "refuted_invariant": inv,
+        "counterexample_trace": trace,
+        "unconstrained_variables": unconstrained,
+        "constraints_count": len(constraints),
+    }
+
+
+def _verify_temporal_pillars(
+    sm,
+    reachable,
+    adj,
+    parent,
+    state_vars,
+    engine_name,
+    model,
+    unconstrained,
+    constraints,
+):
+    """Verify Safety, Deadlock Freedom, and Liveness on the reachable state graph."""
+    inv_fail, trace = _check_sm_safety(
+        reachable, parent, state_vars, _normalize_str_list(sm.get("invariants"))
+    )
+    if inv_fail is not None:
+        return _build_temporal_refuted(
+            engine_name,
+            model,
+            unconstrained,
+            constraints,
+            "SAFETY_VIOLATION",
+            inv_fail,
+            trace,
+        )
+    term_list = _normalize_str_list(sm.get("terminal"))
+    dl_trace = _check_sm_deadlock(
+        reachable, adj, parent, state_vars, term_list[0] if term_list else ""
+    )
+    if dl_trace is not None:
+        return _build_temporal_refuted(
+            engine_name,
+            model,
+            unconstrained,
+            constraints,
+            "DEADLOCK",
+            "deadlock_freedom",
+            dl_trace,
+        )
+    live_fail, l_trace = _check_sm_liveness(
+        reachable, adj, parent, state_vars, _normalize_str_list(sm.get("liveness"))
+    )
+    if live_fail is not None:
+        return _build_temporal_refuted(
+            engine_name,
+            model,
+            unconstrained,
+            constraints,
+            "LIVENESS_VIOLATION",
+            live_fail,
+            l_trace,
+        )
+    return None
+
+
+def _prepare_sm_domains(variables, constraints, sm):
+    """Extract state, next, and action variable lists and constraint partitions."""
+    state_vars = list(sm.get("state_vars", []))
+    next_vars = ["next_" + v for v in state_vars]
+    excluded = set(state_vars) | set(next_vars)
+    action_vars = [v for v in variables if v not in excluded]
+    state_only, step_clauses = _partition_sm_constraints(
+        constraints, set(state_vars), sm
+    )
+    return state_vars, next_vars, action_vars, state_only, step_clauses
+
+
+def _check_state_machine(
+    spec, variables, constraints, engine_name, model, unconstrained
+):
+    """Run TLA+-style reachable-state verification when state_machine is present."""
+    sm = spec.get("state_machine")
+    if not isinstance(sm, dict):
+        return None, 0, 0
+    state_vars, next_vars, action_vars, state_only, step_clauses = (
+        _prepare_sm_domains(variables, constraints, sm)
+    )
+    init_clauses = state_only + _normalize_str_list(sm.get("init"))
+    init_states = _find_initial_states(variables, state_vars, init_clauses)
+    if not state_vars or not init_states:
+        return (
+            {
+                "status": "UNSAT",
+                "engine": engine_name,
+                "model": None,
+                "unsat_reason": "empty_initial_states",
+                "unconstrained_variables": unconstrained,
+                "constraints_count": len(constraints),
+            },
+            0,
+            0,
+        )
+    valid_states = _find_initial_states(variables, state_vars, state_only)
+    action_tuples = _enumerate_tuples(variables, action_vars)
+    reachable, adj, parent, total_tx = _explore_state_graph(
+        init_states,
+        state_vars,
+        next_vars,
+        action_vars,
+        action_tuples,
+        valid_states,
+        step_clauses,
+    )
+    if total_tx == 0:
+        return (
+            {
+                "status": "VACUOUS",
+                "engine": engine_name,
+                "model": model,
+                "vacuous_reason": "zero_transitions_explored",
+                "unconstrained_variables": unconstrained,
+                "constraints_count": len(constraints),
+            },
+            0,
+            0,
+        )
+    failure = _verify_temporal_pillars(
+        sm,
+        reachable,
+        adj,
+        parent,
+        state_vars,
+        engine_name,
+        model,
+        unconstrained,
+        constraints,
+    )
+    return failure, len(reachable), total_tx
+
+
 def _compute_proof_certificate(spec, engine_name, model):
     """Return deterministic SHA-256 hex digest over spec, engine, and model."""
     payload = {
@@ -362,16 +757,32 @@ def _compute_proof_certificate(spec, engine_name, model):
             spec.get("equivalence_constraints", [])
         ),
     }
-    if "program_target" in spec:
-        payload["program_target"] = spec["program_target"]
+    for opt_key in ("program_target", "state_machine", "must_refute"):
+        if opt_key in spec:
+            payload[opt_key] = spec[opt_key]
     raw = json.dumps(payload, sort_keys=True).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
+
+
+def _attach_sat_extensions(out, spec, reach_cnt, tx_cnt):
+    """Attach equivalence, must_refute, and state_machine verification metadata to SAT output."""
+    if spec.get("equivalence_constraints"):
+        out["equivalence_verified"] = True
+    if "must_refute" in spec:
+        out["must_refute"] = list(spec["must_refute"])
+        out["must_refute_verified"] = True
+    if isinstance(spec.get("state_machine"), dict):
+        out["state_machine"] = spec["state_machine"]
+        out["temporal_verified"] = True
+        out["reachable_states_count"] = reach_cnt
+        out["transitions_explored_count"] = tx_cnt
+    return out
 
 
 def _finalize_sat_result(
     spec, engine_name, variables, constraints, model, unconstrained
 ):
-    """Check optional equivalence_constraints and build SAT receipt with certificate."""
+    """Check equivalence, must_refute, and state_machine, then build SAT receipt."""
     eq_constraints = spec.get("equivalence_constraints", [])
     if eq_constraints:
         eq_fail = _check_clause_equivalence(
@@ -384,6 +795,16 @@ def _finalize_sat_result(
         )
         if eq_fail is not None:
             return eq_fail
+    mr_fail = _check_must_refute(
+        spec, variables, constraints, engine_name, model, unconstrained
+    )
+    if mr_fail is not None:
+        return mr_fail
+    sm_fail, reach_cnt, tx_cnt = _check_state_machine(
+        spec, variables, constraints, engine_name, model, unconstrained
+    )
+    if sm_fail is not None:
+        return sm_fail
     out = {
         "status": "SAT",
         "engine": engine_name,
@@ -394,9 +815,7 @@ def _finalize_sat_result(
             spec, engine_name, model
         ),
     }
-    if eq_constraints:
-        out["equivalence_verified"] = True
-    return out
+    return _attach_sat_extensions(out, spec, reach_cnt, tx_cnt)
 
 
 def _check_finite_invariant(inv, variables, constraints, model, unconstrained):
@@ -444,10 +863,7 @@ def solve_finite_domain(spec):
     variables = spec.get("variables", {})
     constraints = spec.get("constraints", [])
     invariants = spec.get("invariants", [])
-    eq_constraints = spec.get("equivalence_constraints", [])
-    referenced = _extract_referenced_vars(
-        list(constraints) + list(invariants) + list(eq_constraints)
-    )
+    referenced = _extract_referenced_vars(_collect_all_spec_exprs(spec))
     unconstrained = sorted(set(variables.keys()) - referenced)
 
     model = _find_satisfying_assignment(variables, constraints)
@@ -637,10 +1053,7 @@ def _solve_with_z3(spec, z3_mod):
     variables = spec.get("variables", {})
     constraints = spec.get("constraints", [])
     invariants = spec.get("invariants", [])
-    eq_constraints = spec.get("equivalence_constraints", [])
-    referenced = _extract_referenced_vars(
-        list(constraints) + list(invariants) + list(eq_constraints)
-    )
+    referenced = _extract_referenced_vars(_collect_all_spec_exprs(spec))
     unconstrained = sorted(set(variables.keys()) - referenced)
     solver, z3_vars, env = _build_z3_solver(z3_mod, variables, constraints)
     if solver.check() != z3_mod.sat:
@@ -875,12 +1288,7 @@ def _attach_program_target_metadata(result, compiled_spec):
 def solve_spec(spec):
     """Solve constraint spec using z3 if available, otherwise stdlib fallback."""
     compiled = _compile_program_target_spec(spec)
-    all_exprs = (
-        list(compiled.get("constraints", []))
-        + list(compiled.get("invariants", []))
-        + list(compiled.get("equivalence_constraints", []))
-    )
-    for expr in all_exprs:
+    for expr in _collect_all_spec_exprs(compiled):
         _validate_safe_ast(ast.parse(expr, mode="eval"))
     try:
         import z3  # type: ignore
@@ -1066,6 +1474,56 @@ def _check_vcgen_program_target_cases():
     return True
 
 
+def _check_temporal_and_must_refute_cases():
+    """Verify state_machine temporal properties and must_refute fault falsifiability."""
+    sm_ok = solve_spec(
+        {
+            "variables": {"state": [0, 1, 2], "next_state": [0, 1, 2]},
+            "constraints": ["next_state == (state + 1 if state < 2 else 2)"],
+            "state_machine": {
+                "state_vars": ["state"],
+                "init": ["state == 0"],
+                "invariants": ["state >= 0 and state <= 2"],
+                "terminal": "state == 2",
+                "liveness": ["state == 2"],
+            },
+            "must_refute": ["state == 0"],
+        }
+    )
+    if (
+        sm_ok.get("status"),
+        sm_ok.get("temporal_verified"),
+        sm_ok.get("must_refute_verified"),
+    ) != ("SAT", True, True):
+        print("Self-test temporal SAT failed: %r" % (sm_ok,))
+        return False
+    live_bad = solve_spec(
+        {
+            "variables": {"state": [0, 1], "next_state": [0, 1]},
+            "constraints": ["next_state == 1 - state"],
+            "state_machine": {
+                "state_vars": ["state"],
+                "init": ["state == 0"],
+                "liveness": "state == 1 and state == 0",
+            },
+        }
+    )
+    if live_bad.get("temporal_violation") != "LIVENESS_VIOLATION":
+        print("Self-test temporal LIVENESS_VIOLATION failed: %r" % (live_bad,))
+        return False
+    mr_bad = solve_spec(
+        {
+            "variables": {"x": [1, 2]},
+            "constraints": ["x == 1"],
+            "must_refute": ["x >= 1"],
+        }
+    )
+    if mr_bad.get("vacuous_reason") != "unfalsified_fault_mutation":
+        print("Self-test must_refute failed: %r" % (mr_bad,))
+        return False
+    return True
+
+
 def run_self_test():
     """Verify SAT, UNSAT, REFUTED, VACUOUS proofs and AST sandbox safety deterministically."""
     if not _check_ast_sandbox_safety():
@@ -1076,6 +1534,8 @@ def run_self_test():
     if not _check_unsat_and_vacuous_cases():
         return 1
     if not _check_vcgen_program_target_cases():
+        return 1
+    if not _check_temporal_and_must_refute_cases():
         return 1
     print("logical_z3_polyfill self-test: PASS (%s)" % engine)
     return 0

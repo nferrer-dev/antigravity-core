@@ -3451,6 +3451,174 @@ class LiveTree(unittest.TestCase):
                 res_stale_ast["reason"], "stale_z3_function_ast_sha256"
             )
 
+            # 5. VeriHarness 3.0: TLA+-style temporal state_machine & must_refute
+            sm_py = t_root / "src" / "sm_targets.py"
+            sm_py.write_text(
+                "def step_tx(state: int, action: int) -> int:\n"
+                "    if state == 0:\n"
+                "        return 1\n"
+                "    if state == 1 and action >= 1:\n"
+                "        return 2\n"
+                "    return 2\n",
+                encoding="utf-8",
+            )
+            sm_ok_res = lz3.solve_spec(
+                {
+                    "variables": {
+                        "state": [0, 1, 2],
+                        "action": [1, 2],
+                        "next_state": [0, 1, 2],
+                    },
+                    "program_target": {
+                        "file": str(sm_py),
+                        "function": "step_tx",
+                        "result_var": "next_state",
+                        "preconditions": [],
+                        "postconditions": [],
+                    },
+                    "state_machine": {
+                        "state_vars": ["state"],
+                        "init": ["state == 0"],
+                        "invariants": ["state >= 0 and state <= 2"],
+                        "terminal": "state == 2",
+                        "liveness": ["state == 2"],
+                    },
+                    "must_refute": ["state == 0"],
+                }
+            )
+            self.assertEqual(sm_ok_res["status"], "SAT", sm_ok_res)
+            self.assertTrue(sm_ok_res.get("temporal_verified"))
+            self.assertTrue(sm_ok_res.get("must_refute_verified"))
+            self.assertGreaterEqual(sm_ok_res.get("reachable_states_count", 0), 2)
+            self.assertGreaterEqual(
+                sm_ok_res.get("transitions_explored_count", 0), 2
+            )
+
+            sm_receipt = dict(sm_ok_res)
+            sm_receipt["program_target"] = dict(
+                sm_ok_res["program_target"], file="src/sm_targets.py"
+            )
+            sm_receipt_p = t_root / "scratch" / "stage0_sm_ok.json"
+            sm_receipt_p.write_text(json.dumps(sm_receipt), encoding="utf-8")
+            sm_rubric_txt = (
+                "<RUBRIC_SCORE>"
+                + json.dumps(
+                    {
+                        "stage": 4,
+                        "role": "Python Style Expert",
+                        "verdict": "APPROVE",
+                        "criteria": [
+                            {
+                                "id": "c1",
+                                "evidence": "src/sm_targets.py:1-6",
+                                "witness_symbol": "step_tx",
+                                "z3_receipt": "scratch/stage0_sm_ok.json",
+                                "score": 3,
+                            },
+                            valid_payload["criteria"][1],
+                            valid_payload["criteria"][2],
+                        ],
+                    }
+                )
+                + "</RUBRIC_SCORE>"
+            )
+            res_sm_rubric = rgg.evaluate_rubric_text(
+                sm_rubric_txt, repo_root=t_root, require_witness=True
+            )
+            self.assertEqual(res_sm_rubric["status"], "VALID", res_sm_rubric)
+
+            # Spoofed temporal receipt rejected -> unverified_temporal_z3_receipt
+            spoof_sm = dict(sm_receipt, temporal_verified=False)
+            sm_receipt_p.write_text(json.dumps(spoof_sm), encoding="utf-8")
+            res_spoof_sm = rgg.evaluate_rubric_text(
+                sm_rubric_txt, repo_root=t_root, require_witness=True
+            )
+            self.assertEqual(res_spoof_sm["status"], "INVALID")
+            self.assertEqual(
+                res_spoof_sm["reason"], "unverified_temporal_z3_receipt"
+            )
+
+            # Safety violation
+            safety_res = lz3.solve_spec(
+                {
+                    "variables": {"state": [0, 1, 2], "next_state": [0, 1, 2]},
+                    "constraints": [
+                        "next_state == (state + 1 if state < 2 else 2)"
+                    ],
+                    "state_machine": {
+                        "state_vars": ["state"],
+                        "init": ["state == 0"],
+                        "invariants": ["state < 2"],
+                        "terminal": "state == 2",
+                    },
+                }
+            )
+            self.assertEqual(safety_res["status"], "REFUTED", safety_res)
+            self.assertEqual(
+                safety_res.get("temporal_violation"), "SAFETY_VIOLATION"
+            )
+            self.assertTrue(safety_res.get("counterexample_trace"))
+
+            # Deadlock violation
+            deadlock_res = lz3.solve_spec(
+                {
+                    "variables": {"state": [0, 1, 2], "next_state": [0, 1, 2]},
+                    "constraints": ["state == 0 and next_state == 1"],
+                    "state_machine": {
+                        "state_vars": ["state"],
+                        "init": ["state == 0"],
+                        "invariants": ["state >= 0"],
+                        "terminal": "state == 2",
+                    },
+                }
+            )
+            self.assertEqual(deadlock_res["status"], "REFUTED", deadlock_res)
+            self.assertEqual(deadlock_res.get("temporal_violation"), "DEADLOCK")
+            self.assertEqual(
+                deadlock_res.get("refuted_invariant"), "deadlock_freedom"
+            )
+            self.assertTrue(deadlock_res.get("counterexample_trace"))
+
+            # Liveness violation (2-state cycle 0 <-> 1 never reaching state == 2)
+            liveness_res = lz3.solve_spec(
+                {
+                    "variables": {
+                        "state": [0, 1, 2],
+                        "action": [0, 1],
+                        "next_state": [0, 1, 2],
+                    },
+                    "constraints": [
+                        "next_state == (0 if state == 1 and action == 0 else state + 1 if state < 2 else 2)"
+                    ],
+                    "state_machine": {
+                        "state_vars": ["state"],
+                        "init": ["state == 0"],
+                        "invariants": ["state >= 0 and state <= 2"],
+                        "terminal": "state == 2",
+                        "liveness": ["state == 2"],
+                    },
+                }
+            )
+            self.assertEqual(liveness_res["status"], "REFUTED", liveness_res)
+            self.assertEqual(
+                liveness_res.get("temporal_violation"), "LIVENESS_VIOLATION"
+            )
+            self.assertTrue(liveness_res.get("counterexample_trace"))
+
+            # Unfalsified fault mutation -> VACUOUS / unfalsified_fault_mutation
+            unfalsified_res = lz3.solve_spec(
+                {
+                    "variables": {"x": [1, 2]},
+                    "constraints": ["x == 1"],
+                    "must_refute": ["x >= 1"],
+                }
+            )
+            self.assertEqual(unfalsified_res["status"], "VACUOUS")
+            self.assertEqual(
+                unfalsified_res.get("vacuous_reason"),
+                "unfalsified_fault_mutation",
+            )
+
 
 class Meta(unittest.TestCase):
     def test_checks_tuple_covers_all_invariants(self):
